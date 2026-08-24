@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
 
@@ -25,6 +26,7 @@ const initialSlots: TimeSlot[] = [
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 export default function SchedulePage() {
+  const navigate = useNavigate();
   const [slots, setSlots] = useState<TimeSlot[]>(initialSlots);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
@@ -158,7 +160,10 @@ export default function SchedulePage() {
           <a className="text-sm font-medium text-slate-400 hover:text-white transition-colors" href="#">Mis Grupos</a>
           <a className="text-sm font-medium text-slate-400 hover:text-white transition-colors" href="#">Descubrir</a>
         </div>
-        <button className="text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2 rounded-full hover:from-violet-500 hover:to-indigo-500 transition-all shadow-md shadow-violet-600/20 cursor-pointer">
+        <button 
+          onClick={() => navigate('/profile')}
+          className="text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2 rounded-full hover:from-violet-500 hover:to-indigo-500 transition-all shadow-md shadow-violet-600/20 cursor-pointer"
+        >
           Mi Perfil
         </button>
       </nav>
