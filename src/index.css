@@ -63,8 +63,8 @@
 body {
   margin: 0;
   font-family: var(--font-body);
-  background-color: #020817; /* slate-950 */
-  color: #f8fafc;
+  background-color: var(--color-surface); /* #f4fbf1 Paleta de Verdes Huecko */
+  color: var(--color-on-surface); /* #161d15 */
   -webkit-font-smoothing: antialiased;
 }
 
