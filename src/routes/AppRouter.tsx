@@ -4,6 +4,7 @@ import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
 import DashboardPlaceholder from '../pages/DashboardPlaceholder';
 import SchedulePage from '../pages/SchedulePage';
+import ProfilePage from '../pages/ProfilePage';
 
 export default function AppRouter() {
   return (
@@ -11,6 +12,7 @@ export default function AppRouter() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/schedule" element={<SchedulePage />} />
+      <Route path="/profile" element={<ProfilePage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPlaceholder />} />
