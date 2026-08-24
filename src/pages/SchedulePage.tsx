@@ -1,34 +1,50 @@
 import React, { useState } from 'react';
 
+type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
+
 interface TimeSlot {
   id: string;
   title: string;
-  day: 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
+  day: DayOfWeek;
   startTime: string; // e.g. "08:00"
   endTime: string;   // e.g. "11:00"
   colorClass: string;
   textColorClass: string;
+  customColor?: string;
 }
 
 const initialSlots: TimeSlot[] = [
-  { id: '1', title: 'Universidad', day: 'Lun', startTime: '08:00', endTime: '11:00', colorClass: 'bg-[#fde68a] bg-opacity-40 border-[#fde68a]', textColorClass: 'text-[#92400e]' },
-  { id: '2', title: 'Trabajo', day: 'Mar', startTime: '10:00', endTime: '14:00', colorClass: 'bg-[#bfdbfe] bg-opacity-40 border-[#bfdbfe]', textColorClass: 'text-[#1e40af]' },
-  { id: '3', title: 'Universidad', day: 'Mié', startTime: '08:00', endTime: '10:00', colorClass: 'bg-[#fde68a] bg-opacity-40 border-[#fde68a]', textColorClass: 'text-[#92400e]' },
-  { id: '4', title: 'Gimnasio', day: 'Mié', startTime: '13:00', endTime: '15:30', colorClass: 'bg-secondary-fixed bg-opacity-40 border-secondary-fixed', textColorClass: 'text-on-secondary-fixed-variant' },
-  { id: '5', title: 'Trabajo', day: 'Jue', startTime: '10:00', endTime: '14:00', colorClass: 'bg-[#bfdbfe] bg-opacity-40 border-[#bfdbfe]', textColorClass: 'text-[#1e40af]' },
-  { id: '6', title: 'Universidad', day: 'Vie', startTime: '08:00', endTime: '11:00', colorClass: 'bg-[#fde68a] bg-opacity-40 border-[#fde68a]', textColorClass: 'text-[#92400e]' },
+  { id: '1', title: 'Universidad', day: 'Lun', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b' },
+  { id: '2', title: 'Trabajo', day: 'Mar', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6' },
+  { id: '3', title: 'Universidad', day: 'Mié', startTime: '08:00', endTime: '10:00', colorClass: '', textColorClass: '', customColor: '#f59e0b' },
+  { id: '4', title: 'Gimnasio', day: 'Mié', startTime: '13:00', endTime: '15:30', colorClass: '', textColorClass: '', customColor: '#10b981' },
+  { id: '5', title: 'Trabajo', day: 'Jue', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6' },
+  { id: '6', title: 'Universidad', day: 'Vie', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b' },
 ];
+
+const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 export default function SchedulePage() {
   const [slots, setSlots] = useState<TimeSlot[]>(initialSlots);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
+
+  // Form states
   const [newTitle, setNewTitle] = useState('');
-  const [newDay, setNewDay] = useState<'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom'>('Lun');
+  const [selectedDays, setSelectedDays] = useState<DayOfWeek[]>(['Lun']);
   const [newStartTime, setNewStartTime] = useState('08:00');
   const [newEndTime, setNewEndTime] = useState('10:00');
-  const [newType, setNewType] = useState<'university' | 'work' | 'gym'>('university');
+  const [selectedColor, setSelectedColor] = useState('#8b5cf6'); // Violet default
 
-  const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'] as const;
+  const PRESET_COLORS = [
+    { name: 'Violeta', hex: '#8b5cf6' },
+    { name: 'Azul', hex: '#3b82f6' },
+    { name: 'Ámbar', hex: '#f59e0b' },
+    { name: 'Esmeralda', hex: '#10b981' },
+    { name: 'Rosa', hex: '#ec4899' },
+    { name: 'Rojo', hex: '#ef4444' },
+  ];
+
   const timeLabels = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
 
   const getPositionStyles = (startTime: string, endTime: string) => {
@@ -46,33 +62,84 @@ export default function SchedulePage() {
     };
   };
 
-  const handleAddBlock = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle) return;
+  const openCreateModal = () => {
+    setEditingSlotId(null);
+    setNewTitle('');
+    setSelectedDays(['Lun']);
+    setNewStartTime('08:00');
+    setNewEndTime('10:00');
+    setSelectedColor('#8b5cf6');
+    setIsModalOpen(true);
+  };
 
-    let colorClass = 'bg-amber-500/20 border-amber-500/40';
-    let textColorClass = 'text-amber-300';
+  const openEditModal = (slot: TimeSlot) => {
+    setEditingSlotId(slot.id);
+    setNewTitle(slot.title);
+    setSelectedDays([slot.day]);
+    setNewStartTime(slot.startTime);
+    setNewEndTime(slot.endTime);
+    setSelectedColor(slot.customColor || '#8b5cf6');
+    setIsModalOpen(true);
+  };
 
-    if (newType === 'work') {
-      colorClass = 'bg-blue-500/20 border-blue-500/40';
-      textColorClass = 'text-blue-300';
-    } else if (newType === 'gym') {
-      colorClass = 'bg-emerald-500/20 border-emerald-500/40';
-      textColorClass = 'text-emerald-300';
+  const toggleDaySelection = (day: DayOfWeek) => {
+    // In edit mode, limit to single day selection
+    if (editingSlotId) {
+      setSelectedDays([day]);
+      return;
     }
 
-    const newSlot: TimeSlot = {
-      id: Date.now().toString(),
-      title: newTitle,
-      day: newDay,
-      startTime: newStartTime,
-      endTime: newEndTime,
-      colorClass,
-      textColorClass,
-    };
+    if (selectedDays.includes(day)) {
+      if (selectedDays.length > 1) {
+        setSelectedDays(selectedDays.filter((d) => d !== day));
+      }
+    } else {
+      setSelectedDays([...selectedDays, day]);
+    }
+  };
 
-    setSlots([...slots, newSlot]);
-    setNewTitle('');
+  const handleSaveBlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle || selectedDays.length === 0) return;
+
+    if (editingSlotId) {
+      // Update single existing slot
+      setSlots((prev) =>
+        prev.map((slot) =>
+          slot.id === editingSlotId
+            ? {
+                ...slot,
+                title: newTitle,
+                day: selectedDays[0],
+                startTime: newStartTime,
+                endTime: newEndTime,
+                customColor: selectedColor,
+              }
+            : slot
+        )
+      );
+    } else {
+      // Create new slots for each selected day
+      const newSlots: TimeSlot[] = selectedDays.map((day, idx) => ({
+        id: `${Date.now()}-${idx}`,
+        title: newTitle,
+        day,
+        startTime: newStartTime,
+        endTime: newEndTime,
+        colorClass: '',
+        textColorClass: '',
+        customColor: selectedColor,
+      }));
+
+      setSlots((prev) => [...prev, ...newSlots]);
+    }
+
+    setIsModalOpen(false);
+  };
+
+  const handleDeleteSlot = () => {
+    if (!editingSlotId) return;
+    setSlots((prev) => prev.filter((slot) => slot.id !== editingSlotId));
     setIsModalOpen(false);
   };
 
@@ -110,7 +177,7 @@ export default function SchedulePage() {
               Importar
             </button>
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={openCreateModal}
               className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 transition-all text-sm font-semibold shadow-lg shadow-violet-500/20 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[20px]">add</span>
@@ -163,16 +230,32 @@ export default function SchedulePage() {
                     <div key={day} className="relative h-full">
                       {daySlots.map((slot) => {
                         const style = getPositionStyles(slot.startTime, slot.endTime);
+                        const isCustom = Boolean(slot.customColor);
+                        const customBg = slot.customColor ? `${slot.customColor}26` : undefined;
+                        const customBorder = slot.customColor ? `${slot.customColor}66` : undefined;
+
                         return (
                           <div
                             key={slot.id}
-                            style={style}
-                            className={`absolute w-full border backdrop-blur-md rounded-xl p-2.5 flex flex-col justify-between overflow-hidden cursor-pointer hover:scale-[1.02] transition-all shadow-md ${slot.colorClass}`}
+                            onClick={() => openEditModal(slot)}
+                            style={{
+                              ...style,
+                              ...(isCustom ? { backgroundColor: customBg, borderColor: customBorder } : {}),
+                            }}
+                            className={`absolute w-full border backdrop-blur-md rounded-xl p-2.5 flex flex-col justify-between overflow-hidden cursor-pointer hover:scale-[1.03] transition-all shadow-md group ${
+                              !isCustom ? slot.colorClass : ''
+                            }`}
                           >
-                            <span className={`text-xs font-bold ${slot.textColorClass}`}>
+                            <span
+                              style={isCustom ? { color: slot.customColor } : undefined}
+                              className={`text-xs font-bold ${!isCustom ? slot.textColorClass : ''}`}
+                            >
                               {slot.title}
                             </span>
-                            <span className={`text-[10px] opacity-80 ${slot.textColorClass}`}>
+                            <span
+                              style={isCustom ? { color: slot.customColor } : undefined}
+                              className={`text-[10px] opacity-80 ${!isCustom ? slot.textColorClass : ''}`}
+                            >
                               {slot.startTime} - {slot.endTime}
                             </span>
                           </div>
@@ -187,18 +270,33 @@ export default function SchedulePage() {
         </div>
       </main>
 
-      {/* Modal para Crear Bloque */}
+      {/* Modal para Crear/Editar Bloque */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-4">Agregar Nuevo Bloque</h2>
-            <form onSubmit={handleAddBlock} className="flex flex-col gap-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-white">
+                {editingSlotId ? 'Editar Bloque' : 'Agregar Nuevo Bloque'}
+              </h2>
+              {editingSlotId && (
+                <button
+                  type="button"
+                  onClick={handleDeleteSlot}
+                  className="text-xs text-red-400 hover:text-red-300 bg-red-950/30 border border-red-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[14px]">delete</span>
+                  Eliminar
+                </button>
+              )}
+            </div>
+
+            <form onSubmit={handleSaveBlock} className="flex flex-col gap-4">
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Nombre del Bloque</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Clase de Cálculo, Gimnasio..."
+                  placeholder="Ej. Clase de Cálculo, Gimnasio, Estudio..."
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   className="w-full px-3.5 py-2.5 border border-slate-800 rounded-xl bg-slate-950 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
@@ -206,18 +304,28 @@ export default function SchedulePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Día</label>
-                <select
-                  value={newDay}
-                  onChange={(e) => setNewDay(e.target.value as any)}
-                  className="w-full px-3.5 py-2.5 border border-slate-800 rounded-xl bg-slate-950 text-white text-sm focus:outline-none focus:border-violet-500"
-                >
-                  {days.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  {editingSlotId ? 'Día' : 'Días de repetición (Selecciona uno o varios)'}
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {days.map((d) => {
+                    const isSelected = selectedDays.includes(d);
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => toggleDaySelection(d)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-violet-600 border-violet-500 text-white shadow-sm shadow-violet-500/30'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -242,16 +350,36 @@ export default function SchedulePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Categoría / Color</label>
-                <select
-                  value={newType}
-                  onChange={(e) => setNewType(e.target.value as any)}
-                  className="w-full px-3.5 py-2.5 border border-slate-800 rounded-xl bg-slate-950 text-white text-sm focus:outline-none focus:border-violet-500"
-                >
-                  <option value="university">Universidad (Ámbar)</option>
-                  <option value="work">Trabajo (Azul)</option>
-                  <option value="gym">Gimnasio / Personal (Verde)</option>
-                </select>
+                <label className="block text-xs font-medium text-slate-400 mb-2">Color del Bloque</label>
+                <div className="flex items-center gap-2.5 mb-3 flex-wrap">
+                  {PRESET_COLORS.map((color) => (
+                    <button
+                      key={color.hex}
+                      type="button"
+                      onClick={() => setSelectedColor(color.hex)}
+                      className={`w-7 h-7 rounded-full border-2 transition-all cursor-pointer flex items-center justify-center ${
+                        selectedColor.toLowerCase() === color.hex.toLowerCase()
+                          ? 'border-white scale-110 shadow-md shadow-violet-500/30'
+                          : 'border-transparent hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: color.hex }}
+                      title={color.name}
+                    />
+                  ))}
+
+                  <label
+                    title="Color personalizado"
+                    className="w-7 h-7 rounded-full border-2 border-slate-700 hover:border-slate-500 flex items-center justify-center cursor-pointer relative overflow-hidden bg-slate-950"
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-slate-400">palette</span>
+                    <input
+                      type="color"
+                      value={selectedColor}
+                      onChange={(e) => setSelectedColor(e.target.value)}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                  </label>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 mt-4">
@@ -266,7 +394,7 @@ export default function SchedulePage() {
                   type="submit"
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 transition-all text-sm font-semibold cursor-pointer shadow-md shadow-violet-500/20"
                 >
-                  Guardar Bloque
+                  {editingSlotId ? 'Guardar Cambios' : 'Guardar Bloque'}
                 </button>
               </div>
             </form>
