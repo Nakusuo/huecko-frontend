@@ -414,6 +414,17 @@ export default function GroupsPage() {
     );
   };
 
+  const handleCloseVotingManually = (proposalId: string) => {
+    setGroupProposals(
+      groupProposals.map((p) => {
+        if (p.id === proposalId) {
+          return { ...p, estado: 'confirmado' };
+        }
+        return p;
+      })
+    );
+  };
+
   // Incident Modal State (Faltas / Tardanzas)
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
   const [targetProposalForIncident, setTargetProposalForIncident] = useState<PlanProposal | null>(null);
