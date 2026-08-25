@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Navbar from '../components/Navbar';
+import { useScheduleStore } from '../store/scheduleStore';
 
 type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
 
@@ -14,19 +15,10 @@ interface TimeSlot {
   customColor?: string;
 }
 
-const initialSlots: TimeSlot[] = [
-  { id: '1', title: 'Universidad', day: 'Lun', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b' },
-  { id: '2', title: 'Trabajo', day: 'Mar', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6' },
-  { id: '3', title: 'Universidad', day: 'Mié', startTime: '08:00', endTime: '10:00', colorClass: '', textColorClass: '', customColor: '#f59e0b' },
-  { id: '4', title: 'Gimnasio', day: 'Mié', startTime: '13:00', endTime: '15:30', colorClass: '', textColorClass: '', customColor: '#10b981' },
-  { id: '5', title: 'Trabajo', day: 'Jue', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6' },
-  { id: '6', title: 'Universidad', day: 'Vie', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b' },
-];
-
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 export default function SchedulePage() {
-  const [slots, setSlots] = useState<TimeSlot[]>(initialSlots);
+  const { slots, addMultipleSlots, updateSlot, deleteSlot, importMockCalendar } = useScheduleStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
 
@@ -104,25 +96,15 @@ export default function SchedulePage() {
     if (!newTitle || selectedDays.length === 0) return;
 
     if (editingSlotId) {
-      // Update single existing slot
-      setSlots((prev) =>
-        prev.map((slot) =>
-          slot.id === editingSlotId
-            ? {
-                ...slot,
-                title: newTitle,
-                day: selectedDays[0],
-                startTime: newStartTime,
-                endTime: newEndTime,
-                customColor: selectedColor,
-              }
-            : slot
-        )
-      );
+      updateSlot(editingSlotId, {
+        title: newTitle,
+        day: selectedDays[0],
+        startTime: newStartTime,
+        endTime: newEndTime,
+        customColor: selectedColor,
+      });
     } else {
-      // Create new slots for each selected day
-      const newSlots: TimeSlot[] = selectedDays.map((day, idx) => ({
-        id: `${Date.now()}-${idx}`,
+      const newSlots = selectedDays.map((day) => ({
         title: newTitle,
         day,
         startTime: newStartTime,
@@ -131,8 +113,7 @@ export default function SchedulePage() {
         textColorClass: '',
         customColor: selectedColor,
       }));
-
-      setSlots((prev) => [...prev, ...newSlots]);
+      addMultipleSlots(newSlots);
     }
 
     setIsModalOpen(false);
@@ -140,7 +121,7 @@ export default function SchedulePage() {
 
   const handleDeleteSlot = () => {
     if (!editingSlotId) return;
-    setSlots((prev) => prev.filter((slot) => slot.id !== editingSlotId));
+    deleteSlot(editingSlotId);
     setIsModalOpen(false);
   };
 
@@ -157,7 +138,10 @@ export default function SchedulePage() {
             <p className="text-[#40493e] text-sm md:text-base">Define tus bloques ocupados para encontrar huecos más fácilmente.</p>
           </div>
           <div className="flex gap-4 w-full md:w-auto">
-            <button className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-[#d5e3cf] bg-[#e9f0e4] text-[#40493e] hover:bg-[#dbe5d6] hover:text-[#161d15] transition-all text-sm font-medium cursor-pointer shadow-xs">
+            <button
+              onClick={importMockCalendar}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-[#d5e3cf] bg-[#e9f0e4] text-[#40493e] hover:bg-[#dbe5d6] hover:text-[#161d15] transition-all text-sm font-medium cursor-pointer shadow-xs"
+            >
               <span className="material-symbols-outlined text-[20px]">cloud_upload</span>
               Importar
             </button>
