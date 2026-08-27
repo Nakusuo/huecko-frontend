@@ -19,78 +19,11 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-const SVG_BASE_PROPS = {
-  xmlns: 'http://www.w3.org/2000/svg',
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 2,
-  strokeLinecap: 'round' as const,
-  strokeLinejoin: 'round' as const,
-};
-
-function EyeIcon({ open }: { open: boolean }) {
-  return open ? (
-    <svg {...SVG_BASE_PROPS} width="18" height="18" viewBox="0 0 24 24">
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  ) : (
-    <svg {...SVG_BASE_PROPS} width="18" height="18" viewBox="0 0 24 24">
-      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-      <line x1="2" x2="22" y1="2" y2="22" />
-    </svg>
-  );
-}
-
-function MailIcon() {
-  return (
-    <svg {...SVG_BASE_PROPS} width="16" height="16" viewBox="0 0 24 24">
-      <rect width="20" height="16" x="2" y="4" rx="2" />
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-    </svg>
-  );
-}
-
-function LockIcon() {
-  return (
-    <svg {...SVG_BASE_PROPS} width="16" height="16" viewBox="0 0 24 24">
-      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
-
-function SpinnerIcon() {
-  return (
-    <svg
-      {...SVG_BASE_PROPS}
-      className="animate-spin"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-    >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
-  );
-}
-
-const inputBaseClass = `
-  w-full py-3 rounded-xl text-sm
-  bg-slate-900 border text-white placeholder-slate-600
-  outline-none transition-all duration-200
-  focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500
-`;
-
-const inputErrorClass = 'border-red-500/60 bg-red-950/20';
-const inputDefaultClass = 'border-slate-800 hover:border-slate-700';
-
 const FEATURE_PILLS = [
-  'Horarios automáticos',
-  'Grupos inteligentes',
-  'Votación en tiempo real',
-  'Sin drama, solo planes',
+  { icon: 'calendar_month', label: 'Horarios automáticos' },
+  { icon: 'groups', label: 'Grupos inteligentes' },
+  { icon: 'how_to_vote', label: 'Votación en tiempo real' },
+  { icon: 'spa', label: 'Sin drama, solo planes' },
 ];
 
 export default function LoginPage() {
@@ -102,6 +35,7 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -112,7 +46,7 @@ export default function LoginPage() {
     try {
       const response = await loginUser(data);
       login(response.user, response.token);
-      navigate('/dashboard', { replace: true });
+      navigate('/schedule', { replace: true });
     } catch (error) {
       setServerError(
         error instanceof Error ? error.message : 'Error inesperado. Intenta de nuevo.'
@@ -120,130 +54,185 @@ export default function LoginPage() {
     }
   };
 
-  const togglePasswordVisibility = () => setShowPassword((prev) => !prev);
+  const fillDemoCredentials = () => {
+    setValue('email', 'demo@huecko.com', { shouldValidate: true });
+    setValue('password', 'demo1234', { shouldValidate: true });
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
+    <div className="min-h-screen bg-[#f4fbf1] flex text-[#161d15]">
+      {/* Branding Panel (Desktop) */}
       <BrandingPanel />
 
+      {/* Form Panel */}
       <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-md">
           <MobileLogo />
 
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-1">Bienvenido de vuelta</h2>
-            <p className="text-slate-400 text-sm">
-              Inicia sesión para coordinar con tu grupo.
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="block text-sm font-medium text-slate-300">
-                Correo electrónico
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
-                  <MailIcon />
-                </span>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="demo@huecko.com"
-                  {...register('email')}
-                  className={`${inputBaseClass} pl-10 pr-4 ${errors.email ? inputErrorClass : inputDefaultClass}`}
-                />
-              </div>
-              {errors.email && (
-                <p className="text-xs text-red-400">⚠ {errors.email.message}</p>
-              )}
+          <div className="bg-[#e9f0e4]/90 border border-[#d5e3cf] rounded-3xl p-7 md:p-9 shadow-lg shadow-[#7fae7a]/10 backdrop-blur-md">
+            <div className="mb-6">
+              <h2 className="text-2xl md:text-3xl font-bold text-[#161d15] font-headline mb-1.5">
+                Bienvenido de vuelta
+              </h2>
+              <p className="text-[#40493e] text-sm">
+                Inicia sesión para coordinar horarios y actividades con tu grupo.
+              </p>
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="block text-sm font-medium text-slate-300">
-                Contraseña
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
-                  <LockIcon />
+            <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+              {/* Campo Email */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="email"
+                  className="block text-xs font-semibold uppercase tracking-wider text-[#40493e]"
+                >
+                  Correo Electrónico
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#70796d] flex items-center">
+                    <span className="material-symbols-outlined text-[20px]">mail</span>
+                  </span>
+                  <input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="demo@huecko.com"
+                    {...register('email')}
+                    className={`w-full pl-11 pr-4 py-3 rounded-xl text-sm bg-white text-[#161d15] placeholder-[#8a9486] border outline-none transition-all duration-200 focus:ring-2 focus:ring-[#7fae7a]/30 focus:border-[#416840] ${
+                      errors.email
+                        ? 'border-red-400 bg-red-50/50'
+                        : 'border-[#c0c9bb] hover:border-[#7fae7a]'
+                    }`}
+                  />
+                </div>
+                {errors.email && (
+                  <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
+                    <span className="material-symbols-outlined text-[14px]">error</span>
+                    {errors.email.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Campo Password */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="password"
+                  className="block text-xs font-semibold uppercase tracking-wider text-[#40493e]"
+                >
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#70796d] flex items-center">
+                    <span className="material-symbols-outlined text-[20px]">lock</span>
+                  </span>
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    {...register('password')}
+                    className={`w-full pl-11 pr-12 py-3 rounded-xl text-sm bg-white text-[#161d15] placeholder-[#8a9486] border outline-none transition-all duration-200 focus:ring-2 focus:ring-[#7fae7a]/30 focus:border-[#416840] ${
+                      errors.password
+                        ? 'border-red-400 bg-red-50/50'
+                        : 'border-[#c0c9bb] hover:border-[#7fae7a]'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#70796d] hover:text-[#161d15] transition-colors p-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {showPassword ? 'visibility_off' : 'visibility'}
+                    </span>
+                  </button>
+                </div>
+                {errors.password && (
+                  <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
+                    <span className="material-symbols-outlined text-[14px]">error</span>
+                    {errors.password.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Error del Servidor */}
+              {serverError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[18px] shrink-0 text-red-600">
+                    cancel
+                  </span>
+                  <span>{serverError}</span>
+                </div>
+              )}
+
+              {/* Botón Submit */}
+              <button
+                id="btn-login"
+                type="submit"
+                disabled={isSubmitting}
+                className="
+                  w-full py-3 px-4 rounded-xl font-semibold text-sm mt-3
+                  bg-[#416840] hover:bg-[#345333] active:scale-[0.98]
+                  text-white shadow-md shadow-[#416840]/25
+                  transition-all duration-200 cursor-pointer
+                  disabled:opacity-60 disabled:cursor-not-allowed
+                  flex items-center justify-center gap-2
+                "
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin text-[18px]">
+                      progress_activity
+                    </span>
+                    <span>Iniciando sesión...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Iniciar sesión</span>
+                    <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Separador */}
+            <div className="my-5 flex items-center gap-3">
+              <div className="flex-1 h-px bg-[#c0c9bb]/60" />
+              <span className="text-xs text-[#70796d]">o</span>
+              <div className="flex-1 h-px bg-[#c0c9bb]/60" />
+            </div>
+
+            {/* Enlace Registro */}
+            <p className="text-center text-sm text-[#40493e]">
+              ¿No tienes cuenta?{' '}
+              <Link
+                to="/register"
+                className="text-[#416840] hover:text-[#2a4f2b] font-bold underline transition-colors"
+              >
+                Regístrate gratis
+              </Link>
+            </p>
+
+            {/* Tarjeta de Credenciales Demo */}
+            <div className="mt-5 p-3.5 rounded-2xl border border-dashed border-[#7fae7a] bg-[#eff6eb] flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#416840] flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px]">key</span>
+                  Credenciales Demo:
                 </span>
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  {...register('password')}
-                  className={`${inputBaseClass} pl-10 pr-12 ${errors.password ? inputErrorClass : inputDefaultClass}`}
-                />
                 <button
                   type="button"
-                  onClick={togglePasswordVisibility}
-                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-1"
+                  onClick={fillDemoCredentials}
+                  className="text-[11px] font-semibold text-[#416840] bg-white border border-[#c0c9bb] px-2.5 py-0.5 rounded-full hover:bg-[#c3e5bb]/50 transition-colors cursor-pointer"
                 >
-                  <EyeIcon open={showPassword} />
+                  Autocompletar
                 </button>
               </div>
-              {errors.password && (
-                <p className="text-xs text-red-400">⚠ {errors.password.message}</p>
-              )}
+              <p className="text-xs text-[#40493e] font-mono bg-white/70 px-2 py-1 rounded-lg border border-[#c0c9bb]/40">
+                demo@huecko.com / demo1234
+              </p>
             </div>
-
-            {serverError && (
-              <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/30 text-sm text-red-300 flex items-start gap-2">
-                <span className="mt-0.5 shrink-0">✕</span>
-                <span>{serverError}</span>
-              </div>
-            )}
-
-            <button
-              id="btn-login"
-              type="submit"
-              disabled={isSubmitting}
-              className="
-                w-full py-3 rounded-xl font-semibold text-sm mt-2
-                bg-gradient-to-r from-violet-600 to-indigo-600
-                hover:from-violet-500 hover:to-indigo-500
-                text-white shadow-lg shadow-violet-500/20
-                transition-all duration-200
-                disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none
-                flex items-center justify-center gap-2
-                active:scale-[0.98]
-              "
-            >
-              {isSubmitting ? (
-                <>
-                  <SpinnerIcon />
-                  <span>Iniciando sesión...</span>
-                </>
-              ) : (
-                'Iniciar sesión'
-              )}
-            </button>
-          </form>
-
-          <div className="my-6 flex items-center gap-3">
-            <div className="flex-1 h-px bg-slate-800" />
-            <span className="text-xs text-slate-600">o</span>
-            <div className="flex-1 h-px bg-slate-800" />
-          </div>
-
-          <p className="text-center text-sm text-slate-500">
-            ¿No tienes cuenta?{' '}
-            <Link
-              to="/register"
-              className="text-violet-400 hover:text-violet-300 font-medium transition-colors"
-            >
-              Regístrate gratis
-            </Link>
-          </p>
-
-          <div className="mt-6 p-3 rounded-xl border border-dashed border-slate-800 bg-slate-900/50">
-            <p className="text-xs text-slate-500 text-center leading-relaxed">
-              <span className="text-slate-400 font-medium">Demo:</span>{' '}
-              demo@huecko.com / demo1234
-            </p>
           </div>
         </div>
       </div>
@@ -253,57 +242,54 @@ export default function LoginPage() {
 
 function BrandingPanel() {
   return (
-    <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center p-12">
-      <div className="absolute inset-0 bg-gradient-to-br from-violet-950 via-slate-900 to-slate-950" />
-      <div className="absolute top-1/4 -left-20 w-80 h-80 bg-violet-600/20 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl" />
-      <div className="absolute top-3/4 left-1/3 w-48 h-48 bg-purple-500/10 rounded-full blur-2xl" />
-      <div
-        className="absolute inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(139,92,246,1) 1px, transparent 1px), linear-gradient(90deg, rgba(139,92,246,1) 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-        }}
-      />
+    <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center p-12 bg-gradient-to-br from-[#1e3b1f] via-[#2a4f2b] to-[#416840] text-white">
+      {/* Decorative Orbs */}
+      <div className="absolute top-1/4 -left-20 w-80 h-80 bg-[#7fae7a]/25 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-[#c3e5bb]/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-3/4 left-1/3 w-48 h-48 bg-[#bcebe9]/15 rounded-full blur-2xl pointer-events-none" />
 
       <div className="relative z-10 text-center max-w-md">
-        <div className="mb-8 flex items-center justify-center">
+        <div className="mb-6 flex items-center justify-center">
           <div className="relative">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-violet-500/30">
+            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#7fae7a] to-[#416840] flex items-center justify-center shadow-2xl shadow-black/30 border border-white/20">
               <span className="text-4xl font-black text-white tracking-tighter">H</span>
             </div>
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-400 rounded-full border-2 border-slate-950 flex items-center justify-center">
-              <div className="w-2 h-2 bg-emerald-900 rounded-full" />
+            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#c3e5bb] rounded-full border-2 border-[#1e3b1f] flex items-center justify-center">
+              <div className="w-2 h-2 bg-[#416840] rounded-full" />
             </div>
           </div>
         </div>
 
-        <h1 className="text-5xl font-black text-white mb-3 tracking-tight">Huecko</h1>
-        <p className="text-violet-300 text-lg font-medium mb-8">
+        <h1 className="text-5xl font-bold font-headline mb-2 tracking-tight text-white">
+          Huecko
+        </h1>
+        <p className="text-[#c3e5bb] text-lg font-medium mb-8">
           Coordinación Social, Naturalmente.
         </p>
 
-        <div className="flex flex-wrap gap-2 justify-center">
-          {FEATURE_PILLS.map((label) => (
+        <div className="flex flex-wrap gap-2.5 justify-center mb-8">
+          {FEATURE_PILLS.map((item) => (
             <span
-              key={label}
-              className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-slate-300 backdrop-blur-sm"
+              key={item.label}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white/10 border border-white/15 rounded-full text-xs text-[#eff6eb] backdrop-blur-sm shadow-xs"
             >
-              {label}
+              <span className="material-symbols-outlined text-[16px] text-[#c3e5bb]">
+                {item.icon}
+              </span>
+              {item.label}
             </span>
           ))}
         </div>
 
-        <div className="mt-10 p-4 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-sm text-left">
-          <p className="text-slate-300 text-sm italic leading-relaxed">
+        <div className="p-4 bg-white/10 border border-white/15 rounded-2xl backdrop-blur-md text-left shadow-lg shadow-black/10">
+          <p className="text-[#eff6eb] text-sm italic leading-relaxed">
             "Por fin dejamos de discutir en el grupo de WhatsApp de cuándo nos juntamos."
           </p>
-          <div className="mt-3 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center text-xs font-bold text-white">
+          <div className="mt-3 flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#7fae7a] to-[#c3e5bb] flex items-center justify-center text-xs font-bold text-[#1e3b1f]">
               M
             </div>
-            <span className="text-xs text-slate-400">María C. — Usuaria Beta</span>
+            <span className="text-xs text-[#c3e5bb]">María C. — Estudiante Universitaria</span>
           </div>
         </div>
       </div>
@@ -313,11 +299,11 @@ function BrandingPanel() {
 
 function MobileLogo() {
   return (
-    <div className="lg:hidden flex items-center gap-3 mb-10">
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+    <div className="lg:hidden flex items-center gap-3 mb-6 justify-center">
+      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#7fae7a] to-[#416840] flex items-center justify-center shadow-md shadow-[#7fae7a]/20">
         <span className="text-xl font-black text-white">H</span>
       </div>
-      <span className="text-2xl font-black text-white tracking-tight">Huecko</span>
+      <span className="text-2xl font-bold font-headline text-[#161d15] tracking-tight">Huecko</span>
     </div>
   );
 }
