@@ -7,22 +7,37 @@ import SchedulePage from '../pages/SchedulePage';
 import ProfilePage from '../pages/ProfilePage';
 import GroupsPage from '../pages/GroupsPage';
 import DiscoverPage from '../pages/DiscoverPage';
+import { useAuthStore } from '../store/authStore';
 
 export default function AppRouter() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/schedule" element={<SchedulePage />} />
-      <Route path="/profile" element={<ProfilePage />} />
-      <Route path="/groups" element={<GroupsPage />} />
-      <Route path="/discover" element={<DiscoverPage />} />
+      {/* Rutas Públicas de Autenticación */}
+      <Route
+        path="/login"
+        element={isAuthenticated ? <Navigate to="/schedule" replace /> : <LoginPage />}
+      />
+      <Route
+        path="/register"
+        element={isAuthenticated ? <Navigate to="/schedule" replace /> : <RegisterPage />}
+      />
 
+      {/* Rutas Protegidas (Requieren autenticación) */}
       <Route element={<ProtectedRoute />}>
+        <Route path="/schedule" element={<SchedulePage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/groups" element={<GroupsPage />} />
+        <Route path="/discover" element={<DiscoverPage />} />
         <Route path="/dashboard" element={<DashboardPlaceholder />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/groups" replace />} />
+      {/* Ruta por defecto */}
+      <Route
+        path="*"
+        element={<Navigate to={isAuthenticated ? "/schedule" : "/login"} replace />}
+      />
     </Routes>
   );
 }
