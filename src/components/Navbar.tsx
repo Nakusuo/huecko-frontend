@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
 
 interface NavbarProps {
   currentTab: 'schedule' | 'groups' | 'discover' | 'profile';
@@ -7,6 +8,12 @@ interface NavbarProps {
 
 export default function Navbar({ currentTab }: NavbarProps) {
   const navigate = useNavigate();
+  const logout = useAuthStore((s) => s.logout);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <>
@@ -55,20 +62,31 @@ export default function Navbar({ currentTab }: NavbarProps) {
           </button>
         </div>
 
-        <button
-          onClick={() => navigate('/profile')}
-          className={`text-sm font-semibold transition-all cursor-pointer rounded-full px-5 py-2 ${
-            currentTab === 'profile'
-              ? 'bg-[#416840] text-white shadow-md shadow-[#7fae7a]/20'
-              : 'bg-[#7fae7a] hover:bg-[#6f9e6a] text-white shadow-sm'
-          }`}
-        >
-          Mi Perfil
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/profile')}
+            className={`text-sm font-semibold transition-all cursor-pointer rounded-full px-5 py-2 ${
+              currentTab === 'profile'
+                ? 'bg-[#416840] text-white shadow-md shadow-[#7fae7a]/20'
+                : 'bg-[#7fae7a] hover:bg-[#6f9e6a] text-white shadow-sm'
+            }`}
+          >
+            Mi Perfil
+          </button>
+
+          <button
+            onClick={handleLogout}
+            title="Cerrar sesión"
+            className="flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200/80 px-3.5 py-2 rounded-full transition-all cursor-pointer shadow-xs active:scale-95"
+          >
+            <span className="material-symbols-outlined text-[18px]">logout</span>
+            <span>Salir</span>
+          </button>
+        </div>
       </nav>
 
       {/* BottomNavBar (Mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-[#e9f0e4] border-t border-[#d5e3cf]">
+      <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 pb-6 pt-3 bg-[#e9f0e4] border-t border-[#d5e3cf]">
         <button
           onClick={() => navigate('/schedule')}
           className={`flex flex-col items-center justify-center px-3 py-1.5 transition-colors cursor-pointer ${
@@ -107,6 +125,14 @@ export default function Navbar({ currentTab }: NavbarProps) {
         >
           <span className="material-symbols-outlined">person</span>
           <span className="text-[11px]">Perfil</span>
+        </button>
+
+        <button
+          onClick={handleLogout}
+          className="flex flex-col items-center justify-center px-3 py-1.5 text-red-600 hover:text-red-700 transition-colors cursor-pointer active:scale-95"
+        >
+          <span className="material-symbols-outlined">logout</span>
+          <span className="text-[11px]">Salir</span>
         </button>
       </nav>
     </>

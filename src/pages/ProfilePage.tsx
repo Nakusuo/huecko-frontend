@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import { useAuthStore } from '../store/authStore';
 
 interface UserProfileData {
   nombre: string;
@@ -12,15 +14,23 @@ interface UserProfileData {
 }
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
+
   // Initial state aligned with user data structure (RNF-02, Postgres usuarios)
   const [profile, setProfile] = useState<UserProfileData>({
-    nombre: 'Alex Rodríguez',
-    email: 'alex.rodriguez@huecko.com',
+    nombre: user?.nombre || 'Alex Rodríguez',
+    email: user?.email || 'alex.rodriguez@huecko.com',
     timezone: 'America/Lima (GMT-5)',
     compartirDetallesHorario: false, // Default false according to RNF-02 (Privacy: only show free/busy unless opted in)
     notificacionesEmail: true,
     notificacionesWebSockets: true,
   });
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempProfile, setTempProfile] = useState<UserProfileData>(profile);
@@ -88,6 +98,17 @@ export default function ProfilePage() {
                 <span className="text-[#40493e]">Grupos activos:</span>
                 <span className="text-[#161d15] font-medium">3 grupos</span>
               </div>
+            </div>
+
+            <div className="w-full pt-4 mt-2 border-t border-[#c0c9bb]/60">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full py-2.5 px-4 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-98"
+              >
+                <span className="material-symbols-outlined text-[18px]">logout</span>
+                Cerrar Sesión
+              </button>
             </div>
           </div>
 
