@@ -1,9 +1,8 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 interface NavbarProps {
-  currentTab: 'schedule' | 'groups' | 'discover' | 'profile';
+  currentTab: 'dashboard' | 'schedule' | 'groups' | 'discover' | 'profile';
 }
 
 export default function Navbar({ currentTab }: NavbarProps) {
@@ -18,10 +17,10 @@ export default function Navbar({ currentTab }: NavbarProps) {
   return (
     <>
       {/* TopNavBar (Web) */}
-      <nav className="hidden md:flex bg-[#e9f0e4]/90 backdrop-blur-md fixed top-4 left-1/2 -translate-x-1/2 w-[90%] max-w-7xl rounded-full border border-[#d5e3cf] shadow-lg shadow-[#7fae7a]/10 justify-between items-center px-8 py-3 z-50">
+      <nav className="hidden md:flex bg-[#e9f0e4]/90 backdrop-blur-md fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-7xl rounded-full border border-[#d5e3cf] shadow-lg shadow-[#7fae7a]/10 justify-between items-center px-8 py-3 z-50">
         <div
           className="flex items-center gap-3 cursor-pointer"
-          onClick={() => navigate('/schedule')}
+          onClick={() => navigate('/dashboard')}
         >
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#7fae7a] to-[#416840] flex items-center justify-center font-black text-white text-lg shadow-sm">
             H
@@ -29,7 +28,17 @@ export default function Navbar({ currentTab }: NavbarProps) {
           <span className="text-xl font-bold text-[#161d15] tracking-tight">Huecko</span>
         </div>
 
-        <div className="flex gap-8 items-center">
+        <div className="flex gap-7 items-center">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className={`text-sm font-medium transition-colors cursor-pointer ${
+              currentTab === 'dashboard'
+                ? 'text-[#416840] border-b-2 border-[#7fae7a] pb-1 font-bold'
+                : 'text-[#40493e] hover:text-[#161d15]'
+            }`}
+          >
+            Dashboard
+          </button>
           <button
             onClick={() => navigate('/schedule')}
             className={`text-sm font-medium transition-colors cursor-pointer ${
@@ -86,53 +95,63 @@ export default function Navbar({ currentTab }: NavbarProps) {
       </nav>
 
       {/* BottomNavBar (Mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 pb-6 pt-3 bg-[#e9f0e4] border-t border-[#d5e3cf]">
+      <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-1 pb-6 pt-3 bg-[#e9f0e4] border-t border-[#d5e3cf]">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
+            currentTab === 'dashboard' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
+          }`}
+        >
+          <span className="material-symbols-outlined">dashboard</span>
+          <span className="text-[10px]">Inicio</span>
+        </button>
+
         <button
           onClick={() => navigate('/schedule')}
-          className={`flex flex-col items-center justify-center px-3 py-1.5 transition-colors cursor-pointer ${
+          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
             currentTab === 'schedule' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
           }`}
         >
           <span className="material-symbols-outlined">calendar_month</span>
-          <span className="text-[11px]">Horario</span>
+          <span className="text-[10px]">Horario</span>
         </button>
 
         <button
           onClick={() => navigate('/groups')}
-          className={`flex flex-col items-center justify-center px-3 py-1.5 transition-colors cursor-pointer ${
+          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
             currentTab === 'groups' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
           }`}
         >
           <span className="material-symbols-outlined">group</span>
-          <span className="text-[11px]">Grupos</span>
+          <span className="text-[10px]">Grupos</span>
         </button>
 
         <button
           onClick={() => navigate('/discover')}
-          className={`flex flex-col items-center justify-center px-3 py-1.5 transition-colors cursor-pointer ${
+          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
             currentTab === 'discover' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
           }`}
         >
           <span className="material-symbols-outlined">explore</span>
-          <span className="text-[11px]">Descubrir</span>
+          <span className="text-[10px]">Descubrir</span>
         </button>
 
         <button
           onClick={() => navigate('/profile')}
-          className={`flex flex-col items-center justify-center px-3 py-1.5 transition-colors cursor-pointer ${
+          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
             currentTab === 'profile' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
           }`}
         >
           <span className="material-symbols-outlined">person</span>
-          <span className="text-[11px]">Perfil</span>
+          <span className="text-[10px]">Perfil</span>
         </button>
 
         <button
           onClick={handleLogout}
-          className="flex flex-col items-center justify-center px-3 py-1.5 text-red-600 hover:text-red-700 transition-colors cursor-pointer active:scale-95"
+          className="flex flex-col items-center justify-center px-2 py-1.5 text-red-600 hover:text-red-700 transition-colors cursor-pointer active:scale-95"
         >
           <span className="material-symbols-outlined">logout</span>
-          <span className="text-[11px]">Salir</span>
+          <span className="text-[10px]">Salir</span>
         </button>
       </nav>
     </>
