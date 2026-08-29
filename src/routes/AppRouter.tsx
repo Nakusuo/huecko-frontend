@@ -2,27 +2,44 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
-import DashboardPlaceholder from '../pages/DashboardPlaceholder';
+import DashboardPage from '../pages/DashboardPage';
+import OnboardingPage from '../pages/OnboardingPage';
 import SchedulePage from '../pages/SchedulePage';
 import ProfilePage from '../pages/ProfilePage';
 import GroupsPage from '../pages/GroupsPage';
 import DiscoverPage from '../pages/DiscoverPage';
+import { useAuthStore } from '../store/authStore';
 
 export default function AppRouter() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/schedule" element={<SchedulePage />} />
-      <Route path="/profile" element={<ProfilePage />} />
-      <Route path="/groups" element={<GroupsPage />} />
-      <Route path="/discover" element={<DiscoverPage />} />
+      {/* Rutas Públicas de Autenticación */}
+      <Route
+        path="/login"
+        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+      />
+      <Route
+        path="/register"
+        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
+      />
 
+      {/* Rutas Protegidas (Requieren autenticación) */}
       <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<DashboardPlaceholder />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route path="/schedule" element={<SchedulePage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/groups" element={<GroupsPage />} />
+        <Route path="/discover" element={<DiscoverPage />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/groups" replace />} />
+      {/* Ruta por defecto */}
+      <Route
+        path="*"
+        element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />}
+      />
     </Routes>
   );
 }
