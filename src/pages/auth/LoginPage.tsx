@@ -46,7 +46,7 @@ export default function LoginPage() {
     try {
       const response = await loginUser(data);
       login(response.user, response.token);
-      navigate('/schedule', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (error) {
       setServerError(
         error instanceof Error ? error.message : 'Error inesperado. Intenta de nuevo.'

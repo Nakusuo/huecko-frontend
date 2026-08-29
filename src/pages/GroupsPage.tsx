@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Navbar from '../components/Navbar';
+import EmptyState from '../components/EmptyState';
 
 type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
 
@@ -551,8 +552,19 @@ export default function GroupsPage() {
         </header>
 
         {/* Group Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-          {groups.map((group) => {
+        {groups.length === 0 ? (
+          <div className="mb-12">
+            <EmptyState
+              icon="groups"
+              title="Aún no tienes ningún grupo"
+              description="Crea tu primer grupo para invitar a tus amigos o compañeros y ver su coincidencia horaria."
+              actionLabel="Crear mi primer grupo"
+              onAction={openCreateModal}
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+            {groups.map((group) => {
             const isSelected = selectedGroup?.id === group.id;
 
             return (
@@ -665,6 +677,7 @@ export default function GroupsPage() {
             );
           })}
         </div>
+        )}
 
         {/* SECCIÓN DE PLANES PROPUESTOS Y VOTACIONES ACTIVAS */}
         {selectedGroup && (
