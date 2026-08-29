@@ -12,10 +12,13 @@ export interface TimeSlot {
   colorClass: string;
   textColorClass: string;
   customColor?: string;
+  type?: 'recurrente' | 'puntual';
+  specificDate?: string;
 }
 
 interface ScheduleState {
   slots: TimeSlot[];
+  setSlots: (updater: (prev: TimeSlot[]) => TimeSlot[]) => void;
   addSlot: (slot: Omit<TimeSlot, 'id'>) => void;
   addMultipleSlots: (slots: Omit<TimeSlot, 'id'>[]) => void;
   updateSlot: (id: string, updatedSlot: Partial<TimeSlot>) => void;
@@ -36,6 +39,10 @@ export const useScheduleStore = create<ScheduleState>()(
   persist(
     (set) => ({
       slots: INITIAL_SLOTS,
+      setSlots: (updater) =>
+        set((state) => ({
+          slots: updater(state.slots),
+        })),
 
       addSlot: (slot) =>
         set((state) => ({
