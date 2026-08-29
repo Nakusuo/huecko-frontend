@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import { processScheduleOcr } from '../services/ocrService';
+import { useScheduleStore } from '../store/scheduleStore';
 
 export type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
 
@@ -28,16 +29,6 @@ export interface OcrExtractedSlot {
   selected: boolean;
 }
 
-const initialSlots: TimeSlot[] = [
-  { id: '1', title: 'Universidad - Algoritmos', day: 'Lun', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b', type: 'recurrente' },
-  { id: '2', title: 'Trabajo Remoto', day: 'Mar', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6', type: 'recurrente' },
-  { id: '3', title: 'Universidad - Cálculo', day: 'Mié', startTime: '08:00', endTime: '10:00', colorClass: '', textColorClass: '', customColor: '#f59e0b', type: 'recurrente' },
-  { id: '4', title: 'Entrenamiento / Gym', day: 'Mié', startTime: '13:00', endTime: '15:30', colorClass: '', textColorClass: '', customColor: '#10b981', type: 'recurrente' },
-  { id: '5', title: 'Trabajo Remoto', day: 'Jue', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6', type: 'recurrente' },
-  { id: '6', title: 'Universidad - Algoritmos', day: 'Vie', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b', type: 'recurrente' },
-  { id: '7', title: '📌 Cita Médica Anual', day: 'Jue', startTime: '15:00', endTime: '16:30', colorClass: '', textColorClass: '', customColor: '#ec4899', type: 'puntual', specificDate: '2026-09-03' },
-];
-
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 const PRESET_COLORS = [
@@ -57,7 +48,7 @@ const MOCK_OCR_RESULTS: OcrExtractedSlot[] = [
 ];
 
 export default function SchedulePage() {
-  const [slots, setSlots] = useState<TimeSlot[]>(initialSlots);
+  const { slots, setSlots, deleteSlot, importMockCalendar } = useScheduleStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
 
@@ -243,7 +234,7 @@ export default function SchedulePage() {
 
   const handleDeleteSlot = () => {
     if (!editingSlotId) return;
-    setSlots((prev) => prev.filter((slot) => slot.id !== editingSlotId));
+    deleteSlot(editingSlotId);
     setIsModalOpen(false);
     showToast('Bloque eliminado correctamente.');
   };
@@ -399,7 +390,6 @@ export default function SchedulePage() {
               Define tus bloques ocupados (recurrentes o puntuales) o importa tu sílabo vía OCR.
             </p>
           </div>
-
           <div className="flex gap-3 w-full md:w-auto">
             {/* Botón Importar OCR (HU-02) */}
             <button
@@ -408,6 +398,13 @@ export default function SchedulePage() {
             >
               <span className="material-symbols-outlined text-[20px] text-[#416840]">document_scanner</span>
               <span>Importar OCR</span>
+            </button>
+            <button
+              onClick={importMockCalendar}
+              className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[#d5e3cf] bg-[#e9f0e4] text-[#40493e] hover:bg-[#dbe5d6] hover:text-[#161d15] transition-all text-xs sm:text-sm font-semibold cursor-pointer shadow-xs active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[20px]">cloud_upload</span>
+              <span>Importar</span>
             </button>
 
             {/* Botón Agregar Bloque Manual (HU-01 & HU-03) */}

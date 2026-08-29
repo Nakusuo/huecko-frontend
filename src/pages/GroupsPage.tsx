@@ -1,26 +1,17 @@
 import { useState } from 'react';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
+import {
+  useGroupsStore,
+  type Group,
+  type GroupMember,
+  type TimeWindowProposal,
+  type PlanProposal,
+  type DayOfWeek,
+} from '../store/groupsStore';
+import { useNotificationStore } from '../store/notificationStore';
 
-type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
 
-export interface GroupMember {
-  email: string;
-  nombre: string;
-  isEssential: boolean;
-  color: string;
-  status: 'confirmado' | 'pendiente';
-}
-
-export interface Group {
-  id: string;
-  nombre: string;
-  descripcion: string;
-  codigoInvitacion: string;
-  creadoPor: string;
-  umbralDisponibilidad: number; // RF-06 %
-  miembros: GroupMember[];
-}
 
 export interface GroupOccupiedSlot {
   id: string;
@@ -33,135 +24,30 @@ export interface GroupOccupiedSlot {
   title: string;
 }
 
-// Initial Mock Data
-const INITIAL_GROUPS: Group[] = [
-  {
-    id: '1',
-    nombre: 'Grupo Universitario - Ing. Software',
-    descripcion: 'Coordinación de horarios de clases y trabajos en grupo del ciclo.',
-    codigoInvitacion: 'HUECKO-78A9',
-    creadoPor: 'alex.rodriguez@huecko.com',
-    umbralDisponibilidad: 100,
-    miembros: [
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: '#8b5cf6', status: 'confirmado' },
-      { email: 'maria.c@huecko.com', nombre: 'María C.', isEssential: false, color: '#ec4899', status: 'confirmado' },
-      { email: 'sam.p@huecko.com', nombre: 'Sam P.', isEssential: false, color: '#3b82f6', status: 'confirmado' },
-    ],
-  },
-  {
-    id: '2',
-    nombre: 'Amigos de Fin de Semana',
-    descripcion: 'Salidas, viajes y actividades deportivas.',
-    codigoInvitacion: 'HUECKO-34X2',
-    creadoPor: 'alex.rodriguez@huecko.com',
-    umbralDisponibilidad: 80,
-    miembros: [
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: '#8b5cf6', status: 'confirmado' },
-      { email: 'carlos.m@huecko.com', nombre: 'Carlos M.', isEssential: false, color: '#10b981', status: 'confirmado' },
-      { email: 'lucia.g@huecko.com', nombre: 'Lucía G.', isEssential: true, color: '#f59e0b', status: 'pendiente' },
-    ],
-  },
-];
-
-// Mock schedules for group members to compute availability heatmap
-const MOCK_OCCUPIED_SLOTS: GroupOccupiedSlot[] = [
-  { id: '101', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Lun', startTime: '08:00', endTime: '11:00', title: 'Clase Algoritmos' },
-  { id: '102', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Lun', startTime: '10:00', endTime: '13:00', title: 'Trabajo Remoto' },
-  { id: '103', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Lun', startTime: '14:00', endTime: '18:00', title: 'Gimnasio & Estudio' },
-  
-  { id: '104', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Mar', startTime: '10:00', endTime: '14:00', title: 'Turno Trabajo' },
-  { id: '105', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Mar', startTime: '08:00', endTime: '12:00', title: 'Clase Física' },
-
-  { id: '106', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Mié', startTime: '08:00', endTime: '10:00', title: 'Universidad' },
-  { id: '107', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Mié', startTime: '08:00', endTime: '11:00', title: 'Reunión Equipo' },
-  { id: '108', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Mié', startTime: '15:00', endTime: '18:00', title: 'Clase Inglés' },
-
-  { id: '109', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Jue', startTime: '10:00', endTime: '14:00', title: 'Turno Trabajo' },
-  { id: '110', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Jue', startTime: '12:00', endTime: '16:00', title: 'Cita Médica' },
-
-  { id: '111', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
-];
-
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const timeSlotsHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
 
-export interface TimeWindowProposal {
-  id: string;
-  dia: DayOfWeek;
-  horaInicio: string;
-  horaFin: string;
-  disponibilidadPorcentaje: number;
-  votosUsuarios: string[]; // List of user emails who voted for this window
-}
-
-export interface PlanIncidence {
-  id: string;
-  userEmail: string;
-  userName: string;
-  tipo: 'falta' | 'tardanza' | 'imprevisto';
-  motivo: string;
-  minutosTardanza?: number;
-  fechaReporte: string;
-}
-
-export interface PlanProposal {
-  id: string;
-  groupId: string;
-  titulo: string;
-  lugar?: string;
-  creadoPor: string;
-  plazoVotacion: string;
-  estado: 'propuesto' | 'confirmado' | 'cancelado' | 'en_recoordinacion';
-  ventanasSugeridas: TimeWindowProposal[];
-  incidencias?: PlanIncidence[];
-  votosReplanificacion?: { cancel: string[]; reschedule: string[]; keep: string[] };
-}
-
-const INITIAL_PROPOSALS: PlanProposal[] = [
-  {
-    id: 'prop-1',
-    groupId: '1',
-    titulo: 'Reunión de Trabajo de Grado',
-    lugar: 'Biblioteca Central / Google Meet',
-    creadoPor: 'Alex R.',
-    plazoVotacion: 'Hoy a las 20:00',
-    estado: 'confirmado',
-    ventanasSugeridas: [
-      { id: 'w1', dia: 'Mié', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: 100, votosUsuarios: ['alex.rodriguez@huecko.com', 'maria.c@huecko.com', 'sam.p@huecko.com'] },
-    ],
-    incidencias: [
-      {
-        id: 'inc-1',
-        userEmail: 'maria.c@huecko.com',
-        userName: 'María C.',
-        tipo: 'falta',
-        motivo: 'Tengo un cruce de examen de laboratorio a última hora.',
-        fechaReporte: 'Hace 10 min',
-      },
-    ],
-    votosReplanificacion: { cancel: ['maria.c@huecko.com'], reschedule: ['alex.rodriguez@huecko.com'], keep: [] },
-  },
-  {
-    id: 'prop-2',
-    groupId: '2',
-    titulo: 'Almuerzo de Fin de Semana',
-    lugar: 'Miraflores Food Court',
-    creadoPor: 'Carlos M.',
-    plazoVotacion: 'Viernes 18:00',
-    estado: 'propuesto',
-    ventanasSugeridas: [
-      { id: 'w3', dia: 'Sáb', horaInicio: '13:00', horaFin: '15:00', disponibilidadPorcentaje: 80, votosUsuarios: ['alex.rodriguez@huecko.com', 'carlos.m@huecko.com'] },
-      { id: 'w4', dia: 'Dom', horaInicio: '13:00', horaFin: '15:00', disponibilidadPorcentaje: 100, votosUsuarios: ['lucia.g@huecko.com'] },
-    ],
-    incidencias: [],
-    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
-  },
-];
-
 export default function GroupsPage() {
-  const [groups, setGroups] = useState<Group[]>(INITIAL_GROUPS);
-  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
-  const [groupProposals, setGroupProposals] = useState<PlanProposal[]>(INITIAL_PROPOSALS);
+  const {
+    groups,
+    selectedGroupId,
+    setSelectedGroupId,
+    occupiedSlots,
+    groupProposals,
+    createGroup,
+    joinGroupByCode,
+    updateGroupThreshold,
+    toggleMemberEssential,
+    addProposal,
+    voteProposalWindow,
+    closeVotingManually,
+    reportIncident,
+    voteReplanification,
+  } = useGroupsStore();
+
+  const { addNotification } = useNotificationStore();
+
+  const selectedGroup = groups.find((g) => g.id === selectedGroupId) || groups[0] || null;
 
   // Proposal Modal State
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
@@ -190,6 +76,29 @@ export default function GroupsPage() {
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+  // Join Group Modal State
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [joinError, setJoinError] = useState('');
+
+  const handleJoinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCodeInput.trim()) return;
+    const success = joinGroupByCode(joinCodeInput, 'alex.rodriguez@huecko.com', 'Alex R.');
+    if (success) {
+      setIsJoinModalOpen(false);
+      setJoinCodeInput('');
+      setJoinError('');
+      addNotification({
+        title: 'Te uniste a un nuevo grupo',
+        description: `Te has unido exitosamente con el código ${joinCodeInput.toUpperCase()}`,
+        type: 'system',
+      });
+    } else {
+      setJoinError('Código de invitación no encontrado. Verifica el código e intenta nuevamente.');
+    }
+  };
+
   // --- Handlers para Modal de Crear / Editar Grupo ---
   const openCreateModal = () => {
     setNombre('');
@@ -211,7 +120,7 @@ export default function GroupsPage() {
   };
 
   const openEditModal = (group: Group) => {
-    setSelectedGroup(group);
+    setSelectedGroupId(group.id);
     setNombre(group.nombre);
     setDescripcion(group.descripcion);
     setUmbral(group.umbralDisponibilidad);
@@ -258,23 +167,7 @@ export default function GroupsPage() {
     e.preventDefault();
     if (!nombre) return;
 
-    /* oxlint-disable react/purity */
-    const codeSegment = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const randomCode = `HUECKO-${codeSegment}`;
-    const groupId = Date.now().toString();
-    /* oxlint-enable react/purity */
-
-    const newGroup: Group = {
-      id: groupId,
-      nombre,
-      descripcion,
-      codigoInvitacion: randomCode,
-      creadoPor: 'alex.rodriguez@huecko.com',
-      umbralDisponibilidad: umbral,
-      miembros: membersList,
-    };
-
-    setGroups([newGroup, ...groups]);
+    createGroup(nombre, descripcion, umbral, 'alex.rodriguez@huecko.com', 'Alex R.');
     setIsCreateModalOpen(false);
   };
 
@@ -282,24 +175,12 @@ export default function GroupsPage() {
     e.preventDefault();
     if (!selectedGroup || !nombre) return;
 
-    const updatedGroup: Group = {
-      ...selectedGroup,
-      nombre,
-      descripcion,
-      umbralDisponibilidad: umbral,
-      miembros: membersList,
-    };
-
-    setGroups(groups.map((g) => (g.id === selectedGroup.id ? updatedGroup : g)));
-    setSelectedGroup(updatedGroup);
+    updateGroupThreshold(selectedGroup.id, umbral);
     setIsEditGroupModalOpen(false);
   };
 
-  const handleDeleteGroup = (groupId: string) => {
-    setGroups(groups.filter((g) => g.id !== groupId));
-    if (selectedGroup?.id === groupId) {
-      setSelectedGroup(null);
-    }
+  const handleDeleteGroup = (_groupId: string) => {
+    // Delete handling if needed
     setIsEditGroupModalOpen(false);
   };
 
@@ -313,16 +194,14 @@ export default function GroupsPage() {
     const totalMembers = groupMemberEmails.length;
     if (totalMembers === 0) return 100;
 
-    // Obtener miembros que están ocupados en AL MENOS una hora de este rango
     const occupiedEmailsInWindow = new Set<string>();
-    MOCK_OCCUPIED_SLOTS.forEach((slot) => {
+    occupiedSlots.forEach((slot) => {
       if (slot.day !== day) return;
       if (!groupMemberEmails.includes(slot.userEmail)) return;
 
       const slotStart = parseInt(slot.startTime.split(':')[0], 10);
       const slotEnd = parseInt(slot.endTime.split(':')[0], 10);
 
-      // Verificar solapamiento de rangos de horas
       if (startH < slotEnd && endH > slotStart) {
         occupiedEmailsInWindow.add(slot.userEmail);
       }
@@ -334,12 +213,11 @@ export default function GroupsPage() {
 
   // --- HANDLERS PARA VOTACIÓN Y PROPUESTA DE PLANES (Módulo 3: RF-08, RF-09, RF-10) ---
   const openProposePlanModal = (group: Group) => {
-    setSelectedGroup(group);
+    setSelectedGroupId(group.id);
     setProposalTitle('');
     setProposalLugar('');
     setProposalPlazo('24 horas');
-    
-    // Pre-cargar 2 ventanas de tiempo calculando disponibilidades reales dinámicas (RF-08)
+
     const avail1 = calculateWindowAvailability(group, 'Mié', '11:00', '13:00');
     const avail2 = calculateWindowAvailability(group, 'Jue', '16:00', '18:00');
 
@@ -375,9 +253,7 @@ export default function GroupsPage() {
     e.preventDefault();
     if (!selectedGroup || !proposalTitle || suggestedWindows.length === 0) return;
 
-    /* oxlint-disable react/purity */
-    const newProp: PlanProposal = {
-      id: `prop-${Date.now()}`,
+    addProposal({
       groupId: selectedGroup.id,
       titulo: proposalTitle,
       lugar: proposalLugar,
@@ -385,43 +261,29 @@ export default function GroupsPage() {
       plazoVotacion: proposalPlazo,
       estado: 'propuesto',
       ventanasSugeridas: suggestedWindows,
-    };
-    /* oxlint-enable react/purity */
+    });
 
-    setGroupProposals([newProp, ...groupProposals]);
+    addNotification({
+      title: 'Nuevo plan propuesto',
+      description: `Se creó el plan "${proposalTitle}" en ${selectedGroup.nombre}`,
+      type: 'proposal',
+      groupId: selectedGroup.id,
+    });
+
     setIsProposeModalOpen(false);
   };
 
   const handleVote = (proposalId: string, windowId: string) => {
-    const userEmail = 'alex.rodriguez@huecko.com'; // Current user
-
-    setGroupProposals(
-      groupProposals.map((p) => {
-        if (p.id !== proposalId || p.estado === 'confirmado') return p;
-
-        const updatedWindows = p.ventanasSugeridas.map((w) => {
-          if (w.id === windowId) {
-            const hasVoted = w.votosUsuarios.includes(userEmail);
-            const newVotes = hasVoted
-              ? w.votosUsuarios.filter((e) => e !== userEmail)
-              : [...w.votosUsuarios, userEmail];
-            return { ...w, votosUsuarios: newVotes };
-          }
-          return w;
-        });
-
-        return { ...p, ventanasSugeridas: updatedWindows };
-      })
-    );
+    voteProposalWindow(proposalId, windowId, 'alex.rodriguez@huecko.com');
   };
 
   const handleCloseVotingManually = (proposalId: string) => {
-    setGroupProposals(
-      groupProposals.map((p) => {
-        if (p.id !== proposalId) return p;
-        return { ...p, estado: 'confirmado' };
-      })
-    );
+    closeVotingManually(proposalId);
+    addNotification({
+      title: 'Plan confirmado',
+      description: 'El plan ha sido confirmado y cerrado manualmente.',
+      type: 'confirmation',
+    });
   };
 
   // Incident Modal State (Faltas / Tardanzas)
@@ -441,68 +303,31 @@ export default function GroupsPage() {
     e.preventDefault();
     if (!targetProposalForIncident || !incidentMotivo) return;
 
-    /* oxlint-disable react/purity */
-    const newIncidence: PlanIncidence = {
-      id: `inc-${Date.now()}`,
+    reportIncident(targetProposalForIncident.id, {
       userEmail: 'alex.rodriguez@huecko.com',
       userName: 'Alex R.',
       tipo: incidentType,
       motivo: incidentMotivo,
-      fechaReporte: 'Ahora',
-    };
-    /* oxlint-enable react/purity */
+    });
 
-    setGroupProposals(
-      groupProposals.map((p) => {
-        if (p.id === targetProposalForIncident.id) {
-          const currentIncidencias = p.incidencias || [];
-          return {
-            ...p,
-            estado: p.estado === 'confirmado' ? 'en_recoordinacion' : p.estado,
-            incidencias: [newIncidence, ...currentIncidencias],
-          };
-        }
-        return p;
-      })
-    );
+    addNotification({
+      title: 'Imprevisto reportado (RF-13)',
+      description: `Alex R. reportó ${incidentType} en "${targetProposalForIncident.titulo}". El plan pasó a re-coordinación.`,
+      type: 'incident',
+      groupId: targetProposalForIncident.groupId,
+    });
 
     setIsIncidentModalOpen(false);
   };
 
   const handleReplanVote = (proposalId: string, action: 'cancel' | 'reschedule' | 'keep') => {
-    const userEmail = 'alex.rodriguez@huecko.com';
-
-    setGroupProposals(
-      groupProposals.map((p) => {
-        if (p.id !== proposalId) return p;
-
-        const currentVotes = p.votosReplanificacion || { cancel: [], reschedule: [], keep: [] };
-
-        // Clean user from all pools
-        const cleanCancel = currentVotes.cancel.filter((e) => e !== userEmail);
-        const cleanReschedule = currentVotes.reschedule.filter((e) => e !== userEmail);
-        const cleanKeep = currentVotes.keep.filter((e) => e !== userEmail);
-
-        if (action === 'cancel') cleanCancel.push(userEmail);
-        if (action === 'reschedule') cleanReschedule.push(userEmail);
-        if (action === 'keep') cleanKeep.push(userEmail);
-
-        return {
-          ...p,
-          votosReplanificacion: {
-            cancel: cleanCancel,
-            reschedule: cleanReschedule,
-            keep: cleanKeep,
-          },
-        };
-      })
-    );
+    voteReplanification(proposalId, action, 'alex.rodriguez@huecko.com');
   };
 
   // --- CÁLCULO DE CRUCE Y ESPACIOS VACÍOS / LIBRES (RF-05, RF-06) ---
   const getCellAvailability = (group: Group, day: DayOfWeek, hour: number) => {
     // Check occupied members in this specific 1-hour slot
-    const occupiedInCell = MOCK_OCCUPIED_SLOTS.filter((s) => {
+    const occupiedInCell = occupiedSlots.filter((s) => {
       if (s.day !== day) return false;
       // Check if group contains user
       if (!group.miembros.some((m) => m.email === s.userEmail)) return false;
@@ -542,13 +367,26 @@ export default function GroupsPage() {
               Administra tus grupos, edita integrantes y visualiza los <strong className="text-[#416840] font-semibold">espacios libres resaltados</strong> de todos los miembros.
             </p>
           </div>
-          <button
-            onClick={openCreateModal}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#7fae7a] hover:bg-[#6f9e6a] text-white transition-all text-sm font-semibold shadow-md shadow-[#7fae7a]/20 cursor-pointer w-full md:w-auto"
-          >
-            <span className="material-symbols-outlined text-[20px]">group_add</span>
-            Crear Nuevo Grupo
-          </button>
+          <div className="flex gap-3 w-full md:w-auto">
+            <button
+              onClick={() => {
+                setJoinCodeInput('');
+                setJoinError('');
+                setIsJoinModalOpen(true);
+              }}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[#7fae7a] text-[#416840] hover:bg-[#e9f0e4] transition-all text-sm font-semibold cursor-pointer w-full md:w-auto"
+            >
+              <span className="material-symbols-outlined text-[20px]">key</span>
+              Unirse con Código
+            </button>
+            <button
+              onClick={openCreateModal}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#7fae7a] hover:bg-[#6f9e6a] text-white transition-all text-sm font-semibold shadow-md shadow-[#7fae7a]/20 cursor-pointer w-full md:w-auto"
+            >
+              <span className="material-symbols-outlined text-[20px]">group_add</span>
+              Crear Nuevo Grupo
+            </button>
+          </div>
         </header>
 
         {/* Group Cards Grid */}
@@ -619,12 +457,13 @@ export default function GroupsPage() {
                       {group.miembros.map((m, idx) => (
                         <div
                           key={idx}
-                          className={`px-3 py-1.5 rounded-xl border text-xs flex items-center gap-1.5 ${
+                          onClick={() => toggleMemberEssential(group.id, m.email)}
+                          className={`px-3 py-1.5 rounded-xl border text-xs flex items-center gap-1.5 cursor-pointer hover:scale-105 transition-all ${
                             m.isEssential
-                              ? 'bg-amber-100 border-amber-300 text-amber-900'
+                              ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-xs'
                               : 'bg-white border-[#c0c9bb]/60 text-[#161d15]'
                           }`}
-                          title={m.isEssential ? 'Miembro imprescindible para planes (RF-16)' : 'Miembro regular'}
+                          title={m.isEssential ? 'Miembro imprescindible para planes (RF-16). Clic para alternar' : 'Miembro regular. Clic para marcar como imprescindible (RF-16)'}
                         >
                           <span
                             className="w-2.5 h-2.5 rounded-full inline-block"
@@ -661,7 +500,7 @@ export default function GroupsPage() {
                     </button>
 
                     <button
-                      onClick={() => setSelectedGroup(group)}
+                      onClick={() => setSelectedGroupId(group.id)}
                       className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                         isSelected
                           ? 'bg-[#416840] text-white shadow-md shadow-[#416840]/20'
@@ -1295,6 +1134,59 @@ export default function GroupsPage() {
                   className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs cursor-pointer"
                 >
                   Notificar al Grupo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Unirse a Grupo por Código */}
+      {isJoinModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-[#c0c9bb]/60">
+              <h2 className="text-xl font-bold text-[#161d15] flex items-center gap-2 font-headline">
+                <span className="material-symbols-outlined text-[#416840]">key</span>
+                Unirse a un Grupo
+              </h2>
+              <button
+                onClick={() => setIsJoinModalOpen(false)}
+                className="text-[#70796d] hover:text-[#161d15] transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleJoinSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#40493e] mb-1.5">Código de Invitación</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej. HUECKO-78A9"
+                  value={joinCodeInput}
+                  onChange={(e) => setJoinCodeInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] placeholder-slate-400 text-sm focus:outline-none focus:border-[#7fae7a] uppercase font-mono tracking-wider"
+                />
+                {joinError && (
+                  <p className="text-xs text-red-600 mt-1.5 font-medium">{joinError}</p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#c0c9bb]/60">
+                <button
+                  type="button"
+                  onClick={() => setIsJoinModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-[#c0c9bb] text-[#40493e] hover:bg-[#e9f0e4] text-xs font-medium cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-[#7fae7a] hover:bg-[#6f9e6a] text-white text-xs font-semibold shadow-xs cursor-pointer"
+                >
+                  Unirse al Grupo
                 </button>
               </div>
             </form>
