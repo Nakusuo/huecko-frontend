@@ -2,30 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuthStore } from '../store/authStore';
-
-interface UserProfileData {
-  nombre: string;
-  email: string;
-  avatarUrl?: string;
-  timezone: string;
-  compartirDetallesHorario: boolean;
-  notificacionesEmail: boolean;
-  notificacionesWebSockets: boolean;
-}
+import { useProfileStore, type UserProfileData } from '../store/profileStore';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
-
-  // Initial state aligned with user data structure (RNF-02, Postgres usuarios)
-  const [profile, setProfile] = useState<UserProfileData>({
-    nombre: user?.nombre || 'Alex Rodríguez',
-    email: user?.email || 'alex.rodriguez@huecko.com',
-    timezone: 'America/Lima (GMT-5)',
-    compartirDetallesHorario: false, // Default false according to RNF-02 (Privacy: only show free/busy unless opted in)
-    notificacionesEmail: true,
-    notificacionesWebSockets: true,
-  });
+  const logout = useAuthStore((s) => s.logout);
+  const { profile, updateProfile } = useProfileStore();
 
   const handleLogout = () => {
     logout();
@@ -36,9 +18,14 @@ export default function ProfilePage() {
   const [tempProfile, setTempProfile] = useState<UserProfileData>(profile);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const startEdit = () => {
+    setTempProfile(profile);
+    setIsEditing(true);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    setProfile(tempProfile);
+    updateProfile(tempProfile);
     setIsEditing(false);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
@@ -124,10 +111,7 @@ export default function ProfilePage() {
                 {!isEditing && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setTempProfile(profile);
-                      setIsEditing(true);
-                    }}
+                    onClick={startEdit}
                     className="text-xs font-bold text-[#416840] hover:text-[#2a4f2b] flex items-center gap-1 cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[16px]">edit</span>
@@ -234,9 +218,7 @@ export default function ProfilePage() {
                       type="checkbox"
                       checked={profile.compartirDetallesHorario}
                       onChange={(e) => {
-                        const updated = { ...profile, compartirDetallesHorario: e.target.checked };
-                        setProfile(updated);
-                        setTempProfile(updated);
+                        updateProfile({ compartirDetallesHorario: e.target.checked });
                       }}
                       className="sr-only peer"
                     />
@@ -263,7 +245,7 @@ export default function ProfilePage() {
                     <input
                       type="checkbox"
                       checked={profile.notificacionesWebSockets}
-                      onChange={(e) => setProfile({ ...profile, notificacionesWebSockets: e.target.checked })}
+                      onChange={(e) => updateProfile({ notificacionesWebSockets: e.target.checked })}
                       className="sr-only peer"
                     />
                     <div className="w-11 h-6 bg-[#c0c9bb] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#7fae7a]"></div>
