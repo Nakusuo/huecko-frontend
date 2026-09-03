@@ -62,7 +62,7 @@ export default function RegisterPage() {
         password: data.password,
       });
       login(response.user, response.token);
-      navigate('/schedule', { replace: true });
+      navigate('/onboarding', { replace: true });
     } catch (error) {
       setServerError(
         error instanceof Error ? error.message : 'Error inesperado. Intenta de nuevo.'

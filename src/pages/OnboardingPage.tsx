@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuthStore } from '../store/authStore';
+import { useGroupsStore } from '../store/groupsStore';
 
 type OnboardingStep = 1 | 2 | 3 | 4;
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const createGroup = useGroupsStore((s) => s.createGroup);
+  const joinGroupByCode = useGroupsStore((s) => s.joinGroupByCode);
 
   const [step, setStep] = useState<OnboardingStep>(1);
   const [profileType, setProfileType] = useState<'universitario' | 'trabajador' | 'mixto'>('universitario');
@@ -19,14 +22,36 @@ export default function OnboardingPage() {
   const [groupThreshold, setGroupThreshold] = useState<number>(100);
   const [invitationCodeInput, setInvitationCodeInput] = useState('');
   
-  // Generated mock code
-  const [generatedCode] = useState(() => `HUECKO-${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
+  // Code state
+  const [activeInviteCode, setActiveInviteCode] = useState(() => `HUECKO-${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
   const [copiedCode, setCopiedCode] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(generatedCode);
+    navigator.clipboard.writeText(activeInviteCode);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2500);
+  };
+
+  const handleStep2Submit = () => {
+    const userEmail = user?.email || 'alex.rodriguez@huecko.com';
+    const userName = user?.nombre || 'Alex R.';
+
+    if (groupAction === 'create') {
+      const newG = createGroup(
+        groupName || 'Mi Nuevo Grupo',
+        groupDescription || 'Coordinación de horarios y planes',
+        groupThreshold,
+        userEmail,
+        userName
+      );
+      setActiveInviteCode(newG.codigoInvitacion);
+    } else {
+      if (invitationCodeInput.trim()) {
+        joinGroupByCode(invitationCodeInput, userEmail, userName);
+        setActiveInviteCode(invitationCodeInput.toUpperCase());
+      }
+    }
+    setStep(3);
   };
 
   return (
@@ -262,7 +287,7 @@ export default function OnboardingPage() {
 
               <button
                 type="button"
-                onClick={() => setStep(3)}
+                onClick={handleStep2Submit}
                 className="px-6 py-3 rounded-2xl bg-[#416840] hover:bg-[#2a4f2b] text-white text-xs font-bold transition-all shadow-md shadow-[#416840]/20 cursor-pointer active:scale-95 flex items-center gap-2"
               >
                 <span>Continuar al Paso 3</span>
@@ -288,7 +313,7 @@ export default function OnboardingPage() {
             <div className="p-6 rounded-3xl bg-[#e9f0e4] border-2 border-dashed border-[#7fae7a] text-center space-y-4">
               <span className="text-xs font-semibold text-[#70796d]">CÓDIGO EXCLUSIVO DE INVITACIÓN</span>
               <div className="text-3xl sm:text-4xl font-mono font-bold text-[#2a4f2b] tracking-wider">
-                {generatedCode}
+                {activeInviteCode}
               </div>
 
               <div className="flex justify-center gap-3 pt-2">
@@ -305,7 +330,7 @@ export default function OnboardingPage() {
 
                 <a
                   href={`https://wa.me/?text=${encodeURIComponent(
-                    `¡Hola! Únete a mi grupo en Huecko para coordinar nuestros horarios libres. Usa el código: ${generatedCode}`
+                    `¡Hola! Únete a mi grupo en Huecko para coordinar nuestros horarios libres. Usa el código: ${activeInviteCode}`
                   )}`}
                   target="_blank"
                   rel="noreferrer"
