@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuthStore } from '../store/authStore';
@@ -8,7 +8,11 @@ import { useGroupsStore } from '../store/groupsStore';
 export default function ProfilePage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
-  const { profile, updateProfile } = useProfileStore();
+  const { profile, updateProfile, fetchProfile, isLoading } = useProfileStore();
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
   const activeGroupsCount = useGroupsStore((s) => s.groups.length);
 
   const handleLogout = () => {
@@ -25,9 +29,9 @@ export default function ProfilePage() {
     setIsEditing(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfile(tempProfile);
+    await updateProfile(tempProfile);
     setIsEditing(false);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
@@ -201,7 +205,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Sección de privacidad y visibilidad */}
-            <div className="bg-[#e9f0e4]/80 border border-[#d5e3cf] rounded-2xl p-6 shadow-sm backdrop-blur-md">
+            <div className="bg-[#e9f0e4]/80 border border-[#d5e3cf] rounded-2xl p-6 shadow-sm">
               <h3 className="text-lg font-bold text-[#161d15] flex items-center gap-2 mb-4 pb-3 border-b border-[#c0c9bb]/60">
                 <span className="material-symbols-outlined text-[#416840]">lock</span>
                 Privacidad de horarios
@@ -210,9 +214,11 @@ export default function ProfilePage() {
               <div className="space-y-4">
                 <div className="flex items-start justify-between gap-4 p-3.5 rounded-xl bg-white/70 border border-[#c0c9bb]/60">
                   <div className="space-y-1">
-                    <p className="text-sm font-semibold text-[#161d15]">Compartir detalles de bloques</p>
+                    <p className="text-sm font-semibold text-[#161d15]">
+                      Compartir detalles de bloques
+                    </p>
                     <p className="text-xs text-[#70796d] leading-relaxed">
-                      Si está desactivado, tus amigos en el grupo solo verán si estás "Ocupado" o "Libre", pero no los nombres de tus clases o actividades.
+                      Si está desactivado, tus amigos solo verán si estás "Ocupado" o "Libre".
                     </p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
@@ -220,18 +226,20 @@ export default function ProfilePage() {
                       type="checkbox"
                       checked={profile.compartirDetallesHorario}
                       onChange={(e) => {
-                        updateProfile({ compartirDetallesHorario: e.target.checked });
+                        updateProfile({
+                          compartirDetallesHorario: e.target.checked,
+                        });
                       }}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-[#c0c9bb] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#7fae7a]"></div>
+                    <div className="w-11 h-6 bg-[#c0c9bb] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#7fae7a]"></div>
                   </label>
                 </div>
               </div>
             </div>
 
             {/* Sección: Notificaciones */}
-            <div className="bg-[#e9f0e4]/80 border border-[#d5e3cf] rounded-2xl p-6 shadow-sm backdrop-blur-md">
+            <div className="bg-[#e9f0e4]/80 border border-[#d5e3cf] rounded-2xl p-6 shadow-sm">
               <h3 className="text-lg font-bold text-[#161d15] flex items-center gap-2 mb-4 pb-3 border-b border-[#c0c9bb]/60">
                 <span className="material-symbols-outlined text-[#416840]">notifications</span>
                 Notificaciones y Alertas
@@ -240,17 +248,25 @@ export default function ProfilePage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3.5 rounded-xl bg-white/70 border border-[#c0c9bb]/60">
                   <div>
-                    <p className="text-sm font-semibold text-[#161d15]">Alertas de retrasos e imprevistos (Tiempo real)</p>
-                    <p className="text-xs text-[#70796d]">Recibir notificaciones inmediatas de tu grupo.</p>
+                    <p className="text-sm font-semibold text-[#161d15]">
+                      Alertas en tiempo real
+                    </p>
+                    <p className="text-xs text-[#70796d]">
+                      Recibir imprevistos y retrasos del grupo.
+                    </p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
                       checked={profile.notificacionesWebSockets}
-                      onChange={(e) => updateProfile({ notificacionesWebSockets: e.target.checked })}
+                      onChange={(e) =>
+                        updateProfile({
+                          notificacionesWebSockets: e.target.checked,
+                        })
+                      }
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-[#c0c9bb] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#7fae7a]"></div>
+                    <div className="w-11 h-6 bg-[#c0c9bb] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#7fae7a]"></div>
                   </label>
                 </div>
               </div>

@@ -218,12 +218,36 @@ export default function GroupsPage() {
     setProposalLugar('');
     setProposalPlazo('24 horas');
 
-    const avail1 = calculateWindowAvailability(group, 'Mié', '11:00', '13:00');
-    const avail2 = calculateWindowAvailability(group, 'Jue', '16:00', '18:00');
+    const avail1 = calculateWindowAvailability(
+      group,
+      'Mié',
+      '11:00',
+      '13:00'
+    );
+    const avail2 = calculateWindowAvailability(
+      group,
+      'Jue',
+      '16:00',
+      '18:00'
+    );
 
     setSuggestedWindows([
-      { id: Date.now().toString() + '-1', dia: 'Mié', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: avail1, votosUsuarios: [] },
-      { id: Date.now().toString() + '-2', dia: 'Jue', horaInicio: '16:00', horaFin: '18:00', disponibilidadPorcentaje: avail2, votosUsuarios: [] },
+      {
+        id: `${Date.now()}-1`,
+        dia: 'Mié',
+        horaInicio: '11:00',
+        horaFin: '13:00',
+        disponibilidadPorcentaje: avail1,
+        votosUsuarios: [],
+      },
+      {
+        id: `${Date.now()}-2`,
+        dia: 'Jue',
+        horaInicio: '16:00',
+        horaFin: '18:00',
+        disponibilidadPorcentaje: avail2,
+        votosUsuarios: [],
+      },
     ]);
     setIsProposeModalOpen(true);
   };
@@ -232,7 +256,12 @@ export default function GroupsPage() {
     if (!selectedGroup) return;
     if (suggestedWindows.length >= 5) return;
 
-    const realAvail = calculateWindowAvailability(selectedGroup, tempDay, tempStart, tempEnd);
+    const realAvail = calculateWindowAvailability(
+      selectedGroup,
+      tempDay,
+      tempStart,
+      tempEnd
+    );
 
     const newW: TimeWindowProposal = {
       id: Date.now().toString(),
@@ -247,12 +276,21 @@ export default function GroupsPage() {
 
   const handleRemoveWindowFromProposal = (id: string) => {
     if (suggestedWindows.length <= 2) return;
-    setSuggestedWindows(suggestedWindows.filter((w) => w.id !== id));
+    setSuggestedWindows(
+      suggestedWindows.filter((w) => w.id !== id)
+    );
   };
 
   const handleCreateProposalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedGroup || !proposalTitle || suggestedWindows.length < 2 || suggestedWindows.length > 5) return;
+    if (
+      !selectedGroup ||
+      !proposalTitle ||
+      suggestedWindows.length < 2 ||
+      suggestedWindows.length > 5
+    ) {
+      return;
+    }
 
     addProposal({
       groupId: selectedGroup.id,
@@ -266,7 +304,7 @@ export default function GroupsPage() {
 
     addNotification({
       title: 'Nuevo plan propuesto',
-      description: `Se creó el plan "${proposalTitle}" en ${selectedGroup.nombre}`,
+      description: `Se creó "${proposalTitle}" en ${selectedGroup.nombre}`,
       type: 'proposal',
       groupId: selectedGroup.id,
     });
@@ -274,15 +312,22 @@ export default function GroupsPage() {
     setIsProposeModalOpen(false);
   };
 
-  const handleVote = (proposalId: string, windowId: string) => {
-    voteProposalWindow(proposalId, windowId, 'alex.rodriguez@huecko.com');
+  const handleVote = (
+    proposalId: string,
+    windowId: string
+  ) => {
+    voteProposalWindow(
+      proposalId,
+      windowId,
+      'alex.rodriguez@huecko.com'
+    );
   };
 
   const handleCloseVotingManually = (proposalId: string) => {
     closeVotingManually(proposalId);
     addNotification({
       title: 'Plan confirmado',
-      description: 'El plan ha sido confirmado y cerrado manualmente.',
+      description: 'El plan ha sido confirmado y cerrado.',
       type: 'confirmation',
     });
   };
@@ -326,12 +371,17 @@ export default function GroupsPage() {
   };
 
   // Cálculo de coincidencias y espacios libres.
-  const getCellAvailability = (group: Group, day: DayOfWeek, hour: number) => {
-    // Check occupied members in this specific 1-hour slot
+  const getCellAvailability = (
+    group: Group,
+    day: DayOfWeek,
+    hour: number
+  ) => {
+    // Miembros ocupados en esta franja de 1 hora
     const occupiedInCell = occupiedSlots.filter((s) => {
       if (s.day !== day) return false;
-      // Check if group contains user
-      if (!group.miembros.some((m) => m.email === s.userEmail)) return false;
+      if (!group.miembros.some((m) => m.email === s.userEmail)) {
+        return false;
+      }
 
       const startH = parseInt(s.startTime.split(':')[0], 10);
       const endH = parseInt(s.endTime.split(':')[0], 10);
@@ -341,9 +391,12 @@ export default function GroupsPage() {
     const totalMembers = group.miembros.length;
     const occupiedCount = occupiedInCell.length;
     const freeCount = totalMembers - occupiedCount;
-    const freePercentage = Math.round((freeCount / totalMembers) * 100);
+    const freePercentage = Math.round(
+      (freeCount / totalMembers) * 100
+    );
 
-    const meetsThreshold = freePercentage >= group.umbralDisponibilidad;
+    const meetsThreshold =
+      freePercentage >= group.umbralDisponibilidad;
 
     return {
       freeCount,
@@ -354,9 +407,19 @@ export default function GroupsPage() {
     };
   };
 
-  /** Agrupa las horas consecutivas que cumplen el umbral en franjas legibles. */
-  const getRecommendedWindows = (group: Group, day: DayOfWeek) => {
-    const windows: Array<{ start: number; end: number; minimumAvailability: number; freeCount: number }> = [];
+  /** Agrupa horas consecutivas con quórum en franjas legibles */
+  const getRecommendedWindows = (
+    group: Group,
+    day: DayOfWeek
+  ) => {
+    type FreeWindow = {
+      start: number;
+      end: number;
+      minimumAvailability: number;
+      freeCount: number;
+    };
+
+    const windows: FreeWindow[] = [];
 
     timeSlotsHours.forEach((hour) => {
       const cell = getCellAvailability(group, day, hour);
@@ -364,10 +427,21 @@ export default function GroupsPage() {
 
       if (cell.meetsThreshold && current?.end === hour) {
         current.end = hour + 1;
-        current.minimumAvailability = Math.min(current.minimumAvailability, cell.freePercentage);
-        current.freeCount = Math.min(current.freeCount, cell.freeCount);
+        current.minimumAvailability = Math.min(
+          current.minimumAvailability,
+          cell.freePercentage
+        );
+        current.freeCount = Math.min(
+          current.freeCount,
+          cell.freeCount
+        );
       } else if (cell.meetsThreshold) {
-        windows.push({ start: hour, end: hour + 1, minimumAvailability: cell.freePercentage, freeCount: cell.freeCount });
+        windows.push({
+          start: hour,
+          end: hour + 1,
+          minimumAvailability: cell.freePercentage,
+          freeCount: cell.freeCount,
+        });
       }
     });
 

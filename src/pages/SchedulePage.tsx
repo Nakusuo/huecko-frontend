@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useAuthStore } from '../store/authStore';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import { processScheduleOcr } from '../services/ocrService';
@@ -21,7 +22,12 @@ const RECURRENT_TAGS = ['Clase', 'Turno', 'Estudio', 'Gimnasio', 'Personal'];
 const PUNTUAL_TAGS = ['Cita Médica', 'Viaje', 'Examen', 'Trámite', 'Evento Especial'];
 
 export default function SchedulePage() {
-  const { slots, setSlots, deleteSlot } = useScheduleStore();
+  const { slots, setSlots, deleteSlot, addSlot, updateSlot, addMultipleSlots, fetchSchedule, isLoading } = useScheduleStore();
+  const user = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    fetchSchedule(user?.id);
+  }, [user?.id, fetchSchedule]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
 
@@ -59,14 +65,26 @@ export default function SchedulePage() {
 
   const timeLabels = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
 
-  const getPositionStyles = (startTime: string, endTime: string) => {
-    const startHour = parseInt(startTime.split(':')[0], 10) + parseInt(startTime.split(':')[1], 10) / 60;
-    const endHour = parseInt(endTime.split(':')[0], 10) + parseInt(endTime.split(':')[1], 10) / 60;
+  const getPositionStyles = (
+    startTime: string,
+    endTime: string
+  ) => {
+    const [sH, sM] = startTime.split(':').map(Number);
+    const [eH, eM] = endTime.split(':').map(Number);
+
+    const startHour = sH + sM / 60;
+    const endHour = eH + eM / 60;
     const minHour = 8;
     const totalHours = 12;
 
-    const topPercent = Math.max(0, ((startHour - minHour) / totalHours) * 100);
-    const heightPercent = Math.min(100 - topPercent, Math.max(8, ((endHour - startHour) / totalHours) * 100));
+    const topPercent = Math.max(
+      0,
+      ((startHour - minHour) / totalHours) * 100
+    );
+    const heightPercent = Math.min(
+      100 - topPercent,
+      Math.max(8, ((endHour - startHour) / totalHours) * 100)
+    );
 
     return {
       top: `${topPercent}%`,
@@ -136,77 +154,71 @@ export default function SchedulePage() {
     }
   };
 
-  const handleSaveBlock = (e: React.FormEvent) => {
+  const handleSaveBlock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle) return;
 
     if (blockType === 'puntual') {
       const assignedDay = getDayFromDate(specificDate);
       if (editingSlotId) {
-        setSlots((prev) =>
-          prev.map((slot) =>
-            slot.id === editingSlotId
-              ? {
-                  ...slot,
-                  title: newTitle,
-                  tag: newTag,
-                  day: assignedDay,
-                  startTime: newStartTime,
-                  endTime: newEndTime,
-                  customColor: selectedColor,
-                  type: 'puntual',
-                  frequency: 'unica',
-                  specificDate,
-                  specificEndDate: isDateRange ? specificEndDate : undefined,
-                }
-              : slot
-          )
+        await updateSlot(
+          editingSlotId,
+          {
+            title: newTitle,
+            tag: newTag,
+            day: assignedDay,
+            startTime: newStartTime,
+            endTime: newEndTime,
+            customColor: selectedColor,
+            type: 'puntual',
+            frequency: 'unica',
+            specificDate,
+            specificEndDate: isDateRange ? specificEndDate : undefined,
+          },
+          user?.id
         );
         showToast('Bloque puntual actualizado correctamente.');
       } else {
-        const newSlot: TimeSlot = {
-          id: `slot-puntual-${Date.now()}`,
-          title: newTitle,
-          tag: newTag,
-          day: assignedDay,
-          startTime: newStartTime,
-          endTime: newEndTime,
-          colorClass: '',
-          textColorClass: '',
-          customColor: selectedColor,
-          type: 'puntual',
-          frequency: 'unica',
-          specificDate,
-          specificEndDate: isDateRange ? specificEndDate : undefined,
-        };
-        setSlots((prev) => [...prev, newSlot]);
+        await addSlot(
+          {
+            title: newTitle,
+            tag: newTag,
+            day: assignedDay,
+            startTime: newStartTime,
+            endTime: newEndTime,
+            colorClass: '',
+            textColorClass: '',
+            customColor: selectedColor,
+            type: 'puntual',
+            frequency: 'unica',
+            specificDate,
+            specificEndDate: isDateRange ? specificEndDate : undefined,
+          },
+          user?.id
+        );
         showToast('Evento puntual registrado en tu horario.');
       }
     } else {
       // Bloque recurrente.
       if (selectedDays.length === 0) return;
       if (editingSlotId) {
-        setSlots((prev) =>
-          prev.map((slot) =>
-            slot.id === editingSlotId
-              ? {
-                  ...slot,
-                  title: newTitle,
-                  tag: newTag,
-                  day: selectedDays[0],
-                  startTime: newStartTime,
-                  endTime: newEndTime,
-                  customColor: selectedColor,
-                  type: 'recurrente',
-                  frequency: 'semanal',
-                }
-              : slot
-          )
+        await updateSlot(
+          editingSlotId,
+          {
+            title: newTitle,
+            tag: newTag,
+            day: selectedDays[0],
+            startTime: newStartTime,
+            endTime: newEndTime,
+            customColor: selectedColor,
+            type: 'recurrente',
+            frequency: 'semanal',
+          },
+          user?.id
         );
         showToast('Bloque recurrente semanal actualizado.');
       } else {
-        const newSlots: TimeSlot[] = selectedDays.map((day, idx) => ({
-          id: `slot-rec-${Date.now()}-${idx}`,
+        const newSlotsData: Omit<TimeSlot, 'id'>[] = selectedDays.map((day) => ({
           title: newTitle,
           tag: newTag,
           day,
@@ -218,7 +230,7 @@ export default function SchedulePage() {
           type: 'recurrente',
           frequency: 'semanal',
         }));
-        setSlots((prev) => [...prev, ...newSlots]);
+        await addMultipleSlots(newSlotsData, user?.id);
         showToast(`${newSlots.length} bloque(s) recurrente(s) semanal(es) registrado(s).`);
       }
     }
@@ -226,9 +238,9 @@ export default function SchedulePage() {
     setIsModalOpen(false);
   };
 
-  const handleDeleteSlot = () => {
+  const handleDeleteSlot = async () => {
     if (!editingSlotId) return;
-    deleteSlot(editingSlotId);
+    await deleteSlot(editingSlotId, user?.id);
     setIsModalOpen(false);
     showToast('Bloque eliminado de tu horario.');
   };
@@ -279,31 +291,34 @@ export default function SchedulePage() {
     }
   };
 
-  // OCR Processing Execution (PDF.js + Tesseract Engine)
+  // OCR Processing Execution (PDF.js + Tesseract)
   const handleStartOcr = async () => {
     setIsOcrProcessing(true);
     setOcrProgress(10);
 
     if (!selectedOcrFile) {
       setIsOcrProcessing(false);
-      showToast('Selecciona una imagen o PDF antes de iniciar la lectura.');
+      showToast('Selecciona una imagen o PDF primero.');
       return;
     }
 
     try {
-      setOcrStatusText(`Iniciando escaneo de "${selectedOcrFile.name}"...`);
-      const { slots: extractedSlots } = await processScheduleOcr(
-        selectedOcrFile,
-        (progressPercent, statusMsg) => {
-          setOcrProgress(progressPercent);
-          setOcrStatusText(statusMsg);
-        }
+      setOcrStatusText(
+        `Escaneando "${selectedOcrFile.name}"...`
       );
+      const { slots: extractedSlots } =
+        await processScheduleOcr(
+          selectedOcrFile,
+          (progress, msg) => {
+            setOcrProgress(progress);
+            setOcrStatusText(msg);
+          }
+        );
 
       if (extractedSlots.length === 0) {
         setIsOcrProcessing(false);
         setOcrProgress(0);
-        showToast('No pudimos reconocer bloques. Prueba con una imagen nítida, recta y donde se vean días y horas.');
+        showToast('No se detectaron bloques legibles.');
         return;
       }
 
@@ -317,11 +332,11 @@ export default function SchedulePage() {
       console.error('Error procesando OCR:', err);
       setIsOcrProcessing(false);
       setOcrProgress(0);
-      showToast('No se pudo leer el archivo. Verifica que sea una imagen o PDF válido e inténtalo de nuevo.');
+      showToast('Error al leer el archivo. Intenta de nuevo.');
     }
   };
 
-  // Ayudantes para editar borradores.
+  // Ayudantes para editar borradores
   const handleAddDraftRow = () => {
     const newDraft: OcrExtractedSlot = {
       id: `draft-manual-${Date.now()}`,
@@ -337,32 +352,39 @@ export default function SchedulePage() {
   };
 
   const handleDeleteDraftRow = (id: string) => {
-    setOcrDraftSlots((prev) => prev.filter((d) => d.id !== id));
+    setOcrDraftSlots((prev) =>
+      prev.filter((d) => d.id !== id)
+    );
   };
 
-  // Confirmar importación de borrador OCR.
-  const handleConfirmOcrDraft = () => {
-    const selectedDrafts = ocrDraftSlots.filter((d) => d.selected);
+  // Confirmar importación de borrador OCR
+  const handleConfirmOcrDraft = async () => {
+    const selectedDrafts = ocrDraftSlots.filter(
+      (d) => d.selected
+    );
     if (selectedDrafts.length === 0) return;
 
-    const importedSlots: TimeSlot[] = selectedDrafts.map((d, idx) => ({
-      id: `ocr-imported-${Date.now()}-${idx}`,
-      title: d.title,
-      tag: d.tag || 'Clase',
-      day: d.day,
-      startTime: d.startTime,
-      endTime: d.endTime,
-      colorClass: '',
-      textColorClass: '',
-      customColor: d.customColor,
-      type: 'recurrente',
-      frequency: 'semanal',
-      isOcrImported: true,
-    }));
+    const importedSlotsData: Omit<TimeSlot, 'id'>[] = selectedDrafts.map(
+      (d) => ({
+        title: d.title,
+        tag: d.tag || 'Clase',
+        day: d.day,
+        startTime: d.startTime,
+        endTime: d.endTime,
+        colorClass: '',
+        textColorClass: '',
+        customColor: d.customColor,
+        type: 'recurrente',
+        frequency: 'semanal',
+        isOcrImported: true,
+      })
+    );
 
-    setSlots((prev) => [...prev, ...importedSlots]);
+    await addMultipleSlots(importedSlotsData, user?.id);
     setIsOcrDraftModalOpen(false);
-    showToast(`¡Se confirmaron e importaron ${importedSlots.length} asignaturas desde el OCR!`);
+    showToast(
+      `¡Se importaron ${importedSlotsData.length} asignaturas!`
+    );
   };
 
   return (
