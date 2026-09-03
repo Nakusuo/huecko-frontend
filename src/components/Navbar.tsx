@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
 
 interface NavbarProps {
-  currentTab: 'dashboard' | 'schedule' | 'groups' | 'discover' | 'profile';
+  currentTab: 'dashboard' | 'schedule' | 'groups' | 'profile';
 }
 
 export default function Navbar({ currentTab }: NavbarProps) {
@@ -23,12 +23,12 @@ export default function Navbar({ currentTab }: NavbarProps) {
   return (
     <>
       {/* TopNavBar (Web) */}
-      <nav className="hidden md:flex bg-[#e9f0e4]/90 backdrop-blur-md fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-7xl rounded-full border border-[#d5e3cf] shadow-lg shadow-[#7fae7a]/10 justify-between items-center px-8 py-3 z-50">
+      <nav className="hidden md:flex bg-[#f7f5ef] fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-7xl rounded-full border border-[#d8d5c8] shadow-sm justify-between items-center px-8 py-3 z-50">
         <div
           className="flex items-center gap-3 cursor-pointer"
           onClick={() => navigate('/dashboard')}
         >
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#7fae7a] to-[#416840] flex items-center justify-center font-black text-white text-lg shadow-sm">
+          <div className="w-9 h-9 rounded-xl bg-[#3f5d45] flex items-center justify-center font-black text-white text-lg">
             H
           </div>
           <span className="text-xl font-bold text-[#161d15] tracking-tight">Huecko</span>
@@ -65,25 +65,15 @@ export default function Navbar({ currentTab }: NavbarProps) {
           >
             Mis Grupos
           </button>
-          <button
-            onClick={() => navigate('/discover')}
-            className={`text-sm font-medium transition-colors cursor-pointer ${
-              currentTab === 'discover'
-                ? 'text-[#416840] border-b-2 border-[#7fae7a] pb-1 font-bold'
-                : 'text-[#40493e] hover:text-[#161d15]'
-            }`}
-          >
-            Descubrir
-          </button>
         </div>
 
         <div className="flex items-center gap-4 relative">
-          {/* Notification Bell Dropdown (RF-15) */}
+          {/* Centro de notificaciones */}
           <div className="relative">
             <button
               onClick={() => setIsNotifOpen(!isNotifOpen)}
               className="p-2 text-[#40493e] hover:text-[#161d15] hover:bg-[#d5e3cf]/50 rounded-full transition-colors relative cursor-pointer flex items-center justify-center"
-              title="Notificaciones (RF-15)"
+              title="Notificaciones"
             >
               <span className="material-symbols-outlined text-xl">notifications</span>
               {unreadCount > 0 && (
@@ -97,7 +87,7 @@ export default function Navbar({ currentTab }: NavbarProps) {
             {isNotifOpen && (
               <div className="absolute right-0 mt-3 w-80 bg-white border border-[#d5e3cf] rounded-2xl shadow-xl p-4 z-50 animate-fadeIn">
                 <div className="flex justify-between items-center pb-2 border-b border-[#e9f0e4] mb-3">
-                  <h4 className="font-bold text-sm text-[#161d15]">Notificaciones (RF-15)</h4>
+                  <h4 className="font-bold text-sm text-[#161d15]">Notificaciones</h4>
                   {unreadCount > 0 && (
                     <button
                       onClick={markAllAsRead}
@@ -193,15 +183,6 @@ export default function Navbar({ currentTab }: NavbarProps) {
           <span className="text-[10px]">Grupos</span>
         </button>
 
-        <button
-          onClick={() => navigate('/discover')}
-          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
-            currentTab === 'discover' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
-          }`}
-        >
-          <span className="material-symbols-outlined">explore</span>
-          <span className="text-[10px]">Descubrir</span>
-        </button>
 
         <button
           onClick={() => navigate('/profile')}

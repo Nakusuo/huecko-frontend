@@ -13,7 +13,11 @@ export interface TimeSlot {
   textColorClass: string;
   customColor?: string;
   type?: 'recurrente' | 'puntual';
+  tag?: string;
+  frequency?: 'semanal' | 'unica';
   specificDate?: string;
+  specificEndDate?: string;
+  isOcrImported?: boolean;
 }
 
 interface ScheduleState {
@@ -23,16 +27,15 @@ interface ScheduleState {
   addMultipleSlots: (slots: Omit<TimeSlot, 'id'>[]) => void;
   updateSlot: (id: string, updatedSlot: Partial<TimeSlot>) => void;
   deleteSlot: (id: string) => void;
-  importMockCalendar: () => void;
 }
 
 const INITIAL_SLOTS: TimeSlot[] = [
-  { id: '1', title: 'Universidad', day: 'Lun', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b' },
-  { id: '2', title: 'Trabajo', day: 'Mar', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6' },
-  { id: '3', title: 'Universidad', day: 'Mié', startTime: '08:00', endTime: '10:00', colorClass: '', textColorClass: '', customColor: '#f59e0b' },
-  { id: '4', title: 'Gimnasio', day: 'Mié', startTime: '13:00', endTime: '15:30', colorClass: '', textColorClass: '', customColor: '#10b981' },
-  { id: '5', title: 'Trabajo', day: 'Jue', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6' },
-  { id: '6', title: 'Universidad', day: 'Vie', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b' },
+  { id: '1', title: 'Universidad - Algoritmos', day: 'Lun', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b', type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
+  { id: '2', title: 'Turno Laboral', day: 'Mar', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6', type: 'recurrente', frequency: 'semanal', tag: 'Trabajo' },
+  { id: '3', title: 'Universidad - Cálculo Avanzado', day: 'Mié', startTime: '08:00', endTime: '10:00', colorClass: '', textColorClass: '', customColor: '#f59e0b', type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
+  { id: '4', title: 'Gimnasio & Entrenamiento', day: 'Mié', startTime: '13:00', endTime: '15:30', colorClass: '', textColorClass: '', customColor: '#10b981', type: 'recurrente', frequency: 'semanal', tag: 'Personal' },
+  { id: '5', title: 'Turno Laboral', day: 'Jue', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6', type: 'recurrente', frequency: 'semanal', tag: 'Trabajo' },
+  { id: '6', title: 'Universidad - Redes', day: 'Vie', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b', type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
 ];
 
 export const useScheduleStore = create<ScheduleState>()(
@@ -67,14 +70,6 @@ export const useScheduleStore = create<ScheduleState>()(
           slots: state.slots.filter((s) => s.id !== id),
         })),
 
-      importMockCalendar: () =>
-        set((state) => {
-          const imported: TimeSlot[] = [
-            { id: `imp-1-${Date.now()}`, title: 'Estudio de Proyecto', day: 'Mar', startTime: '16:00', endTime: '18:00', colorClass: '', textColorClass: '', customColor: '#ec4899' },
-            { id: `imp-2-${Date.now()}`, title: 'Reunión Familiar', day: 'Sáb', startTime: '11:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#8b5cf6' },
-          ];
-          return { slots: [...state.slots, ...imported] };
-        }),
     }),
     {
       name: 'huecko-schedule',

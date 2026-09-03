@@ -17,7 +17,7 @@ export interface Group {
   descripcion: string;
   codigoInvitacion: string;
   creadoPor: string;
-  umbralDisponibilidad: number; // RF-06 %
+  umbralDisponibilidad: number;
   miembros: GroupMember[];
 }
 
@@ -131,10 +131,10 @@ const INITIAL_PROPOSALS: PlanProposal[] = [
   {
     id: 'prop-1',
     groupId: '1',
-    titulo: 'Reunión de Trabajo de Grado',
+    titulo: 'Reunión de Trabajo de Grado & Cierre',
     lugar: 'Biblioteca Central / Google Meet',
     creadoPor: 'Alex R.',
-    plazoVotacion: 'Hoy a las 20:00',
+    plazoVotacion: 'Finalizada',
     estado: 'confirmado',
     ventanasSugeridas: [
       { id: 'w1', dia: 'Mié', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: 100, votosUsuarios: ['alex.rodriguez@huecko.com', 'maria.c@huecko.com', 'sam.p@huecko.com'] },
@@ -150,6 +150,35 @@ const INITIAL_PROPOSALS: PlanProposal[] = [
       },
     ],
     votosReplanificacion: { cancel: [], reschedule: ['maria.c@huecko.com'], keep: [] },
+  },
+  {
+    id: 'prop-2',
+    groupId: '2',
+    titulo: 'Pichanga & Parrilla de Domingo',
+    lugar: 'Canchas El Golazo',
+    creadoPor: 'Carlos M.',
+    plazoVotacion: 'Cierra hoy a las 20:00',
+    estado: 'propuesto',
+    ventanasSugeridas: [
+      { id: 'w-101', dia: 'Sáb', horaInicio: '16:00', horaFin: '18:00', disponibilidadPorcentaje: 85, votosUsuarios: ['alex.rodriguez@huecko.com', 'carlos.m@huecko.com'] },
+      { id: 'w-102', dia: 'Dom', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: 100, votosUsuarios: ['carlos.m@huecko.com'] },
+      { id: 'w-103', dia: 'Dom', horaInicio: '15:00', horaFin: '17:00', disponibilidadPorcentaje: 70, votosUsuarios: [] },
+    ],
+    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
+  },
+  {
+    id: 'prop-3',
+    groupId: '1',
+    titulo: 'Reunión de Avance de Tesis',
+    lugar: 'Google Meet / Biblioteca',
+    creadoPor: 'Alex R.',
+    plazoVotacion: 'Cierra mañana a las 12:00',
+    estado: 'propuesto',
+    ventanasSugeridas: [
+      { id: 'w-201', dia: 'Mié', horaInicio: '14:00', horaFin: '16:00', disponibilidadPorcentaje: 100, votosUsuarios: ['sam.p@huecko.com'] },
+      { id: 'w-202', dia: 'Jue', horaInicio: '10:00', horaFin: '12:00', disponibilidadPorcentaje: 75, votosUsuarios: ['alex.rodriguez@huecko.com'] },
+    ],
+    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
   },
 ];
 
