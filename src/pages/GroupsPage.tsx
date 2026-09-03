@@ -184,7 +184,7 @@ export default function GroupsPage() {
     setIsEditGroupModalOpen(false);
   };
 
-  // --- HELPER PARA CALCULAR LA DISPONIBILIDAD REAL DINÁMICA DE UNA VENTANA DE TIEMPO (RF-05, RF-06) ---
+  // Calcula la disponibilidad real de una ventana de tiempo.
   const calculateWindowAvailability = (group: Group, day: DayOfWeek, startTimeStr: string, endTimeStr: string) => {
     const startH = parseInt(startTimeStr.split(':')[0], 10);
     const endH = parseInt(endTimeStr.split(':')[0], 10);
@@ -211,7 +211,7 @@ export default function GroupsPage() {
     return Math.round((freeCount / totalMembers) * 100);
   };
 
-  // --- HANDLERS PARA VOTACIÓN Y PROPUESTA DE PLANES (Módulo 3: RF-08, RF-09, RF-10) ---
+  // Acciones de propuestas y votaciones.
   const openProposePlanModal = (group: Group) => {
     setSelectedGroupId(group.id);
     setProposalTitle('');
@@ -230,6 +230,7 @@ export default function GroupsPage() {
 
   const handleAddWindowToProposal = () => {
     if (!selectedGroup) return;
+    if (suggestedWindows.length >= 5) return;
 
     const realAvail = calculateWindowAvailability(selectedGroup, tempDay, tempStart, tempEnd);
 
@@ -245,13 +246,13 @@ export default function GroupsPage() {
   };
 
   const handleRemoveWindowFromProposal = (id: string) => {
-    if (suggestedWindows.length <= 1) return;
+    if (suggestedWindows.length <= 2) return;
     setSuggestedWindows(suggestedWindows.filter((w) => w.id !== id));
   };
 
   const handleCreateProposalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedGroup || !proposalTitle || suggestedWindows.length === 0) return;
+    if (!selectedGroup || !proposalTitle || suggestedWindows.length < 2 || suggestedWindows.length > 5) return;
 
     addProposal({
       groupId: selectedGroup.id,
@@ -311,7 +312,7 @@ export default function GroupsPage() {
     });
 
     addNotification({
-      title: 'Imprevisto reportado (RF-13)',
+      title: 'Imprevisto reportado',
       description: `Alex R. reportó ${incidentType} en "${targetProposalForIncident.titulo}". El plan pasó a re-coordinación.`,
       type: 'incident',
       groupId: targetProposalForIncident.groupId,
@@ -324,7 +325,7 @@ export default function GroupsPage() {
     voteReplanification(proposalId, action, 'alex.rodriguez@huecko.com');
   };
 
-  // --- CÁLCULO DE CRUCE Y ESPACIOS VACÍOS / LIBRES (RF-05, RF-06) ---
+  // Cálculo de coincidencias y espacios libres.
   const getCellAvailability = (group: Group, day: DayOfWeek, hour: number) => {
     // Check occupied members in this specific 1-hour slot
     const occupiedInCell = occupiedSlots.filter((s) => {
@@ -351,6 +352,26 @@ export default function GroupsPage() {
       meetsThreshold,
       occupiedMembers: occupiedInCell,
     };
+  };
+
+  /** Agrupa las horas consecutivas que cumplen el umbral en franjas legibles. */
+  const getRecommendedWindows = (group: Group, day: DayOfWeek) => {
+    const windows: Array<{ start: number; end: number; minimumAvailability: number; freeCount: number }> = [];
+
+    timeSlotsHours.forEach((hour) => {
+      const cell = getCellAvailability(group, day, hour);
+      const current = windows[windows.length - 1];
+
+      if (cell.meetsThreshold && current?.end === hour) {
+        current.end = hour + 1;
+        current.minimumAvailability = Math.min(current.minimumAvailability, cell.freePercentage);
+        current.freeCount = Math.min(current.freeCount, cell.freeCount);
+      } else if (cell.meetsThreshold) {
+        windows.push({ start: hour, end: hour + 1, minimumAvailability: cell.freePercentage, freeCount: cell.freeCount });
+      }
+    });
+
+    return windows;
   };
 
   return (
@@ -463,7 +484,7 @@ export default function GroupsPage() {
                               ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-xs'
                               : 'bg-white border-[#c0c9bb]/60 text-[#161d15]'
                           }`}
-                          title={m.isEssential ? 'Miembro imprescindible para planes (RF-16). Clic para alternar' : 'Miembro regular. Clic para marcar como imprescindible (RF-16)'}
+                          title={m.isEssential ? 'Miembro imprescindible para los planes. Clic para alternar' : 'Miembro regular. Clic para marcar como imprescindible'}
                         >
                           <span
                             className="w-2.5 h-2.5 rounded-full inline-block"
@@ -733,115 +754,52 @@ export default function GroupsPage() {
 
         {/* VISTA DEL HORARIO EN COMÚN DE TODOS */}
         {selectedGroup ? (
-          <section className="bg-[#e9f0e4]/80 border border-[#d5e3cf] rounded-2xl p-6 md:p-8 shadow-sm backdrop-blur-md animate-fadeIn">
+          <section className="bg-[#f0eee5] border border-[#d8d5c8] rounded-2xl p-6 md:p-8 shadow-sm animate-fadeIn">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-[#c0c9bb]/60 pb-4">
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <h2 className="text-2xl font-bold text-[#161d15] font-headline">Horario en Común: {selectedGroup.nombre}</h2>
-                  <span className="px-3 py-1 rounded-full bg-[#a8c9a0]/40 border border-[#7fae7a] text-[#1e4d50] text-xs font-bold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#7fae7a] animate-pulse" />
-                    Cruce Activo
+                  <span className="px-3 py-1 rounded-full bg-[#e4eadf] border border-[#aebba8] text-[#3f5d45] text-xs font-bold">
+                    Actualizado
                   </span>
                 </div>
                 <p className="text-[#40493e] text-sm">
-                  Los casilleros en <strong className="text-[#416840]">Verde</strong> representan <strong>huecos/espacios libres</strong> que superan el umbral del <strong>{selectedGroup.umbralDisponibilidad}% de coincidencia</strong>.
+                  Franjas continuas que cumplen el umbral de <strong>{selectedGroup.umbralDisponibilidad}%</strong>. La información ocupada se muestra sin exponer detalles personales.
                 </p>
               </div>
 
-              {/* Leyenda de colores */}
-              <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-xl border border-[#c0c9bb]/60 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded bg-[#a8c9a0] border border-[#7fae7a]" />
-                  <span className="text-[#161d15] font-semibold">Espacio Libre (Cumple {selectedGroup.umbralDisponibilidad}%)</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded bg-[#e9f0e6] border border-[#c0c9bb]" />
-                  <span className="text-[#70796d]">Parcial / Ocupado</span>
-                </div>
+              <div className="bg-[#fcfbf7] px-4 py-2 rounded-xl border border-[#d8d5c8] text-xs text-[#5e685d]">
+                {selectedGroup.miembros.length} integrantes · {selectedGroup.umbralDisponibilidad}% mínimo
               </div>
             </div>
 
-            {/* Heatmap Grid Tabla Rediseñada */}
+            {/* Agenda de coincidencias: una lectura rápida, sin 84 casillas. */}
             <div className="overflow-x-auto">
-              <div className="min-w-[850px]">
-                {/* Días Header */}
-                <div className="grid grid-cols-8 gap-3 mb-4">
-                  <div className="w-16"></div>
-                  {days.map((day) => (
-                    <div key={day} className="text-center text-xs font-bold text-[#40493e] uppercase tracking-wider pb-2 border-b border-[#c0c9bb]/60">
-                      {day}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Horas Filas */}
-                <div className="space-y-2.5">
-                  {timeSlotsHours.map((hour) => (
-                    <div key={hour} className="grid grid-cols-8 gap-3 items-center">
-                      {/* Label hora */}
-                      <div className="text-xs text-[#70796d] font-mono font-medium text-right pr-2">
-                        {hour.toString().padStart(2, '0')}:00
-                      </div>
-
-                      {/* Días celdas */}
-                      {days.map((day) => {
-                        const cell = getCellAvailability(selectedGroup, day, hour);
-
-                        return (
-                          <div
-                            key={`${day}-${hour}`}
-                            className={`p-2.5 rounded-xl border transition-all flex flex-col justify-between min-h-[64px] relative group ${
-                              cell.meetsThreshold
-                                ? 'bg-[#a8c9a0]/50 border-[#7fae7a] hover:bg-[#a8c9a0]/70'
-                                : cell.freeCount > 0
-                                ? 'bg-white/80 border-[#c0c9bb]/60 hover:border-[#7fae7a]'
-                                : 'bg-[#e9f0e6]/40 border-[#d5e3cf] opacity-60'
-                            }`}
-                          >
-                            {/* Indicador superior de % */}
-                            <div className="flex justify-between items-center w-full">
-                              <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                                  cell.meetsThreshold
-                                    ? 'bg-[#7fae7a] text-white'
-                                    : 'bg-[#e3eae0] text-[#40493e]'
-                                }`}
-                              >
-                                {cell.freePercentage}% libre
-                              </span>
-                              <span className="text-[10px] text-[#70796d] font-medium">
-                                {cell.freeCount}/{cell.totalMembers}
-                              </span>
-                            </div>
-
-                            {/* Ocupados resumen o Badge de Disponible */}
-                            <div className="mt-1 flex items-center justify-between">
-                              {cell.occupiedMembers.length > 0 ? (
-                                <div className="flex -space-x-1.5 overflow-hidden">
-                                  {cell.occupiedMembers.map((oc, i) => (
-                                    <span
-                                      key={i}
-                                      className="w-4 h-4 rounded-full border border-white text-[9px] font-bold text-white flex items-center justify-center shrink-0 shadow-xs"
-                                      style={{ backgroundColor: oc.userColor }}
-                                      title={`${oc.userName}: ${oc.title}`}
-                                    >
-                                      {oc.userName.charAt(0)}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-[10px] text-[#416840] font-bold flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#416840] inline-block" />
-                                  Libre
-                                </span>
-                              )}
-                            </div>
+              <div className="min-w-[760px] grid grid-cols-7 gap-3">
+                {days.map((day) => {
+                  const windows = getRecommendedWindows(selectedGroup, day);
+                  return (
+                    <article key={day} className="rounded-xl border border-[#d8d5c8] bg-[#fcfbf7] overflow-hidden">
+                      <header className="px-3 py-2.5 border-b border-[#e4e1d7] text-xs font-bold uppercase tracking-wider text-[#3f5d45]">
+                        {day}
+                      </header>
+                      <div className="p-2 space-y-2 min-h-28">
+                        {windows.length ? windows.map((window) => (
+                          <div key={`${day}-${window.start}`} className="rounded-lg bg-[#e4eadf] border-l-4 border-[#54735a] px-2.5 py-2">
+                            <p className="text-xs font-bold text-[#26352a]">
+                              {window.start.toString().padStart(2, '0')}:00 – {window.end.toString().padStart(2, '0')}:00
+                            </p>
+                            <p className="mt-0.5 text-[10px] text-[#5e685d]">
+                              {window.minimumAvailability}% libre · {window.freeCount}/{selectedGroup.miembros.length}
+                            </p>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
+                        )) : (
+                          <p className="px-1 py-3 text-[11px] leading-relaxed text-[#81877d]">No hay una franja que cumpla el umbral.</p>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </div>
           </section>
@@ -909,7 +867,7 @@ export default function GroupsPage() {
         />
       )}
 
-      {/* Modal: Proponer Nuevo Plan Grupal (RF-08) */}
+      {/* Modal para proponer un nuevo plan */}
       {isProposeModalOpen && selectedGroup && (
         <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
@@ -964,7 +922,7 @@ export default function GroupsPage() {
                 </select>
               </div>
 
-              {/* Ventanas de tiempo sugeridas para el plan (RF-08) */}
+              {/* Ventanas de tiempo sugeridas para el plan */}
               <div>
                 <label className="block text-xs font-medium text-[#40493e] mb-2">
                   Ventanas de Tiempo Sugeridas (De 2 a 5 opciones)
@@ -1010,9 +968,10 @@ export default function GroupsPage() {
                   <button
                     type="button"
                     onClick={handleAddWindowToProposal}
-                    className="w-full py-1.5 bg-[#e9f0e4] hover:bg-[#dbe5d6] text-[#40493e] text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-[#c0c9bb]/60"
+                    disabled={suggestedWindows.length >= 5 || tempEnd <= tempStart}
+                    className="w-full py-1.5 bg-[#e9f0e4] hover:bg-[#dbe5d6] text-[#40493e] text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-[#c0c9bb]/60 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    + Agregar Opción de Horario
+                    {suggestedWindows.length >= 5 ? 'Máximo de 5 opciones' : '+ Agregar Opción de Horario'}
                   </button>
                 </div>
 
@@ -1033,7 +992,7 @@ export default function GroupsPage() {
                         </span>
                       </div>
 
-                      {suggestedWindows.length > 1 && (
+                      {suggestedWindows.length > 2 && (
                         <button
                           type="button"
                           onClick={() => handleRemoveWindowFromProposal(w.id)}
@@ -1067,7 +1026,7 @@ export default function GroupsPage() {
         </div>
       )}
 
-      {/* Modal: Reportar Imprevisto / Falta (RF-13, RF-14) */}
+      {/* Modal para reportar un imprevisto */}
       {isIncidentModalOpen && targetProposalForIncident && (
         <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-2xl p-6 w-full max-w-md shadow-2xl">
@@ -1282,12 +1241,12 @@ function GroupFormModal({
             />
           </div>
 
-          {/* Umbral de Coincidencia (RF-06) */}
+          {/* Umbral de coincidencia */}
           <div className="p-4 rounded-xl bg-white border border-[#c0c9bb]/60 space-y-2">
             <div className="flex justify-between items-center">
               <label className="text-xs font-semibold text-[#161d15] flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-[#416840] text-[18px]">tune</span>
-                Umbral Mínimo de Coincidencia (RF-06)
+                Umbral mínimo de coincidencia
               </label>
               <span className="text-xs font-bold text-[#416840] bg-[#a8c9a0]/30 px-2 py-0.5 rounded-lg border border-[#7fae7a]/40">
                 {umbral}% del grupo libre
@@ -1333,7 +1292,7 @@ function GroupFormModal({
                   className="rounded border-[#c0c9bb] bg-white text-[#7fae7a] focus:ring-[#7fae7a] cursor-pointer"
                 />
                 <span className="material-symbols-outlined text-[15px] text-amber-600">star</span>
-                Marcar Imprescindible (RF-16)
+                Marcar como imprescindible
               </label>
 
               <button

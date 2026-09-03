@@ -55,7 +55,7 @@ export default function LoginPage() {
   };
 
   const fillDemoCredentials = () => {
-    setValue('email', 'demo@huecko.com', { shouldValidate: true });
+    setValue('email', 'alex.rodriguez@huecko.com', { shouldValidate: true });
     setValue('password', 'demo1234', { shouldValidate: true });
   };
 
@@ -96,7 +96,7 @@ export default function LoginPage() {
                     id="email"
                     type="email"
                     autoComplete="email"
-                    placeholder="demo@huecko.com"
+                    placeholder="alex.rodriguez@huecko.com"
                     {...register('email')}
                     className={`w-full pl-11 pr-4 py-3 rounded-xl text-sm bg-white text-[#161d15] placeholder-[#8a9486] border outline-none transition-all duration-200 focus:ring-2 focus:ring-[#7fae7a]/30 focus:border-[#416840] ${
                       errors.email
@@ -230,7 +230,7 @@ export default function LoginPage() {
                 </button>
               </div>
               <p className="text-xs text-[#40493e] font-mono bg-white/70 px-2 py-1 rounded-lg border border-[#c0c9bb]/40">
-                demo@huecko.com / demo1234
+                alex.rodriguez@huecko.com / demo1234
               </p>
             </div>
           </div>

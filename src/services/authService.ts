@@ -1,9 +1,10 @@
 import type { LoginPayload, RegisterPayload, AuthResponse } from '../types/auth.types';
+import { apiClient, isApiEnabled } from '../lib/apiClient';
 
 const SIMULATED_NETWORK_DELAY_MS = 1000;
 
 const MOCK_CREDENTIALS = {
-  email: 'demo@huecko.com',
+  email: 'alex.rodriguez@huecko.com',
   password: 'demo1234',
 } as const;
 
@@ -11,7 +12,7 @@ const MOCK_AUTH_RESPONSE: AuthResponse = {
   token: 'mock-jwt-token-huecko-2026',
   user: {
     id: '1',
-    nombre: 'Demo User',
+    nombre: 'Alex Rodríguez',
     email: MOCK_CREDENTIALS.email,
     creado_en: new Date().toISOString(),
   },
@@ -25,6 +26,11 @@ const isValidMockCredentials = (payload: LoginPayload): boolean =>
   payload.password === MOCK_CREDENTIALS.password;
 
 export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
+  if (isApiEnabled) {
+    const { data } = await apiClient.post<AuthResponse>('/auth/login', payload);
+    return data;
+  }
+
   await simulateNetworkDelay();
 
   if (!isValidMockCredentials(payload)) {
@@ -35,6 +41,11 @@ export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
 }
 
 export async function registerUser(payload: RegisterPayload): Promise<AuthResponse> {
+  if (isApiEnabled) {
+    const { data } = await apiClient.post<AuthResponse>('/auth/register', payload);
+    return data;
+  }
+
   await simulateNetworkDelay();
 
   if (payload.email === MOCK_CREDENTIALS.email) {
