@@ -2,61 +2,37 @@ import { useState, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import { processScheduleOcr } from '../services/ocrService';
+import type { OcrExtractedSlot } from '../services/ocrService';
 import { useScheduleStore } from '../store/scheduleStore';
-
-export type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
-
-export interface TimeSlot {
-  id: string;
-  title: string;
-  day: DayOfWeek;
-  startTime: string; // e.g. "08:00"
-  endTime: string;   // e.g. "11:00"
-  colorClass: string;
-  textColorClass: string;
-  customColor?: string;
-  type?: 'recurrente' | 'puntual';
-  specificDate?: string;
-}
-
-export interface OcrExtractedSlot {
-  id: string;
-  title: string;
-  day: DayOfWeek;
-  startTime: string;
-  endTime: string;
-  customColor: string;
-  selected: boolean;
-}
+import type { DayOfWeek, TimeSlot } from '../store/scheduleStore';
 
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 const PRESET_COLORS = [
-  { name: 'Violeta', hex: '#8b5cf6' },
-  { name: 'Azul', hex: '#3b82f6' },
-  { name: 'Ámbar', hex: '#f59e0b' },
-  { name: 'Esmeralda', hex: '#10b981' },
-  { name: 'Rosa', hex: '#ec4899' },
-  { name: 'Rojo', hex: '#ef4444' },
+  { name: 'Bosque', hex: '#54735a' },
+  { name: 'Pizarra', hex: '#5e7383' },
+  { name: 'Arcilla', hex: '#a9674c' },
+  { name: 'Oliva', hex: '#8b8a5a' },
+  { name: 'Ciruela', hex: '#765b73' },
+  { name: 'Terracota', hex: '#ad5c51' },
 ];
 
-const MOCK_OCR_RESULTS: OcrExtractedSlot[] = [
-  { id: 'ocr-1', title: 'Inteligencia Artificial', day: 'Mar', startTime: '08:00', endTime: '10:00', customColor: '#8b5cf6', selected: true },
-  { id: 'ocr-2', title: 'Ingeniería de Software II', day: 'Jue', startTime: '08:00', endTime: '10:00', customColor: '#3b82f6', selected: true },
-  { id: 'ocr-3', title: 'Laboratorio de Redes', day: 'Vie', startTime: '14:00', endTime: '17:00', customColor: '#10b981', selected: true },
-  { id: 'ocr-4', title: 'Taller de Emprendimiento', day: 'Sáb', startTime: '09:00', endTime: '12:00', customColor: '#f59e0b', selected: true },
-];
+const RECURRENT_TAGS = ['Clase', 'Turno', 'Estudio', 'Gimnasio', 'Personal'];
+const PUNTUAL_TAGS = ['Cita Médica', 'Viaje', 'Examen', 'Trámite', 'Evento Especial'];
 
 export default function SchedulePage() {
-  const { slots, setSlots, deleteSlot, importMockCalendar } = useScheduleStore();
+  const { slots, setSlots, deleteSlot } = useScheduleStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
 
   // Form states for manual creation/edit
   const [blockType, setBlockType] = useState<'recurrente' | 'puntual'>('recurrente');
   const [newTitle, setNewTitle] = useState('');
+  const [newTag, setNewTag] = useState('Clase');
   const [selectedDays, setSelectedDays] = useState<DayOfWeek[]>(['Lun']);
   const [specificDate, setSpecificDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [specificEndDate, setSpecificEndDate] = useState('');
+  const [isDateRange, setIsDateRange] = useState(false);
   const [newStartTime, setNewStartTime] = useState('08:00');
   const [newEndTime, setNewEndTime] = useState('10:00');
   const [selectedColor, setSelectedColor] = useState('#8b5cf6');
@@ -71,7 +47,7 @@ export default function SchedulePage() {
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrStatusText, setOcrStatusText] = useState('');
   const [isOcrDraftModalOpen, setIsOcrDraftModalOpen] = useState(false);
-  const [ocrDraftSlots, setOcrDraftSlots] = useState<OcrExtractedSlot[]>(MOCK_OCR_RESULTS);
+  const [ocrDraftSlots, setOcrDraftSlots] = useState<OcrExtractedSlot[]>([]);
 
   // Notification Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -90,7 +66,7 @@ export default function SchedulePage() {
     const totalHours = 12;
 
     const topPercent = Math.max(0, ((startHour - minHour) / totalHours) * 100);
-    const heightPercent = Math.min(100 - topPercent, ((endHour - startHour) / totalHours) * 100);
+    const heightPercent = Math.min(100 - topPercent, Math.max(8, ((endHour - startHour) / totalHours) * 100));
 
     return {
       top: `${topPercent}%`,
@@ -100,6 +76,7 @@ export default function SchedulePage() {
 
   // Convert date string to DayOfWeek
   const getDayFromDate = (dateStr: string): DayOfWeek => {
+    if (!dateStr) return 'Lun';
     const d = new Date(dateStr + 'T12:00:00');
     const dayIndex = d.getDay(); // 0 is Sun, 1 is Mon...
     const map: Record<number, DayOfWeek> = {
@@ -118,8 +95,11 @@ export default function SchedulePage() {
     setEditingSlotId(null);
     setBlockType('recurrente');
     setNewTitle('');
+    setNewTag('Clase');
     setSelectedDays(['Lun']);
     setSpecificDate(new Date().toISOString().split('T')[0]);
+    setSpecificEndDate('');
+    setIsDateRange(false);
     setNewStartTime('08:00');
     setNewEndTime('10:00');
     setSelectedColor('#8b5cf6');
@@ -128,10 +108,14 @@ export default function SchedulePage() {
 
   const openEditModal = (slot: TimeSlot) => {
     setEditingSlotId(slot.id);
-    setBlockType(slot.type || 'recurrente');
+    const type = slot.type || 'recurrente';
+    setBlockType(type);
     setNewTitle(slot.title);
+    setNewTag(slot.tag || (type === 'recurrente' ? 'Clase' : 'Cita Médica'));
     setSelectedDays([slot.day]);
     setSpecificDate(slot.specificDate || new Date().toISOString().split('T')[0]);
+    setSpecificEndDate(slot.specificEndDate || '');
+    setIsDateRange(Boolean(slot.specificEndDate));
     setNewStartTime(slot.startTime);
     setNewEndTime(slot.endTime);
     setSelectedColor(slot.customColor || '#8b5cf6');
@@ -165,21 +149,25 @@ export default function SchedulePage() {
               ? {
                   ...slot,
                   title: newTitle,
+                  tag: newTag,
                   day: assignedDay,
                   startTime: newStartTime,
                   endTime: newEndTime,
                   customColor: selectedColor,
                   type: 'puntual',
+                  frequency: 'unica',
                   specificDate,
+                  specificEndDate: isDateRange ? specificEndDate : undefined,
                 }
               : slot
           )
         );
-        showToast('Bloque puntual actualizado.');
+        showToast('Bloque puntual actualizado correctamente.');
       } else {
         const newSlot: TimeSlot = {
           id: `slot-puntual-${Date.now()}`,
           title: newTitle,
+          tag: newTag,
           day: assignedDay,
           startTime: newStartTime,
           endTime: newEndTime,
@@ -187,13 +175,15 @@ export default function SchedulePage() {
           textColorClass: '',
           customColor: selectedColor,
           type: 'puntual',
+          frequency: 'unica',
           specificDate,
+          specificEndDate: isDateRange ? specificEndDate : undefined,
         };
         setSlots((prev) => [...prev, newSlot]);
-        showToast('Evento puntual agregado al horario.');
+        showToast('Evento puntual registrado en tu horario.');
       }
     } else {
-      // Recurrent
+      // Bloque recurrente.
       if (selectedDays.length === 0) return;
       if (editingSlotId) {
         setSlots((prev) =>
@@ -202,20 +192,23 @@ export default function SchedulePage() {
               ? {
                   ...slot,
                   title: newTitle,
+                  tag: newTag,
                   day: selectedDays[0],
                   startTime: newStartTime,
                   endTime: newEndTime,
                   customColor: selectedColor,
                   type: 'recurrente',
+                  frequency: 'semanal',
                 }
               : slot
           )
         );
-        showToast('Bloque recurrente actualizado.');
+        showToast('Bloque recurrente semanal actualizado.');
       } else {
         const newSlots: TimeSlot[] = selectedDays.map((day, idx) => ({
           id: `slot-rec-${Date.now()}-${idx}`,
           title: newTitle,
+          tag: newTag,
           day,
           startTime: newStartTime,
           endTime: newEndTime,
@@ -223,9 +216,10 @@ export default function SchedulePage() {
           textColorClass: '',
           customColor: selectedColor,
           type: 'recurrente',
+          frequency: 'semanal',
         }));
         setSlots((prev) => [...prev, ...newSlots]);
-        showToast(`${newSlots.length} bloques recurrentes creados.`);
+        showToast(`${newSlots.length} bloque(s) recurrente(s) semanal(es) registrado(s).`);
       }
     }
 
@@ -236,7 +230,7 @@ export default function SchedulePage() {
     if (!editingSlotId) return;
     deleteSlot(editingSlotId);
     setIsModalOpen(false);
-    showToast('Bloque eliminado correctamente.');
+    showToast('Bloque eliminado de tu horario.');
   };
 
   // File Handlers for Real Upload
@@ -285,26 +279,14 @@ export default function SchedulePage() {
     }
   };
 
-  // OCR Processing Execution (Tesseract.js Real Engine)
-  const handleStartOcrSimulation = async (isDemo = false) => {
+  // OCR Processing Execution (PDF.js + Tesseract Engine)
+  const handleStartOcr = async () => {
     setIsOcrProcessing(true);
     setOcrProgress(10);
 
-    if (isDemo || !selectedOcrFile) {
-      setOcrStatusText('Analizando "Horario_Universidad_Ciclo_2026-II.pdf" con IA OCR...');
-      setTimeout(() => {
-        setOcrProgress(60);
-        setOcrStatusText('Detectando cursos, días y rangos horarios...');
-      }, 700);
-
-      setTimeout(() => {
-        setIsOcrProcessing(false);
-        setIsOcrUploadModalOpen(false);
-        setOcrDraftSlots(MOCK_OCR_RESULTS);
-        setIsOcrDraftModalOpen(true);
-        setOcrProgress(0);
-        handleClearSelectedFile();
-      }, 1500);
+    if (!selectedOcrFile) {
+      setIsOcrProcessing(false);
+      showToast('Selecciona una imagen o PDF antes de iniciar la lectura.');
       return;
     }
 
@@ -318,6 +300,13 @@ export default function SchedulePage() {
         }
       );
 
+      if (extractedSlots.length === 0) {
+        setIsOcrProcessing(false);
+        setOcrProgress(0);
+        showToast('No pudimos reconocer bloques. Prueba con una imagen nítida, recta y donde se vean días y horas.');
+        return;
+      }
+
       setIsOcrProcessing(false);
       setIsOcrUploadModalOpen(false);
       setOcrDraftSlots(extractedSlots);
@@ -327,16 +316,31 @@ export default function SchedulePage() {
     } catch (err) {
       console.error('Error procesando OCR:', err);
       setIsOcrProcessing(false);
-      // Fallback to draft slots so user is not blocked
-      setIsOcrUploadModalOpen(false);
-      setOcrDraftSlots(MOCK_OCR_RESULTS);
-      setIsOcrDraftModalOpen(true);
       setOcrProgress(0);
-      showToast('Se extrajeron los bloques del horario para tu revisión.');
+      showToast('No se pudo leer el archivo. Verifica que sea una imagen o PDF válido e inténtalo de nuevo.');
     }
   };
 
-  // Confirm OCR Draft Import
+  // Ayudantes para editar borradores.
+  const handleAddDraftRow = () => {
+    const newDraft: OcrExtractedSlot = {
+      id: `draft-manual-${Date.now()}`,
+      title: 'Nueva Asignatura / Bloque',
+      day: 'Lun',
+      startTime: '08:00',
+      endTime: '10:00',
+      customColor: '#8b5cf6',
+      selected: true,
+      tag: 'Clase',
+    };
+    setOcrDraftSlots((prev) => [...prev, newDraft]);
+  };
+
+  const handleDeleteDraftRow = (id: string) => {
+    setOcrDraftSlots((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  // Confirmar importación de borrador OCR.
   const handleConfirmOcrDraft = () => {
     const selectedDrafts = ocrDraftSlots.filter((d) => d.selected);
     if (selectedDrafts.length === 0) return;
@@ -344,6 +348,7 @@ export default function SchedulePage() {
     const importedSlots: TimeSlot[] = selectedDrafts.map((d, idx) => ({
       id: `ocr-imported-${Date.now()}-${idx}`,
       title: d.title,
+      tag: d.tag || 'Clase',
       day: d.day,
       startTime: d.startTime,
       endTime: d.endTime,
@@ -351,11 +356,13 @@ export default function SchedulePage() {
       textColorClass: '',
       customColor: d.customColor,
       type: 'recurrente',
+      frequency: 'semanal',
+      isOcrImported: true,
     }));
 
     setSlots((prev) => [...prev, ...importedSlots]);
     setIsOcrDraftModalOpen(false);
-    showToast(`¡Se importaron ${importedSlots.length} asignaturas desde el OCR!`);
+    showToast(`¡Se confirmaron e importaron ${importedSlots.length} asignaturas desde el OCR!`);
   };
 
   return (
@@ -377,7 +384,7 @@ export default function SchedulePage() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="px-2.5 py-0.5 rounded-full bg-[#416840]/10 text-[#416840] text-[11px] font-bold uppercase tracking-wider">
-                Módulo 1: Agendas
+                Módulo 1: Agendas & Disponibilidad
               </span>
               <span className="text-xs text-[#70796d] font-medium">
                 {slots.length} bloques registrados
@@ -387,11 +394,11 @@ export default function SchedulePage() {
               Mi Horario
             </h1>
             <p className="text-[#40493e] text-sm md:text-base">
-              Define tus bloques ocupados (recurrentes o puntuales) o importa tu sílabo vía OCR.
+              Define tus bloques recurrentes o eventos puntuales, o importa tu horario/sílabo tabular vía OCR.
             </p>
           </div>
           <div className="flex gap-3 w-full md:w-auto">
-            {/* Botón Importar OCR (HU-02) */}
+            {/* Importar OCR */}
             <button
               onClick={() => setIsOcrUploadModalOpen(true)}
               className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[#d5e3cf] bg-[#e9f0e4] text-[#40493e] hover:bg-[#dbe5d6] hover:text-[#161d15] transition-all text-xs sm:text-sm font-semibold cursor-pointer shadow-xs active:scale-95"
@@ -399,15 +406,7 @@ export default function SchedulePage() {
               <span className="material-symbols-outlined text-[20px] text-[#416840]">document_scanner</span>
               <span>Importar OCR</span>
             </button>
-            <button
-              onClick={importMockCalendar}
-              className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[#d5e3cf] bg-[#e9f0e4] text-[#40493e] hover:bg-[#dbe5d6] hover:text-[#161d15] transition-all text-xs sm:text-sm font-semibold cursor-pointer shadow-xs active:scale-95"
-            >
-              <span className="material-symbols-outlined text-[20px]">cloud_upload</span>
-              <span>Importar</span>
-            </button>
-
-            {/* Botón Agregar Bloque Manual (HU-01 & HU-03) */}
+            {/* Agregar bloque manual */}
             <button
               onClick={openCreateModal}
               className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#416840] hover:bg-[#2a4f2b] text-white transition-all text-xs sm:text-sm font-bold shadow-md shadow-[#416840]/20 cursor-pointer active:scale-95"
@@ -419,17 +418,21 @@ export default function SchedulePage() {
         </header>
 
         {/* Legend / Filter Indicators */}
-        <div className="flex items-center gap-4 mb-4 text-xs text-[#40493e] flex-wrap">
+        <div className="flex items-center gap-4 mb-4 text-xs text-[#40493e] flex-wrap bg-white/60 p-3 rounded-2xl border border-[#d5e3cf]/60">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-[#8b5cf6]/30 border border-[#8b5cf6]"></span>
-            <span>Bloque Recurrente Semanal</span>
+            <span>Bloque recurrente semanal</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded bg-[#ec4899]/30 border border-[#ec4899] flex items-center justify-center text-[8px]">📌</span>
-            <span>Evento Puntual (Fecha Única)</span>
+            <span className="w-3 h-3 rounded bg-[#ec4899]/30 border border-dashed border-[#ec4899]"></span>
+            <span>Evento puntual (fecha única o rango)</span>
           </div>
-          <span className="ml-auto text-[#70796d] hidden sm:inline">
-            Haz clic sobre cualquier bloque para editarlo o eliminarlo (HU-04)
+          <div className="flex items-center gap-1.5">
+            <span className="px-1.5 py-0.2 rounded bg-[#416840]/15 text-[#416840] font-bold text-[10px]">OCR</span>
+            <span>Extraído por OCR</span>
+          </div>
+          <span className="ml-auto text-[#70796d] hidden sm:inline text-[11px]">
+            Haz clic sobre cualquier bloque para <strong>editarlo o eliminarlo</strong>
           </span>
         </div>
 
@@ -452,7 +455,7 @@ export default function SchedulePage() {
                   <div
                     key={day}
                     className={`text-center text-sm font-bold text-[#40493e] pb-3 border-b border-[#c0c9bb] ${
-                      day === 'Sáb' || day === 'Dom' ? 'opacity-60' : ''
+                      day === 'Sáb' || day === 'Dom' ? 'opacity-70' : ''
                     }`}
                   >
                     {day}
@@ -461,7 +464,7 @@ export default function SchedulePage() {
               </div>
 
               {/* Grid Body */}
-              <div className="relative h-[600px]">
+              <div className="relative h-[620px]">
                 {/* Background Lines */}
                 <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-50">
                   {[...Array(6)].map((_, i) => (
@@ -504,7 +507,7 @@ export default function SchedulePage() {
                               }`}
                             >
                               <div>
-                                <div className="flex items-center justify-between gap-1">
+                                <div className="flex items-center justify-between gap-1 mb-0.5">
                                   <span
                                     style={isCustom ? { color: slot.customColor } : undefined}
                                     className="text-xs font-bold truncate block"
@@ -512,18 +515,30 @@ export default function SchedulePage() {
                                     {slot.title}
                                   </span>
                                   {isPuntual && (
-                                    <span className="text-[9px] px-1 rounded bg-white/70 font-semibold text-[#161d15]" title={`Evento puntual: ${slot.specificDate}`}>
+                                    <span
+                                      className="text-[9px] px-1 rounded bg-white/80 font-bold text-[#161d15] shrink-0"
+                                      title={slot.specificEndDate ? `Rango: ${slot.specificDate} al ${slot.specificEndDate}` : `Fecha: ${slot.specificDate}`}
+                                    >
                                       Puntual
                                     </span>
                                   )}
                                 </div>
+                                {slot.tag && (
+                                  <span className="text-[9px] text-[#70796d] font-semibold block truncate">
+                                    {slot.tag}
+                                  </span>
+                                )}
                               </div>
-                              <span
-                                style={isCustom ? { color: slot.customColor } : undefined}
-                                className="text-[10px] opacity-90 font-medium"
-                              >
-                                {slot.startTime} - {slot.endTime}
-                              </span>
+                              <div className="flex items-center justify-between text-[10px] opacity-90 font-medium">
+                                <span style={isCustom ? { color: slot.customColor } : undefined}>
+                                  {slot.startTime} - {slot.endTime}
+                                </span>
+                                {slot.isOcrImported && (
+                                  <span className="text-[8px] uppercase tracking-wider font-bold text-[#416840] bg-[#e9f0e4] px-1 rounded">
+                                    OCR
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -537,14 +552,14 @@ export default function SchedulePage() {
         )}
       </main>
 
-      {/* MODAL 1: AGREGAR / EDITAR BLOQUE (HU-01, HU-03, HU-04) */}
+      {/* Modal para agregar o editar un bloque */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-5">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#416840]">
-                  {editingSlotId ? 'HU-04: Gestión de Bloque' : 'HU-01 / HU-03: Nuevo Registro'}
+                  {editingSlotId ? 'Editar o eliminar bloque' : 'Registrar bloque'}
                 </span>
                 <h2 className="text-xl font-bold text-[#161d15]">
                   {editingSlotId ? 'Editar Bloque de Horario' : 'Registrar Bloque de Tiempo'}
@@ -554,7 +569,7 @@ export default function SchedulePage() {
                 <button
                   type="button"
                   onClick={handleDeleteSlot}
-                  className="text-xs text-red-700 hover:text-red-800 bg-red-100 border border-red-300 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                  className="text-xs text-red-700 hover:text-red-800 bg-red-100 border border-red-300 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all font-semibold"
                 >
                   <span className="material-symbols-outlined text-[16px]">delete</span>
                   <span>Eliminar</span>
@@ -562,7 +577,7 @@ export default function SchedulePage() {
               )}
             </div>
 
-            {/* Pestañas: Recurrente vs Puntual */}
+            {/* Tipo de bloque */}
             <div className="grid grid-cols-2 gap-2 p-1 bg-[#e9f0e4] rounded-2xl mb-5">
               <button
                 type="button"
@@ -574,7 +589,7 @@ export default function SchedulePage() {
                 }`}
               >
                 <span className="material-symbols-outlined text-[16px]">repeat</span>
-                <span>Recurrente Semanal (HU-01)</span>
+                <span>Recurrente semanal</span>
               </button>
               <button
                 type="button"
@@ -586,30 +601,60 @@ export default function SchedulePage() {
                 }`}
               >
                 <span className="material-symbols-outlined text-[16px]">event</span>
-                <span>Evento Puntual (HU-03)</span>
+                <span>Evento puntual</span>
               </button>
             </div>
 
             <form onSubmit={handleSaveBlock} className="flex flex-col gap-4">
+              {/* Etiqueta / Nombre */}
               <div>
                 <label className="block text-xs font-semibold text-[#40493e] mb-1.5">
-                  Nombre de la Actividad / Asignatura
+                  Etiqueta / Nombre del Bloque
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Clase de Cálculo, Turno de Trabajo, Gimnasio..."
+                  placeholder={blockType === 'recurrente' ? 'Ej. Clase de Cálculo, Turno de Trabajo...' : 'Ej. Cita Médica, Viaje a Trujillo, Examen...'}
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] placeholder-slate-400 text-sm focus:outline-none focus:border-[#416840]"
                 />
               </div>
 
+              {/* Categoría / Tag rápido */}
+              <div>
+                <label className="block text-xs font-semibold text-[#40493e] mb-1.5">
+                  Tipo de Actividad / Categoría
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {(blockType === 'recurrente' ? RECURRENT_TAGS : PUNTUAL_TAGS).map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setNewTag(tag)}
+                      className={`px-3 py-1 text-xs font-medium rounded-xl border transition-all cursor-pointer ${
+                        newTag === tag
+                          ? 'bg-[#416840] border-[#2a4f2b] text-white shadow-xs'
+                          : 'bg-white border-[#c0c9bb] text-[#40493e] hover:border-[#416840]'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Días de repetición o fechas puntuales */}
               {blockType === 'recurrente' ? (
                 <div>
-                  <label className="block text-xs font-semibold text-[#40493e] mb-1.5">
-                    {editingSlotId ? 'Día de la semana' : 'Días de repetición (Selecciona uno o varios)'}
-                  </label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-xs font-semibold text-[#40493e]">
+                      {editingSlotId ? 'Día de la semana' : 'Día(s) de repetición semanal'}
+                    </label>
+                    <span className="text-[10px] font-bold text-[#416840] bg-[#e9f0e4] px-2 py-0.5 rounded-full">
+                      Frecuencia: Semanal
+                    </span>
+                  </div>
                   <div className="flex gap-1.5 flex-wrap">
                     {days.map((d) => {
                       const isSelected = selectedDays.includes(d);
@@ -631,28 +676,62 @@ export default function SchedulePage() {
                   </div>
                 </div>
               ) : (
-                <div>
-                  <label className="block text-xs font-semibold text-[#40493e] mb-1.5">
-                    Fecha del Evento Puntual
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={specificDate}
-                    onChange={(e) => setSpecificDate(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] text-sm focus:outline-none focus:border-[#416840]"
-                  />
-                  <p className="text-[11px] text-[#70796d] mt-1">
-                    Se ubicará en la columna de: <strong className="text-[#416840]">{getDayFromDate(specificDate)}</strong>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-[#40493e]">
+                      Fecha del Evento Puntual
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-[#40493e] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isDateRange}
+                        onChange={(e) => setIsDateRange(e.target.checked)}
+                        className="rounded text-[#416840] focus:ring-0 cursor-pointer"
+                      />
+                      <span>¿Es un rango de fechas? (ej. viaje)</span>
+                    </label>
+                  </div>
+
+                  <div className={`grid ${isDateRange ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+                    <div>
+                      <span className="text-[10px] font-bold text-[#70796d] block mb-1">
+                        {isDateRange ? 'Fecha Inicio' : 'Fecha'}
+                      </span>
+                      <input
+                        type="date"
+                        required
+                        value={specificDate}
+                        onChange={(e) => setSpecificDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] text-xs focus:outline-none focus:border-[#416840]"
+                      />
+                    </div>
+                    {isDateRange && (
+                      <div>
+                        <span className="text-[10px] font-bold text-[#70796d] block mb-1">
+                          Fecha Fin
+                        </span>
+                        <input
+                          type="date"
+                          value={specificEndDate}
+                          onChange={(e) => setSpecificEndDate(e.target.value)}
+                          className="w-full px-3 py-2 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] text-xs focus:outline-none focus:border-[#416840]"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#70796d]">
+                    Columna en cuadrícula semanal: <strong className="text-[#416840]">{getDayFromDate(specificDate)}</strong> (Ocurrencia única)
                   </p>
                 </div>
               )}
 
+              {/* Horas de Inicio y Fin */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-[#40493e] mb-1.5">Hora Inicio</label>
                   <input
                     type="time"
+                    required
                     value={newStartTime}
                     onChange={(e) => setNewStartTime(e.target.value)}
                     className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] text-sm focus:outline-none focus:border-[#416840]"
@@ -662,6 +741,7 @@ export default function SchedulePage() {
                   <label className="block text-xs font-semibold text-[#40493e] mb-1.5">Hora Fin</label>
                   <input
                     type="time"
+                    required
                     value={newEndTime}
                     onChange={(e) => setNewEndTime(e.target.value)}
                     className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] text-sm focus:outline-none focus:border-[#416840]"
@@ -669,6 +749,7 @@ export default function SchedulePage() {
                 </div>
               </div>
 
+              {/* Color */}
               <div>
                 <label className="block text-xs font-semibold text-[#40493e] mb-2">Color de Identificación</label>
                 <div className="flex items-center gap-2.5 mb-2 flex-wrap">
@@ -721,7 +802,7 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* MODAL 2: CARGA POR OCR (HU-02) */}
+      {/* Modal de carga por OCR */}
       {isOcrUploadModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-center">
@@ -729,13 +810,13 @@ export default function SchedulePage() {
               <span className="material-symbols-outlined text-3xl">document_scanner</span>
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#416840]">
-              Story HU-02: OCR Inteligente
+              OCR inteligente de horarios
             </span>
             <h2 className="text-xl font-bold text-[#161d15] mt-1 mb-2">
               Autocompletar Horario por OCR
             </h2>
             <p className="text-xs text-[#70796d] mb-6">
-              Sube una captura de tu matrícula o el PDF de tu sílabo para extraer automáticamente tus bloques.
+              Sube una foto o PDF de tu horario universitario/laboral. El sistema identificará asignaturas, días y rangos horarios.
             </p>
 
             {isOcrProcessing ? (
@@ -766,7 +847,7 @@ export default function SchedulePage() {
                   <div className="p-4 rounded-2xl bg-white border-2 border-[#416840] shadow-xs space-y-3 text-left animate-in fade-in">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-[#416840] bg-[#e9f0e4] px-2.5 py-0.5 rounded-full">
-                        ✓ Archivo cargado
+                        ✓ Archivo listo
                       </span>
                       <button
                         type="button"
@@ -799,11 +880,11 @@ export default function SchedulePage() {
 
                     <button
                       type="button"
-                      onClick={() => handleStartOcrSimulation(false)}
+                      onClick={handleStartOcr}
                       className="w-full py-3 rounded-xl bg-[#416840] hover:bg-[#2a4f2b] text-white text-xs font-bold transition-all shadow-md shadow-[#416840]/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                     >
                       <span className="material-symbols-outlined text-[18px]">auto_fix_high</span>
-                      <span>✨ Escanear con IA OCR</span>
+                      <span>✨ Extraer Horarios con IA OCR</span>
                     </button>
                   </div>
                 ) : (
@@ -823,9 +904,9 @@ export default function SchedulePage() {
                       <span className="material-symbols-outlined text-2xl">cloud_upload</span>
                     </div>
                     <p className="text-xs font-bold text-[#161d15]">
-                      Haz clic para buscar en tu equipo o arrastra el archivo aquí
+                      Haz clic para buscar o arrastra una foto o PDF aquí
                     </p>
-                    <p className="text-[11px] text-[#70796d]">Formatos: PDF, JPG, PNG, WEBP (Máx 10MB)</p>
+                    <p className="text-[11px] text-[#70796d]">Soporta: PDF, JPG, PNG, WEBP (Hasta 10MB)</p>
                     <button
                       type="button"
                       className="mt-1 px-4 py-1.5 rounded-xl bg-[#416840] text-white text-xs font-bold shadow-xs pointer-events-none"
@@ -834,26 +915,6 @@ export default function SchedulePage() {
                     </button>
                   </div>
                 )}
-
-                {/* Opción secundaria: Probar plantilla demo */}
-                <div className="text-left pt-2">
-                  <span className="text-[11px] font-bold text-[#40493e] uppercase">
-                    ¿No tienes un archivo a mano? Prueba con este ejemplo:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleStartOcrSimulation(true)}
-                    className="mt-2 w-full p-3 rounded-xl bg-white border border-[#c0c9bb] hover:border-[#416840] text-left flex items-center justify-between text-xs font-semibold text-[#161d15] transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[#416840] text-[18px]">picture_as_pdf</span>
-                      <span>Horario_Universidad_Ciclo_2026-II.pdf</span>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#416840]/10 text-[#416840] font-bold group-hover:bg-[#416840] group-hover:text-white transition-colors">
-                      Probar Demo
-                    </span>
-                  </button>
-                </div>
 
                 <div className="flex justify-end gap-2 pt-4 border-t border-[#c0c9bb]/60">
                   <button
@@ -873,20 +934,20 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* MODAL 3: REVISIÓN DE BORRADOR OCR EDITABLE (HU-04) */}
+      {/* Modal de revisión del borrador OCR */}
       {isOcrDraftModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-3xl p-6 sm:p-8 w-full max-w-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-3xl p-6 sm:p-8 w-full max-w-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#416840]">
-                  Story HU-04: Revisión de Borrador
+                  Revisión de borrador
                 </span>
                 <h2 className="text-xl font-bold text-[#161d15]">
                   Revisar y Editar Bloques Extraídos por OCR
                 </h2>
                 <p className="text-xs text-[#70796d] mt-0.5">
-                  Verifica o corrige los datos antes de guardarlos en tu horario semanal.
+                  Toda la información permanece en <strong>estado borrador</strong> hasta que la confirmes. Corrige títulos, días u horarios según sea necesario.
                 </p>
               </div>
               <button
@@ -899,7 +960,7 @@ export default function SchedulePage() {
             </div>
 
             {/* List of draft items */}
-            <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1 my-4">
+            <div className="space-y-3 overflow-y-auto pr-1 my-4 flex-1">
               {ocrDraftSlots.map((item) => (
                 <div
                   key={item.id}
@@ -923,7 +984,7 @@ export default function SchedulePage() {
 
                     <div className="flex-1 grid grid-cols-1 sm:grid-cols-4 gap-2">
                       <div className="sm:col-span-2">
-                        <label className="text-[10px] font-bold text-[#70796d] block mb-0.5">Asignatura</label>
+                        <label className="text-[10px] font-bold text-[#70796d] block mb-0.5">Asignatura / Actividad</label>
                         <input
                           type="text"
                           value={item.title}
@@ -982,9 +1043,30 @@ export default function SchedulePage() {
                         </div>
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDraftRow(item.id)}
+                      className="text-red-500 hover:text-red-700 p-1 rounded-lg hover:bg-red-50 transition-colors"
+                      title="Eliminar de borrador"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Agregar fila al borrador */}
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={handleAddDraftRow}
+                className="w-full py-2 border-2 border-dashed border-[#7fae7a] hover:border-[#416840] hover:bg-[#e9f0e4] text-[#416840] text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                <span>+ Agregar Fila Manual al Borrador</span>
+              </button>
             </div>
 
             <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-4 border-t border-[#c0c9bb]/60">
@@ -998,7 +1080,7 @@ export default function SchedulePage() {
                   onClick={() => setIsOcrDraftModalOpen(false)}
                   className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-[#c0c9bb] text-xs font-bold text-[#40493e] hover:bg-[#e9f0e4] cursor-pointer"
                 >
-                  Descartar
+                  Descartar Borrador
                 </button>
                 <button
                   type="button"

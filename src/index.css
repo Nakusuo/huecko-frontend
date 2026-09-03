@@ -2,15 +2,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #416840;
+  --color-primary: #3f5d45;
   --color-on-primary: #ffffff;
-  --color-primary-container: #c3e5bb;
-  --color-on-primary-container: #002104;
-  --color-secondary: #7fae7a;
+  --color-primary-container: #e4eadf;
+  --color-on-primary-container: #26352a;
+  --color-secondary: #72876e;
   --color-on-secondary: #ffffff;
-  --color-secondary-container: #cfe7c8;
-  --color-on-secondary-container: #111f0e;
-  --color-tertiary: #386568;
+  --color-secondary-container: #e9ede4;
+  --color-on-secondary-container: #293229;
+  --color-tertiary: #687668;
   --color-on-tertiary: #ffffff;
   --color-tertiary-container: #bcebe9;
   --color-on-tertiary-container: #002021;
@@ -18,38 +18,38 @@
   --color-on-error: #ffffff;
   --color-error-container: #ffdad6;
   --color-on-error-container: #410002;
-  --color-background: #f4fbf1;
-  --color-on-background: #161d15;
-  --color-surface: #f4fbf1;
-  --color-on-surface: #161d15;
-  --color-surface-variant: #dbe5d6;
-  --color-on-surface-variant: #40493e;
-  --color-outline: #70796d;
-  --color-outline-variant: #c0c9bb;
+  --color-background: #f7f5ef;
+  --color-on-background: #263027;
+  --color-surface: #f7f5ef;
+  --color-on-surface: #263027;
+  --color-surface-variant: #ece9df;
+  --color-on-surface-variant: #596058;
+  --color-outline: #777d73;
+  --color-outline-variant: #d8d5c8;
   --color-shadow: #000000;
   --color-scrim: #000000;
-  --color-inverse-surface: #2b322a;
-  --color-inverse-on-surface: #ecf3e8;
-  --color-inverse-primary: #a8c9a0;
-  --color-primary-fixed: #c3e5bb;
-  --color-on-primary-fixed: #002104;
-  --color-primary-fixed-dim: #a8c9a0;
-  --color-on-primary-fixed-variant: #2a4f2b;
-  --color-secondary-fixed: #cfe7c8;
-  --color-on-secondary-fixed: #111f0e;
-  --color-secondary-fixed-dim: #b4cbac;
-  --color-on-secondary-fixed-variant: #3c4b37;
-  --color-tertiary-fixed: #bcebe9;
-  --color-on-tertiary-fixed: #002021;
-  --color-tertiary-fixed-dim: #a0cfcd;
-  --color-on-tertiary-fixed-variant: #1e4d50;
-  --color-surface-dim: #d5dcd2;
-  --color-surface-bright: #f4fbf1;
+  --color-inverse-surface: #2e382f;
+  --color-inverse-on-surface: #f7f5ef;
+  --color-inverse-primary: #c8d5c4;
+  --color-primary-fixed: #e4eadf;
+  --color-on-primary-fixed: #26352a;
+  --color-primary-fixed-dim: #c8d5c4;
+  --color-on-primary-fixed-variant: #3f5d45;
+  --color-secondary-fixed: #e9ede4;
+  --color-on-secondary-fixed: #293229;
+  --color-secondary-fixed-dim: #ccd7c8;
+  --color-on-secondary-fixed-variant: #4f604e;
+  --color-tertiary-fixed: #e5e9e0;
+  --color-on-tertiary-fixed: #2e382f;
+  --color-tertiary-fixed-dim: #ccd3c9;
+  --color-on-tertiary-fixed-variant: #536153;
+  --color-surface-dim: #e7e4da;
+  --color-surface-bright: #f7f5ef;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #eff6eb;
-  --color-surface-container: #e9f0e6;
-  --color-surface-container-high: #e3eae0;
-  --color-surface-container-highest: #dee5db;
+  --color-surface-container-low: #f3f1ea;
+  --color-surface-container: #eeece4;
+  --color-surface-container-high: #e8e6dc;
+  --color-surface-container-highest: #e2e0d6;
 
   --font-headline: 'EB Garamond', serif;
   --font-body: 'Inter', sans-serif;
@@ -62,12 +62,13 @@
 body {
   margin: 0;
   font-family: var(--font-body);
-  background-color: var(--color-surface); /* #f4fbf1 Paleta de Verdes Huecko */
+  background-color: var(--color-surface);
   color: var(--color-on-surface); /* #161d15 */
   -webkit-font-smoothing: antialiased;
 }
 
 .material-symbols-outlined {
+  /* ICONO: reemplazar estos spans por tus iconos propios cuando estén listos. */
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
@@ -78,4 +79,3 @@ body {
 .glow-effect {
   box-shadow: inset 0 0 12px rgba(168, 201, 160, 0.4);
 }
-

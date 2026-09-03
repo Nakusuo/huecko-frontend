@@ -7,7 +7,6 @@ import OnboardingPage from '../pages/OnboardingPage';
 import SchedulePage from '../pages/SchedulePage';
 import ProfilePage from '../pages/ProfilePage';
 import GroupsPage from '../pages/GroupsPage';
-import DiscoverPage from '../pages/DiscoverPage';
 import { useAuthStore } from '../store/authStore';
 
 export default function AppRouter() {
@@ -32,7 +31,6 @@ export default function AppRouter() {
         <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/groups" element={<GroupsPage />} />
-        <Route path="/discover" element={<DiscoverPage />} />
       </Route>
 
       {/* Ruta por defecto */}

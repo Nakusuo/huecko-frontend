@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuthStore } from '../store/authStore';
 import { useProfileStore, type UserProfileData } from '../store/profileStore';
+import { useGroupsStore } from '../store/groupsStore';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
   const { profile, updateProfile } = useProfileStore();
+  const activeGroupsCount = useGroupsStore((s) => s.groups.length);
 
   const handleLogout = () => {
     logout();
@@ -83,7 +85,7 @@ export default function ProfilePage() {
               </div>
               <div className="flex justify-between items-center text-xs">
                 <span className="text-[#40493e]">Grupos activos:</span>
-                <span className="text-[#161d15] font-medium">3 grupos</span>
+                <span className="text-[#161d15] font-medium">{activeGroupsCount} {activeGroupsCount === 1 ? 'grupo' : 'grupos'}</span>
               </div>
             </div>
 
@@ -198,11 +200,11 @@ export default function ProfilePage() {
               </form>
             </div>
 
-            {/* Sección: Privacidad y Visibilidad (RNF-02) */}
+            {/* Sección de privacidad y visibilidad */}
             <div className="bg-[#e9f0e4]/80 border border-[#d5e3cf] rounded-2xl p-6 shadow-sm backdrop-blur-md">
               <h3 className="text-lg font-bold text-[#161d15] flex items-center gap-2 mb-4 pb-3 border-b border-[#c0c9bb]/60">
                 <span className="material-symbols-outlined text-[#416840]">lock</span>
-                Privacidad de Horarios (RNF-02)
+                Privacidad de horarios
               </h3>
 
               <div className="space-y-4">
