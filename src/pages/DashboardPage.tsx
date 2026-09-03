@@ -28,69 +28,108 @@ export default function DashboardPage() {
   const scheduleSlots = useScheduleStore((s) => s.slots);
   const userEmail = user?.email || 'alex.rodriguez@huecko.com';
 
-  const today = (['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'] as DayOfWeek[])[new Date().getDay()];
+  const dayNames: DayOfWeek[] = [
+    'Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'
+  ];
+  const today = dayNames[new Date().getDay()];
+
   const todayBlocks: TodayScheduleBlock[] = useMemo(
-    () => scheduleSlots
-      .filter((slot) => slot.day === today)
-      .map((slot) => ({
-        id: slot.id,
-        title: slot.title,
-        timeRange: `${slot.startTime} - ${slot.endTime}`,
-        type: slot.type === 'puntual' ? 'puntual' : slot.tag === 'Trabajo' ? 'trabajo' : 'clase',
-        customColor: slot.customColor || '#54735a',
-      })),
+    () =>
+      scheduleSlots
+        .filter((slot) => slot.day === today)
+        .map((slot) => ({
+          id: slot.id,
+          title: slot.title,
+          timeRange: `${slot.startTime} - ${slot.endTime}`,
+          type:
+            slot.type === 'puntual'
+              ? 'puntual'
+              : slot.tag === 'Trabajo'
+              ? 'trabajo'
+              : 'clase',
+          customColor: slot.customColor || '#54735a',
+        })),
     [scheduleSlots, today]
   );
 
   const pendingVotes: DashboardPendingVote[] = useMemo(
-    () => proposals
-      .filter((proposal) => proposal.estado === 'propuesto')
-      .map((proposal) => {
-        const group = groups.find((item) => item.id === proposal.groupId);
-        return {
-          id: proposal.id,
-          groupId: proposal.groupId,
-          groupName: group?.nombre || 'Grupo',
-          title: proposal.titulo,
-          location: proposal.lugar,
-          deadline: proposal.plazoVotacion,
-          suggestedWindows: proposal.ventanasSugeridas.map((window) => ({
-            id: window.id,
-            day: window.dia,
-            timeRange: `${window.horaInicio} - ${window.horaFin}`,
-            freePercentage: window.disponibilidadPorcentaje,
-            votesCount: window.votosUsuarios.length,
-            hasVoted: window.votosUsuarios.includes(userEmail),
-          })),
-        };
-      }),
+    () =>
+      proposals
+        .filter((p) => p.estado === 'propuesto')
+        .map((proposal) => {
+          const group = groups.find(
+            (g) => g.id === proposal.groupId
+          );
+          return {
+            id: proposal.id,
+            groupId: proposal.groupId,
+            groupName: group?.nombre || 'Grupo',
+            title: proposal.titulo,
+            location: proposal.lugar,
+            deadline: proposal.plazoVotacion,
+            suggestedWindows: proposal.ventanasSugeridas.map(
+              (w) => ({
+                id: w.id,
+                day: w.dia,
+                timeRange: `${w.horaInicio} - ${w.horaFin}`,
+                freePercentage: w.disponibilidadPorcentaje,
+                votesCount: w.votosUsuarios.length,
+                hasVoted: w.votosUsuarios.includes(userEmail),
+              })
+            ),
+          };
+        }),
     [groups, proposals, userEmail]
   );
 
-  const metrics = useMemo(() => ({
-    activeGroupsCount: groups.length,
-    pendingVotesCount: pendingVotes.length,
-    freeMatchHoursThisWeek: proposals
-      .flatMap((proposal) => proposal.ventanasSugeridas)
-      .filter((window) => window.disponibilidadPorcentaje >= 80)
-      .reduce((total, window) => total + Number(window.horaFin.slice(0, 2)) - Number(window.horaInicio.slice(0, 2)), 0),
-    connectedMembersCount: new Set(groups.flatMap((group) => group.miembros.map((member) => member.email))).size,
-  }), [groups, pendingVotes.length, proposals]);
+  const metrics = useMemo(() => {
+    const freeHours = proposals
+      .flatMap((p) => p.ventanasSugeridas)
+      .filter((w) => w.disponibilidadPorcentaje >= 80)
+      .reduce((total, w) => {
+        const start = Number(w.horaInicio.slice(0, 2));
+        const end = Number(w.horaFin.slice(0, 2));
+        return total + (end - start);
+      }, 0);
+
+    const allMembers = groups.flatMap((g) =>
+      g.miembros.map((m) => m.email)
+    );
+
+    return {
+      activeGroupsCount: groups.length,
+      pendingVotesCount: pendingVotes.length,
+      freeMatchHoursThisWeek: freeHours,
+      connectedMembersCount: new Set(allMembers).size,
+    };
+  }, [groups, pendingVotes.length, proposals]);
 
   const groupSummaries = useMemo(
-    () => groups.map((group) => {
-      const nextWindow = proposals
-        .filter((proposal) => proposal.groupId === group.id && proposal.estado !== 'cancelado')
-        .flatMap((proposal) => proposal.ventanasSugeridas)[0];
-      return {
-        id: group.id,
-        name: group.nombre,
-        membersCount: group.miembros.length,
-        matchPercentage: nextWindow?.disponibilidadPorcentaje ?? group.umbralDisponibilidad,
-        nextSlot: nextWindow ? `${nextWindow.dia} ${nextWindow.horaInicio} - ${nextWindow.horaFin}` : 'Sin propuesta aún',
-        color: group.miembros[0]?.color || '#54735a',
-      };
-    }),
+    () =>
+      groups.map((group) => {
+        const nextWindow = proposals
+          .filter(
+            (p) =>
+              p.groupId === group.id &&
+              p.estado !== 'cancelado'
+          )
+          .flatMap((p) => p.ventanasSugeridas)[0];
+
+        const slotLabel = nextWindow
+          ? `${nextWindow.dia} ${nextWindow.horaInicio} - ${nextWindow.horaFin}`
+          : 'Sin propuesta aún';
+
+        return {
+          id: group.id,
+          name: group.nombre,
+          membersCount: group.miembros.length,
+          matchPercentage:
+            nextWindow?.disponibilidadPorcentaje ??
+            group.umbralDisponibilidad,
+          nextSlot: slotLabel,
+          color: group.miembros[0]?.color || '#54735a',
+        };
+      }),
     [groups, proposals]
   );
 
