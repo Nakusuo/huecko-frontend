@@ -1,4 +1,27 @@
-# React + TypeScript + Vite
+# Huecko — Frontend
+
+SPA React + TypeScript para coordinar disponibilidad, planes, votaciones e imprevistos entre amigos.
+
+## Desarrollo
+
+```bash
+npm install
+npm run dev
+```
+
+Sin variables de entorno la app opera en modo demostración. Para conectarla al backend, copia `.env.example` a `.env` y define `VITE_API_URL` (por ejemplo `http://localhost:8080/api/v1`). El cliente agrega automáticamente `Authorization: Bearer <JWT>`.
+
+## Alcance implementado
+
+- Autenticación, registro, rutas protegidas y perfil/preferencias.
+- Bloques recurrentes y puntuales, edición, eliminación e importación OCR en borrador.
+- Grupos, código de invitación, umbral de disponibilidad y heatmap semanal.
+- Propuestas con 2–5 ventanas, votación, confirmación, retrasos e imprevistos/votación exprés.
+- Notificaciones y UI responsive para móvil y escritorio.
+
+El contrato que debe implementar Spring Boot está en [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
+
+## Nota de plantilla
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
