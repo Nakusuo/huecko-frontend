@@ -1,6 +1,7 @@
 import { createWorker } from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { DayOfWeek } from '../store/scheduleStore';
+import { SUBJECT_COLORS, colorByIndex } from '../theme/palette';
 
 if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '5.4.530'}/build/pdf.worker.min.mjs`;
@@ -17,56 +18,9 @@ export interface OcrExtractedSlot {
   tag?: string;
 }
 
-const PRESET_COLORS: Record<string, string> = {
-  español: '#f59e0b',
-  matemáticas: '#3b82f6',
-  matematicas: '#3b82f6',
-  'ciencias naturales': '#10b981',
-  ciencias: '#10b981',
-  historia: '#8b5cf6',
-  geografía: '#06b6d4',
-  geografia: '#06b6d4',
-  'formación cívica y ética': '#ec4899',
-  'formación cívica': '#ec4899',
-  civica: '#ec4899',
-  'educación física': '#ef4444',
-  'educacion fisica': '#ef4444',
-  educación: '#ef4444',
-  inglés: '#6366f1',
-  ingles: '#6366f1',
-  artística: '#d946ef',
-  artistica: '#d946ef',
-  biblioteca: '#eab308',
-  algoritmos: '#8b5cf6',
-  cálculo: '#3b82f6',
-  calculo: '#3b82f6',
-  redes: '#10b981',
-  software: '#f59e0b',
-  programación: '#6366f1',
-  programacion: '#6366f1',
-  física: '#ec4899',
-  fisica: '#ec4899',
-  química: '#10b981',
-  quimica: '#10b981',
-  base: '#06b6d4',
-  datos: '#06b6d4',
-  estadística: '#8b5cf6',
-  estadistica: '#8b5cf6',
-  sistemas: '#3b82f6',
-  inteligencia: '#8b5cf6',
-  artificial: '#8b5cf6',
-};
 
-const COLOR_PALETTE = [
-  '#8b5cf6',
-  '#3b82f6',
-  '#10b981',
-  '#f59e0b',
-  '#ec4899',
-  '#06b6d4',
-  '#d946ef',
-  '#6366f1',
-];
+
+
 
 const DAY_KEYWORDS: { key: DayOfWeek; patterns: RegExp[] }[] = [
   { key: 'Lun', patterns: [/\blunes\b/i, /\blun\b/i, /\bmon\b/i, /\bmonday\b/i, /^l$/i] },
@@ -737,12 +691,12 @@ function normalizeDayString(dayStr: string): DayOfWeek {
 
 function getColorForSubject(subject: string, index: number): string {
   const lower = subject.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  for (const [key, color] of Object.entries(PRESET_COLORS)) {
+  for (const [key, color] of Object.entries(SUBJECT_COLORS)) {
     if (lower.includes(key.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) {
       return color;
     }
   }
-  return COLOR_PALETTE[index % COLOR_PALETTE.length];
+  return colorByIndex(index);
 }
 
 function capitalize(str: string): string {
