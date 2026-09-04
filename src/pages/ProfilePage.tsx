@@ -123,13 +123,13 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex flex-col pt-6 md:pt-[104px]">
+    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
       <Navbar currentTab="profile" />
 
       {/* Main Container */}
-      <main id="contenido" tabIndex={-1} className="flex-grow w-full max-w-4xl mx-auto px-6 md:px-10 pb-24 md:pb-12">
+      <main id="contenido" tabIndex={-1} className="flex-grow w-full max-w-4xl mx-auto px-6 md:px-10 pt-8 pb-24 md:pb-12">
         <header className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-on-surface mb-2 font-headline">Perfil de Usuario</h1>
+          <h1 className="text-3xl md:text-4xl font-bold text-on-surface mb-2 font-headline">Perfil de usuario</h1>
           <p className="text-on-surface-variant text-sm md:text-base">
             Administra tu información personal, privacidad de agendas y preferencias.
           </p>
@@ -144,7 +144,7 @@ export default function ProfilePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Card: Avatar e Información básica */}
-          <div className="bg-surface-container/80 border border-outline-variant rounded-2xl p-6 shadow-sm backdrop-blur-md flex flex-col items-center text-center">
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-sm flex flex-col items-center text-center">
             <div className="relative mb-4">
               {profile.avatarUrl ? (
                 <img
@@ -214,7 +214,7 @@ export default function ProfilePage() {
                 className="w-full py-2.5 px-4 rounded-xl border border-error/30 bg-error-container hover:bg-error-container text-error hover:text-error text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-98"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[18px]">logout</span>
-                Cerrar Sesión
+                Cerrar sesión
               </button>
             </div>
           </div>
@@ -222,11 +222,11 @@ export default function ProfilePage() {
           {/* Formulario y Configuraciones */}
           <div className="lg:col-span-2 space-y-6">
             {/* Sección: Datos de Cuenta */}
-            <div className="bg-surface-container/80 border border-outline-variant rounded-2xl p-6 shadow-sm backdrop-blur-md">
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-sm">
               <div className="flex justify-between items-center mb-4 pb-3 border-b border-outline-variant/60">
                 <h3 className="text-lg font-bold text-on-surface flex items-center gap-2">
                   <span aria-hidden="true" className="material-symbols-outlined text-primary">person</span>
-                  Datos Personales
+                  Datos personales
                 </h3>
                 {!isEditing && (
                   <button
@@ -243,7 +243,7 @@ export default function ProfilePage() {
               <form onSubmit={handleSave} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre Completo</label>
+                    <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre completo</label>
                     {isEditing ? (
                       <input
                         type="text"
@@ -253,14 +253,14 @@ export default function ProfilePage() {
                         className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
                       />
                     ) : (
-                      <div className="px-3.5 py-2.5 bg-surface-container-lowest/70 rounded-xl border border-outline-variant/60 text-sm text-on-surface">
+                      <div className="px-3.5 py-2.5 bg-surface-container-lowest rounded-xl border border-outline-variant/60 text-sm text-on-surface">
                         {profile.nombre}
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Correo Electrónico</label>
+                    <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Correo electrónico</label>
                     {isEditing ? (
                       <input
                         type="email"
@@ -270,7 +270,7 @@ export default function ProfilePage() {
                         className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
                       />
                     ) : (
-                      <div className="px-3.5 py-2.5 bg-surface-container-lowest/70 rounded-xl border border-outline-variant/60 text-sm text-on-surface">
+                      <div className="px-3.5 py-2.5 bg-surface-container-lowest rounded-xl border border-outline-variant/60 text-sm text-on-surface">
                         {profile.email}
                       </div>
                     )}
@@ -278,7 +278,7 @@ export default function ProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Zona Horaria</label>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Zona horaria</label>
                   {isEditing ? (
                     <select
                       value={tempProfile.timezone}
@@ -292,7 +292,7 @@ export default function ProfilePage() {
                       <option value="Europe/Madrid (GMT+1)">Europe/Madrid (GMT+1)</option>
                     </select>
                   ) : (
-                    <div className="px-3.5 py-2.5 bg-surface-container-lowest/70 rounded-xl border border-outline-variant/60 text-sm text-on-surface">
+                    <div className="px-3.5 py-2.5 bg-surface-container-lowest rounded-xl border border-outline-variant/60 text-sm text-on-surface">
                       {profile.timezone}
                     </div>
                   )}
@@ -311,7 +311,7 @@ export default function ProfilePage() {
                       type="submit"
                       className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
                     >
-                      Guardar Cambios
+                      Guardar cambios
                     </button>
                   </div>
                 )}
@@ -319,7 +319,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Sección de privacidad y visibilidad */}
-            <div className="bg-surface-container/80 border border-outline-variant rounded-2xl p-6 shadow-sm backdrop-blur-md">
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-sm">
               <h3 className="text-lg font-bold text-on-surface flex items-center gap-2 mb-4 pb-3 border-b border-outline-variant/60">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">lock</span>
                 Privacidad de horarios
@@ -336,10 +336,10 @@ export default function ProfilePage() {
             </div>
 
             {/* Sección: Notificaciones */}
-            <div className="bg-surface-container/80 border border-outline-variant rounded-2xl p-6 shadow-sm backdrop-blur-md">
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-sm">
               <h3 className="text-lg font-bold text-on-surface flex items-center gap-2 mb-4 pb-3 border-b border-outline-variant/60">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">notifications</span>
-                Notificaciones y Alertas
+                Notificaciones y alertas
               </h3>
 
               <div className="space-y-3">

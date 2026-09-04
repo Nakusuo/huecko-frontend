@@ -364,7 +364,7 @@ export default function SchedulePage() {
   };
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex flex-col pt-6 md:pt-[104px]">
+    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
       <Navbar currentTab="schedule" />
 
       {/* Toast Notification */}
@@ -376,23 +376,18 @@ export default function SchedulePage() {
       )}
 
       {/* Main Content */}
-      <main id="contenido" tabIndex={-1} className="flex-grow w-full max-w-[1200px] mx-auto px-6 md:px-10 pb-24 md:pb-12">
+      <main id="contenido" tabIndex={-1} className="flex-grow w-full max-w-[1200px] mx-auto px-6 md:px-10 pt-8 pb-24 md:pb-12">
         {/* Header Section */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-2xs font-bold uppercase tracking-wider">
-                Agenda y disponibilidad
-              </span>
-              <span className="text-xs text-on-surface-variant font-medium">
-                {slots.length} bloques registrados
-              </span>
-            </div>
             <h1 className="text-3xl md:text-4xl font-bold text-on-surface font-headline">
-              Mi Horario
+              Mi horario
             </h1>
-            <p className="text-on-surface-variant text-sm md:text-base">
-              Define tus bloques recurrentes o eventos puntuales, o importa tu horario/sílabo tabular vía OCR.
+            <p className="mt-1 text-on-surface-variant text-sm md:text-base">
+              Define tus bloques recurrentes o eventos puntuales, o importa tu horario vía OCR.
+            </p>
+            <p className="mt-2 text-xs text-on-surface-variant">
+              {slots.length} {slots.length === 1 ? 'bloque registrado' : 'bloques registrados'}
             </p>
           </div>
           <div className="flex gap-3 w-full md:w-auto">
@@ -410,13 +405,13 @@ export default function SchedulePage() {
               className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary transition-all text-xs sm:text-sm font-bold shadow-md shadow-primary/20 cursor-pointer active:scale-95"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[20px]">add</span>
-              <span>Nuevo Bloque</span>
+              <span>Nuevo bloque</span>
             </button>
           </div>
         </header>
 
         {/* Legend / Filter Indicators */}
-        <div className="flex items-center gap-4 mb-4 text-xs text-on-surface-variant flex-wrap bg-surface-container-lowest/60 p-3 rounded-2xl border border-outline-variant/60">
+        <div className="flex items-center gap-4 mb-4 text-xs text-on-surface-variant flex-wrap bg-surface-container-lowest p-3 rounded-2xl border border-outline-variant/60">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-cat-puntual/30 border border-cat-puntual"></span>
             <span>Bloque recurrente semanal</span>
@@ -480,7 +475,7 @@ export default function SchedulePage() {
 
               if (bloquesDelDia.length === 0) {
                 return (
-                  <div className="rounded-2xl border border-dashed border-outline-variant bg-surface-container/60 p-8 text-center">
+                  <div className="rounded-2xl border border-dashed border-outline-variant bg-surface-container p-8 text-center">
                     <span aria-hidden="true" className="material-symbols-outlined text-[40px] text-on-surface-variant">
                       event_available
                     </span>
@@ -510,7 +505,7 @@ export default function SchedulePage() {
                           type="button"
                           onClick={() => openEditModal(slot)}
                           aria-label={`${slot.title}, de ${slot.startTime} a ${slot.endTime}. Editar o eliminar.`}
-                          className={`w-full text-left flex items-stretch gap-3 rounded-2xl border bg-surface-container/80 p-3.5 cursor-pointer active:scale-[0.99] transition-transform ${
+                          className={`w-full text-left flex items-stretch gap-3 rounded-2xl border bg-surface-container-lowest p-3.5 cursor-pointer active:scale-[0.99] transition-transform ${
                             isPuntual ? 'border-dashed border-2 border-outline-variant' : 'border-outline-variant'
                           }`}
                         >
@@ -528,7 +523,7 @@ export default function SchedulePage() {
                                 {slot.title}
                               </span>
                               <span className="text-xs font-mono font-medium text-on-surface-variant shrink-0">
-                                {slot.startTime}–{slot.endTime}
+                                {slot.startTime}-{slot.endTime}
                               </span>
                             </span>
                             <span className="mt-1 flex items-center gap-1.5 flex-wrap">
@@ -557,7 +552,7 @@ export default function SchedulePage() {
           </div>
 
           {/* --- Vista de escritorio: rejilla semanal --- */}
-          <div className="hidden md:block bg-surface-container/80 border border-outline-variant rounded-2xl p-6 md:p-8 overflow-x-auto shadow-sm backdrop-blur-md">
+          <div className="hidden md:block bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 md:p-8 overflow-x-auto shadow-sm">
             <div className="min-w-[800px]">
               {/* Days Header */}
               <div className="grid grid-cols-8 gap-4 mb-4">
@@ -620,7 +615,7 @@ export default function SchedulePage() {
                               onClick={() => openEditModal(slot)}
                               aria-label={`${slot.title}, ${slot.day} de ${slot.startTime} a ${slot.endTime}. Editar o eliminar.`}
                               style={{ ...style, ...customStyle }}
-                              className={`absolute w-full text-left border backdrop-blur-md rounded-xl p-2.5 flex flex-col justify-between overflow-hidden cursor-pointer hover:scale-[1.02] transition-all shadow-xs group ${
+                              className={`absolute w-full text-left border rounded-xl p-2.5 flex flex-col justify-between overflow-hidden cursor-pointer hover:scale-[1.02] transition-all shadow-xs group ${
                                 isPuntual ? 'border-dashed border-2' : ''
                               }`}
                             >
@@ -634,7 +629,7 @@ export default function SchedulePage() {
                                   </span>
                                   {isPuntual && (
                                     <span
-                                      className="text-2xs px-1 rounded bg-surface-container-lowest/80 font-bold text-on-surface shrink-0"
+                                      className="text-2xs px-1 rounded bg-surface-container-lowest font-bold text-on-surface shrink-0"
                                       title={slot.specificEndDate ? `Rango: ${slot.specificDate} al ${slot.specificEndDate}` : `Fecha: ${slot.specificDate}`}
                                     >
                                       Puntual
@@ -673,7 +668,7 @@ export default function SchedulePage() {
 
       {/* Modal para agregar o editar un bloque */}
       {isModalOpen && (
-        <div role="dialog" aria-modal="true" aria-label="Bloque de horario" className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-md flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="Bloque de horario" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
           <div className="bg-surface border border-outline-variant rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl animate-modal-in max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-5">
               <div>
@@ -681,7 +676,7 @@ export default function SchedulePage() {
                   {editingSlotId ? 'Editar o eliminar bloque' : 'Registrar bloque'}
                 </span>
                 <h2 className="text-xl font-bold text-on-surface">
-                  {editingSlotId ? 'Editar Bloque de Horario' : 'Registrar Bloque de Tiempo'}
+                  {editingSlotId ? 'Editar bloque' : 'Registrar bloque'}
                 </h2>
               </div>
               {editingSlotId && (
@@ -770,7 +765,7 @@ export default function SchedulePage() {
                     <label className="text-xs font-semibold text-on-surface-variant">
                       {editingSlotId ? 'Día de la semana' : 'Día(s) de repetición semanal'}
                     </label>
-                    <span className="text-2xs font-bold text-primary bg-surface-container px-2 py-0.5 rounded-full">
+                    <span className="text-2xs font-bold text-primary bg-surface-container px-2 py-0.5 rounded-lg">
                       Frecuencia: Semanal
                     </span>
                   </div>
@@ -847,7 +842,7 @@ export default function SchedulePage() {
               {/* Horas de Inicio y Fin */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-on-surface-variant mb-1.5">Hora Inicio</label>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1.5">Hora de inicio</label>
                   <input
                     type="time"
                     required
@@ -857,7 +852,7 @@ export default function SchedulePage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-on-surface-variant mb-1.5">Hora Fin</label>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1.5">Hora de fin</label>
                   <input
                     type="time"
                     required
@@ -870,7 +865,7 @@ export default function SchedulePage() {
 
               {/* Color */}
               <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-2">Color de Identificación</label>
+                <label className="block text-xs font-semibold text-on-surface-variant mb-2">Color de identificación</label>
                 <div className="flex items-center gap-2.5 mb-2 flex-wrap">
                   {CATEGORY_COLORS.map((color) => (
                     <button
@@ -913,7 +908,7 @@ export default function SchedulePage() {
                   type="submit"
                   className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary transition-all text-xs font-bold cursor-pointer shadow-md shadow-primary/20"
                 >
-                  {editingSlotId ? 'Guardar Cambios' : 'Guardar Bloque'}
+                  {editingSlotId ? 'Guardar cambios' : 'Guardar bloque'}
                 </button>
               </div>
             </form>
@@ -923,7 +918,7 @@ export default function SchedulePage() {
 
       {/* Modal de carga por OCR */}
       {isOcrUploadModalOpen && (
-        <div role="dialog" aria-modal="true" aria-label="Autocompletar horario por OCR" className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-md flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="Autocompletar horario por OCR" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
           <div className="bg-surface border border-outline-variant rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl animate-modal-in text-center">
             <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 shadow-xs">
               <span aria-hidden="true" className="material-symbols-outlined text-3xl">document_scanner</span>
@@ -965,7 +960,7 @@ export default function SchedulePage() {
                   /* Tarjeta del archivo real seleccionado */
                   <div className="p-4 rounded-2xl bg-surface-container-lowest border-2 border-primary shadow-xs space-y-3 text-left animate-fade-in">
                     <div className="flex items-center justify-between">
-                      <span className="text-2xs font-bold uppercase tracking-wider text-primary bg-surface-container px-2.5 py-0.5 rounded-full">
+                      <span className="text-2xs font-bold uppercase tracking-wider text-primary bg-surface-container px-2.5 py-0.5 rounded-lg">
                         <span aria-hidden="true" className="material-symbols-outlined text-[18px]">check</span>
                         Archivo listo
                       </span>
@@ -1021,7 +1016,7 @@ export default function SchedulePage() {
                     className={`border-2 border-dashed p-6 rounded-2xl cursor-pointer transition-all bg-surface-container-lowest flex flex-col items-center justify-center gap-2 group ${
                       isDragging
                         ? 'border-primary bg-surface-container'
-                        : 'border-secondary hover:border-primary hover:bg-surface-container/60'
+                        : 'border-secondary hover:border-primary hover:bg-surface-container'
                     }`}
                   >
                     <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
@@ -1064,7 +1059,7 @@ export default function SchedulePage() {
 
       {/* Modal de revisión del borrador OCR */}
       {isOcrDraftModalOpen && (
-        <div role="dialog" aria-modal="true" aria-label="Revisar bloques extraídos" className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-md flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="Revisar bloques extraídos" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
           <div className="bg-surface border border-outline-variant rounded-3xl p-6 sm:p-8 w-full max-w-2xl shadow-2xl animate-modal-in flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -1095,7 +1090,7 @@ export default function SchedulePage() {
                   className={`p-4 rounded-2xl border transition-all ${
                     item.selected
                       ? 'bg-surface-container-lowest border-primary/60 shadow-xs'
-                      : 'bg-surface-container/50 border-outline-variant/50 opacity-60'
+                      : 'bg-surface-container border-outline-variant/50 opacity-60'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -1233,8 +1228,8 @@ export default function SchedulePage() {
           <span className="text-lg font-bold text-on-surface">Huecko</span>
         </div>
         <div className="flex gap-6">
-          <a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Sincronización Activa</a>
-          <a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Ajustes de Privacidad</a>
+          <a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Sincronización activa</a>
+          <a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Ajustes de privacidad</a>
           <a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Soporte</a>
         </div>
         <span className="text-xs text-on-surface-variant">© 2026 Huecko • Coordinación Social</span>
