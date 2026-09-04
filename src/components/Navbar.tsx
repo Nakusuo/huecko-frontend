@@ -2,36 +2,61 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { isApiEnabled } from '../lib/apiClient';
 
 interface NavbarProps {
-  currentTab: 'dashboard' | 'schedule' | 'groups' | 'profile';
+  currentTab?: 'dashboard' | 'schedule' | 'groups' | 'profile';
 }
 
 export default function Navbar({ currentTab }: NavbarProps) {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
+  const user = useAuthStore((s) => s.user);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
-  const { notifications, markAsRead, markAllAsRead } = useNotificationStore();
+  // Notifications
+  const notifications = useNotificationStore((s) => s.notifications);
+  const markAsRead = useNotificationStore((s) => s.markAsRead);
+  const markAllAsRead = useNotificationStore((s) => s.markAllAsRead);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   return (
     <>
-      {/* TopNavBar (Web) */}
-      <nav className="hidden md:flex bg-[#f7f5ef] fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-7xl rounded-full border border-[#d8d5c8] shadow-sm justify-between items-center px-8 py-3 z-50">
-        <div
-          className="flex items-center gap-3 cursor-pointer"
-          onClick={() => navigate('/dashboard')}
-        >
-          <div className="w-9 h-9 rounded-xl bg-[#3f5d45] flex items-center justify-center font-black text-white text-lg">
-            H
+      {/* TopNavBar (Desktop) */}
+      <nav className="hidden md:flex justify-between items-center px-8 py-3.5 bg-[#e9f0e4] border-b border-[#d5e3cf] sticky top-0 z-50 backdrop-blur-md bg-opacity-95 shadow-xs">
+        <div className="flex items-center gap-4">
+          <div
+            className="flex items-center gap-3 cursor-pointer"
+            onClick={() => navigate('/dashboard')}
+          >
+            <div className="w-9 h-9 rounded-xl bg-[#3f5d45] flex items-center justify-center font-black text-white text-lg shadow-sm">
+              H
+            </div>
+            <span className="text-xl font-bold text-[#161d15] tracking-tight">Huecko</span>
           </div>
-          <span className="text-xl font-bold text-[#161d15] tracking-tight">Huecko</span>
+
+          {/* Badge de conexión Backend */}
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+              isApiEnabled
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}
+            title={isApiEnabled ? 'Conectado a la API Backend de Huecko' : 'Operando en Modo Demostración local'}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isApiEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+              }`}
+            />
+            <span>{isApiEnabled ? 'API Conectada' : 'Modo Demo'}</span>
+          </div>
         </div>
 
         <div className="flex gap-7 items-center">
@@ -137,7 +162,7 @@ export default function Navbar({ currentTab }: NavbarProps) {
                 : 'bg-[#7fae7a] hover:bg-[#6f9e6a] text-white shadow-sm'
             }`}
           >
-            Mi Perfil
+            {user?.nombre ? user.nombre.split(' ')[0] : 'Mi Perfil'}
           </button>
 
           <button
@@ -182,7 +207,6 @@ export default function Navbar({ currentTab }: NavbarProps) {
           <span className="material-symbols-outlined">group</span>
           <span className="text-[10px]">Grupos</span>
         </button>
-
 
         <button
           onClick={() => navigate('/profile')}
