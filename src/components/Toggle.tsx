@@ -29,7 +29,7 @@ export default function Toggle({
   const descriptionId = description ? `${id}-desc` : undefined;
 
   return (
-    <div className="flex items-start justify-between gap-4 p-3.5 rounded-xl bg-surface-container-lowest/70 border border-outline-variant/60">
+    <div className="flex items-start justify-between gap-4 p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/60">
       <div className="space-y-1">
         <label
           htmlFor={id}

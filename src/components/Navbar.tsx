@@ -28,8 +28,8 @@ interface NavItem {
  */
 const NAV_ITEMS: NavItem[] = [
   { tab: 'dashboard', to: '/dashboard', label: 'Dashboard', shortLabel: 'Inicio', icon: 'dashboard' },
-  { tab: 'schedule', to: '/schedule', label: 'Mi Horario', shortLabel: 'Horario', icon: 'calendar_month' },
-  { tab: 'groups', to: '/groups', label: 'Mis Grupos', shortLabel: 'Grupos', icon: 'group' },
+  { tab: 'schedule', to: '/schedule', label: 'Mi horario', shortLabel: 'Horario', icon: 'calendar_month' },
+  { tab: 'groups', to: '/groups', label: 'Mis grupos', shortLabel: 'Grupos', icon: 'group' },
 ];
 
 export default function Navbar({ currentTab }: NavbarProps) {
@@ -99,8 +99,9 @@ export default function Navbar({ currentTab }: NavbarProps) {
       {/* --- Barra superior (escritorio) --- */}
       <nav
         aria-label="Navegación principal"
-        className="hidden md:flex bg-surface fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-7xl rounded-full border border-outline-variant shadow-sm justify-between items-center px-8 py-3 z-50"
+        className="hidden md:block sticky top-0 z-50 w-full border-b border-outline-variant bg-surface/90 backdrop-blur-sm"
       >
+        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-8 px-6 lg:px-8">
         <Link to="/dashboard" className="flex items-center gap-3 rounded-full">
           <span
             aria-hidden="true"
@@ -115,7 +116,7 @@ export default function Navbar({ currentTab }: NavbarProps) {
             modo demostración; sin esto, un fallo de conexión se confunde con
             datos reales que simplemente están vacíos. */}
         <span
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-medium border ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-2xs font-medium border ${
             isApiEnabled
               ? 'bg-success-container text-on-success-container border-success/30'
               : 'bg-warning-container text-on-warning-container border-warning/30'
@@ -168,7 +169,7 @@ export default function Navbar({ currentTab }: NavbarProps) {
               {unreadCount > 0 && (
                 <span
                   aria-hidden="true"
-                  className="absolute top-0.5 right-0.5 bg-error text-on-error text-2xs font-bold min-w-4 h-4 px-1 rounded-full flex items-center justify-center"
+                  className="absolute top-0.5 right-0.5 bg-error text-on-error text-2xs font-bold min-w-4 h-4 px-1 rounded-lg flex items-center justify-center"
                 >
                   {unreadCount}
                 </span>
@@ -239,7 +240,7 @@ export default function Navbar({ currentTab }: NavbarProps) {
           <Link
             to="/profile"
             aria-current={currentTab === 'profile' ? 'page' : undefined}
-            className={`text-sm font-semibold transition-colors rounded-full px-5 py-2 ${
+            className={`text-sm font-semibold transition-colors rounded-lg px-5 py-2 ${
               currentTab === 'profile'
                 ? 'bg-primary text-on-primary shadow-sm'
                 : 'bg-primary-container text-on-primary-container hover:bg-secondary-container'
@@ -251,13 +252,14 @@ export default function Navbar({ currentTab }: NavbarProps) {
           <button
             type="button"
             onClick={handleLogout}
-            className="flex items-center gap-1.5 text-xs font-semibold text-error hover:bg-error-container border border-error/30 px-3.5 py-2 rounded-full transition-colors active:scale-95"
+            className="flex items-center gap-1.5 text-xs font-semibold text-error hover:bg-error-container border border-error/30 px-3.5 py-2 rounded-lg transition-colors active:scale-95"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
               logout
             </span>
             <span>Salir</span>
           </button>
+        </div>
         </div>
       </nav>
 
