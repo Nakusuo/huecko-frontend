@@ -64,6 +64,8 @@ export interface PlanIncidence {
   minutosTardanza?: number;
   fechaReporte: string;
   criticidad?: 'BAJA' | 'MEDIA' | 'ALTA';
+  /** Deja de estar abierta cuando la votación exprés decide qué hacer. */
+  resuelta?: boolean;
 }
 
 export interface TimeWindowProposal {

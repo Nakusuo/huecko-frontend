@@ -45,6 +45,7 @@ interface GroupsState {
   closeVotingManually: (proposalId: string) => Promise<void>;
   reportIncident: (proposalId: string, incidence: Omit<PlanIncidence, 'id' | 'fechaReporte'>) => Promise<void>;
   voteReplanification: (proposalId: string, action: 'cancel' | 'reschedule' | 'keep', userEmail: string) => Promise<void>;
+  withdrawIncident: (proposalId: string, userEmail: string) => void;
 }
 
 const INITIAL_GROUPS: Group[] = [
@@ -101,7 +102,7 @@ const INITIAL_PROPOSALS: PlanProposal[] = [
     lugar: 'Biblioteca Central / Google Meet',
     creadoPor: 'Alex R.',
     plazoVotacion: 'Finalizada',
-    estado: 'confirmado',
+    estado: 'en_recoordinacion',
     ventanasSugeridas: [
       { id: 'w1', dia: 'Mié', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: 100, votosUsuarios: ['alex.rodriguez@huecko.com', 'maria.c@huecko.com', 'sam.p@huecko.com'] },
     ],
@@ -147,6 +148,48 @@ const INITIAL_PROPOSALS: PlanProposal[] = [
     votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
   },
 ];
+
+/**
+ * Cierra la votación exprés en cuanto hay mayoría y aplica lo decidido.
+ *
+ * Antes los votos solo se acumulaban: nadie decidía nada, el plan se quedaba
+ * en re-coordinación indefinidamente y quien había avisado podía volver a
+ * avisar, lo que reabría la votación una y otra vez.
+ *
+ * En caso de empate gana la opción menos disruptiva: mantener antes que
+ * reprogramar, y reprogramar antes que cancelar.
+ */
+function resolverVotacionExpres(proposal: PlanProposal, miembros: number): PlanProposal {
+  if (miembros <= 0) return proposal;
+
+  const votos = proposal.votosReplanificacion ?? { cancel: [], reschedule: [], keep: [] };
+  const emitidos = votos.cancel.length + votos.reschedule.length + votos.keep.length;
+  const mayoria = Math.min(Math.floor(miembros / 2) + 1, miembros);
+  if (emitidos < mayoria) return proposal;
+
+  const preferencia = [
+    ['keep', votos.keep.length],
+    ['reschedule', votos.reschedule.length],
+    ['cancel', votos.cancel.length],
+  ] as const;
+  const [ganadora] = preferencia.reduce((mejor, actual) => (actual[1] > mejor[1] ? actual : mejor));
+
+  const estado: PlanProposal['estado'] =
+    ganadora === 'cancel' ? 'cancelado' : ganadora === 'reschedule' ? 'propuesto' : 'confirmado';
+
+  return {
+    ...proposal,
+    estado,
+    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
+    incidencias: (proposal.incidencias ?? []).map((i) => ({ ...i, resuelta: true })),
+    /* Reprogramar es volver a elegir hora: los votos de la ronda anterior ya
+       no dicen nada sobre las ventanas nuevas. */
+    ventanasSugeridas:
+      ganadora === 'reschedule'
+        ? proposal.ventanasSugeridas.map((v) => ({ ...v, votosUsuarios: [] }))
+        : proposal.ventanasSugeridas,
+  };
+}
 
 export const useGroupsStore = create<GroupsState>()(
   persist(
@@ -366,15 +409,25 @@ export const useGroupsStore = create<GroupsState>()(
           };
           return {
             groupProposals: state.groupProposals.map((p) => {
-              if (p.id === proposalId) {
-                const current = p.incidencias || [];
-                return {
-                  ...p,
-                  estado: p.estado === 'confirmado' ? 'en_recoordinacion' : p.estado,
-                  incidencias: [newIncidence, ...current],
-                };
-              }
-              return p;
+              if (p.id !== proposalId) return p;
+
+              // Sobre un plan cancelado ya no hay nada que avisar.
+              if (p.estado === 'cancelado') return p;
+
+              const current = p.incidencias || [];
+              /* Una incidencia abierta por persona. Sin esta guarda, quien
+                 avisa puede volver a avisar en cuanto ha votado, y el plan no
+                 sale nunca de la re-coordinación. */
+              const yaAviso = current.some(
+                (i) => i.userEmail === incidenceData.userEmail && !i.resuelta
+              );
+              if (yaAviso) return p;
+
+              return {
+                ...p,
+                estado: p.estado === 'confirmado' ? 'en_recoordinacion' : p.estado,
+                incidencias: [newIncidence, ...current],
+              };
             }),
           };
         });
@@ -390,6 +443,9 @@ export const useGroupsStore = create<GroupsState>()(
         set((state) => ({
           groupProposals: state.groupProposals.map((p) => {
             if (p.id !== proposalId) return p;
+            // Solo se vota mientras hay algo que decidir.
+            if (p.estado !== 'en_recoordinacion') return p;
+
             const currentVotes = p.votosReplanificacion || { cancel: [], reschedule: [], keep: [] };
 
             const cleanCancel = currentVotes.cancel.filter((e) => e !== userEmail);
@@ -400,13 +456,42 @@ export const useGroupsStore = create<GroupsState>()(
             if (action === 'reschedule') cleanReschedule.push(userEmail);
             if (action === 'keep') cleanKeep.push(userEmail);
 
-            return {
+            const conVoto: PlanProposal = {
               ...p,
               votosReplanificacion: {
                 cancel: cleanCancel,
                 reschedule: cleanReschedule,
                 keep: cleanKeep,
               },
+            };
+
+            const miembros = state.groups.find((g) => g.id === p.groupId)?.miembros.length ?? 0;
+            return resolverVotacionExpres(conVoto, miembros);
+          }),
+        }));
+      },
+
+      withdrawIncident: (proposalId, userEmail) => {
+        set((state) => ({
+          groupProposals: state.groupProposals.map((p) => {
+            if (p.id !== proposalId) return p;
+
+            const restantes = (p.incidencias || []).filter(
+              (i) => !(i.userEmail === userEmail && !i.resuelta)
+            );
+            const quedanAbiertas = restantes.some((i) => !i.resuelta);
+
+            /* Si era el único aviso abierto, el plan vuelve a estar confirmado
+               y la votación desaparece: votar sobre un problema retirado no
+               decide nada. */
+            return {
+              ...p,
+              incidencias: restantes,
+              estado:
+                !quedanAbiertas && p.estado === 'en_recoordinacion' ? 'confirmado' : p.estado,
+              votosReplanificacion: quedanAbiertas
+                ? p.votosReplanificacion
+                : { cancel: [], reschedule: [], keep: [] },
             };
           }),
         }));
