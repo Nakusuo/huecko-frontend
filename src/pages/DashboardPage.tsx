@@ -98,6 +98,7 @@ export default function DashboardPage() {
 
   const reportIncident = useGroupsStore((s) => s.reportIncident);
   const voteReplanification = useGroupsStore((s) => s.voteReplanification);
+  const withdrawIncident = useGroupsStore((s) => s.withdrawIncident);
 
   const upcomingEvent = useMemo<UpcomingEventDetail | null>(() => {
     const proposal = proposals.find((item) => item.estado === 'confirmado');
@@ -138,6 +139,14 @@ export default function DashboardPage() {
 
   // Estado de la votación exprés ante una ausencia importante
   const [hasExpressVoteAlert, setHasExpressVoteAlert] = useState(true);
+  /* Si ya avisé de algo sobre este plan, lo que toca es retirarlo, no mandar
+     otro aviso encima: era lo que permitía avisar, votar y volver a avisar. */
+  const miAvisoAbierto = upcomingEvent
+    ? proposals
+        .find((p) => p.id === upcomingEvent.id)
+        ?.incidencias?.find((i) => i.userEmail === userEmail && !i.resuelta) ?? null
+    : null;
+
   const [expressVoteChoice, setExpressVoteChoice] = useState<'reprogramar' | 'cancelar' | 'mantener' | null>(null);
 
   const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
@@ -862,27 +871,48 @@ export default function DashboardPage() {
 
               {/* Botones de Acción */}
               <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-outline-variant/50">
-                <button
-                  onClick={() => {
-                    setIsDetailModalOpen(false);
-                    setIsDelayModalOpen(true);
-                  }}
-                  className="flex-1 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm"
-                >
-                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">timer</span>
-                  <span>Avisar retraso</span>
-                </button>
+                {miAvisoAbierto ? (
+                  <div className="flex-1 flex flex-col sm:flex-row items-center gap-3">
+                    <p className="flex-1 text-xs text-on-surface-variant">
+                      Ya avisaste: <strong className="text-on-surface">{miAvisoAbierto.motivo}</strong>
+                    </p>
+                    <button
+                      onClick={() => {
+                        withdrawIncident(upcomingEvent.id, userEmail);
+                        setIsDetailModalOpen(false);
+                        showToast('Retiraste tu aviso. El plan vuelve a su estado anterior.', 'info');
+                      }}
+                      className="py-3 px-4 rounded-2xl bg-surface-container-lowest hover:bg-surface-container text-on-surface border border-outline-variant text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">undo</span>
+                      <span>Retirar mi aviso</span>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setIsDetailModalOpen(false);
+                        setIsDelayModalOpen(true);
+                      }}
+                      className="flex-1 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm"
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">timer</span>
+                      <span>Avisar retraso</span>
+                    </button>
 
-                <button
-                  onClick={() => {
-                    setIsDetailModalOpen(false);
-                    setIsIncidentModalOpen(true);
-                  }}
-                  className="flex-1 py-3 rounded-2xl bg-surface-container-lowest hover:bg-error-container text-error border border-error/30 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
-                >
-                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">cancel</span>
-                  <span>Reportar imprevisto</span>
-                </button>
+                    <button
+                      onClick={() => {
+                        setIsDetailModalOpen(false);
+                        setIsIncidentModalOpen(true);
+                      }}
+                      className="flex-1 py-3 rounded-2xl bg-surface-container-lowest hover:bg-error-container text-error border border-error/30 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">cancel</span>
+                      <span>Reportar imprevisto</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
