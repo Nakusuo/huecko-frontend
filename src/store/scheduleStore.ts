@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { SUBJECT_COLORS, CATEGORY_HEXES } from '../theme/palette';
 
 export type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
 
@@ -7,10 +8,9 @@ export interface TimeSlot {
   id: string;
   title: string;
   day: DayOfWeek;
-  startTime: string; // e.g. "08:00"
-  endTime: string;   // e.g. "11:00"
-  colorClass: string;
-  textColorClass: string;
+  startTime: string; // p. ej. "08:00"
+  endTime: string;   // p. ej. "11:00"
+  /** Color de la categoría, de `theme/palette`. */
   customColor?: string;
   type?: 'recurrente' | 'puntual';
   tag?: string;
@@ -29,13 +29,21 @@ interface ScheduleState {
   deleteSlot: (id: string) => void;
 }
 
+/* Horario de ejemplo. Cada categoría lleva un tono distinto a propósito: dos
+   categorías del mismo color hacen ilegible la rejilla de un vistazo. */
+const CLASE_ALGORITMOS = SUBJECT_COLORS.algoritmos; // Ciruela
+const CLASE_CALCULO = SUBJECT_COLORS.calculo; // Pizarra
+const CLASE_REDES = SUBJECT_COLORS.redes; // Bosque
+const TRABAJO = CATEGORY_HEXES[7]; // Cobre
+const PERSONAL = CATEGORY_HEXES[5]; // Terracota
+
 const INITIAL_SLOTS: TimeSlot[] = [
-  { id: '1', title: 'Universidad - Algoritmos', day: 'Lun', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b', type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
-  { id: '2', title: 'Turno Laboral', day: 'Mar', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6', type: 'recurrente', frequency: 'semanal', tag: 'Trabajo' },
-  { id: '3', title: 'Universidad - Cálculo Avanzado', day: 'Mié', startTime: '08:00', endTime: '10:00', colorClass: '', textColorClass: '', customColor: '#f59e0b', type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
-  { id: '4', title: 'Gimnasio & Entrenamiento', day: 'Mié', startTime: '13:00', endTime: '15:30', colorClass: '', textColorClass: '', customColor: '#10b981', type: 'recurrente', frequency: 'semanal', tag: 'Personal' },
-  { id: '5', title: 'Turno Laboral', day: 'Jue', startTime: '10:00', endTime: '14:00', colorClass: '', textColorClass: '', customColor: '#3b82f6', type: 'recurrente', frequency: 'semanal', tag: 'Trabajo' },
-  { id: '6', title: 'Universidad - Redes', day: 'Vie', startTime: '08:00', endTime: '11:00', colorClass: '', textColorClass: '', customColor: '#f59e0b', type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
+  { id: '1', title: 'Universidad - Algoritmos', day: 'Lun', startTime: '08:00', endTime: '11:00', customColor: CLASE_ALGORITMOS, type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
+  { id: '2', title: 'Turno Laboral', day: 'Mar', startTime: '10:00', endTime: '14:00', customColor: TRABAJO, type: 'recurrente', frequency: 'semanal', tag: 'Trabajo' },
+  { id: '3', title: 'Universidad - Cálculo Avanzado', day: 'Mié', startTime: '08:00', endTime: '10:00', customColor: CLASE_CALCULO, type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
+  { id: '4', title: 'Gimnasio & Entrenamiento', day: 'Mié', startTime: '13:00', endTime: '15:30', customColor: PERSONAL, type: 'recurrente', frequency: 'semanal', tag: 'Personal' },
+  { id: '5', title: 'Turno Laboral', day: 'Jue', startTime: '10:00', endTime: '14:00', customColor: TRABAJO, type: 'recurrente', frequency: 'semanal', tag: 'Trabajo' },
+  { id: '6', title: 'Universidad - Redes', day: 'Vie', startTime: '08:00', endTime: '11:00', customColor: CLASE_REDES, type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
 ];
 
 export const useScheduleStore = create<ScheduleState>()(
