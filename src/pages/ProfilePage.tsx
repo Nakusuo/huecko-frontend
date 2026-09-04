@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuthStore } from '../store/authStore';
@@ -26,6 +26,83 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [tempProfile, setTempProfile] = useState<UserProfileData>(profile);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarError, setAvatarError] = useState('');
+
+  /**
+   * Reduce la imagen elegida a un cuadrado de 256 px antes de guardarla.
+   *
+   * La foto se persiste como data URL dentro del perfil, y el perfil vive en
+   * `localStorage`: una foto de cámara sin reescalar (varios MB en base64)
+   * revienta la cuota del navegador. Recortar al centro además evita que las
+   * fotos verticales salgan deformadas en el círculo del avatar.
+   */
+  const shrinkToDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const image = new Image();
+
+      image.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const LADO = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = LADO;
+        canvas.height = LADO;
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+          reject(new Error('El navegador no pudo procesar la imagen.'));
+          return;
+        }
+
+        const recorte = Math.min(image.width, image.height);
+        context.drawImage(
+          image,
+          (image.width - recorte) / 2,
+          (image.height - recorte) / 2,
+          recorte,
+          recorte,
+          0,
+          0,
+          LADO,
+          LADO
+        );
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('No se pudo leer la imagen.'));
+      };
+
+      image.src = objectUrl;
+    });
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Permite volver a elegir el mismo archivo si algo falló.
+    event.target.value = '';
+    if (!file) return;
+
+    setAvatarError('');
+
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Elige un archivo de imagen.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setAvatarError('La imagen no puede pesar más de 8 MB.');
+      return;
+    }
+
+    try {
+      const avatarUrl = await shrinkToDataUrl(file);
+      await updateProfile({ avatarUrl });
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : 'No se pudo cargar la imagen.');
+    }
+  };
 
   const startEdit = () => {
     setTempProfile(profile);
@@ -69,19 +146,53 @@ export default function ProfilePage() {
           {/* Card: Avatar e Información básica */}
           <div className="bg-surface-container/80 border border-outline-variant rounded-2xl p-6 shadow-sm backdrop-blur-md flex flex-col items-center text-center">
             <div className="relative mb-4">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-secondary to-primary flex items-center justify-center text-white text-3xl font-black shadow-md shadow-secondary/20">
-                {profile.nombre.charAt(0)}
-              </div>
+              {profile.avatarUrl ? (
+                <img
+                  src={profile.avatarUrl}
+                  alt={`Foto de perfil de ${profile.nombre}`}
+                  className="w-24 h-24 rounded-full object-cover shadow-md shadow-secondary/20"
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-secondary to-primary flex items-center justify-center text-white text-3xl font-black shadow-md shadow-secondary/20">
+                  {profile.nombre.charAt(0)}
+                </div>
+              )}
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={handleAvatarChange}
+              />
               <button
                 type="button"
+                onClick={() => avatarInputRef.current?.click()}
                 className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-surface-container-lowest border border-outline-variant flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface transition-all cursor-pointer shadow-xs"
-                title="Cambiar foto"
+                aria-label={profile.avatarUrl ? 'Cambiar foto de perfil' : 'Subir foto de perfil'}
+                title={profile.avatarUrl ? 'Cambiar foto' : 'Subir foto'}
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[16px]">photo_camera</span>
               </button>
             </div>
             <h2 className="text-xl font-bold text-on-surface">{profile.nombre}</h2>
-            <p className="text-xs text-on-surface-variant mb-4">{profile.email}</p>
+            <p className="text-xs text-on-surface-variant">{profile.email}</p>
+
+            {avatarError && <p className="mt-2 text-xs text-error font-medium">{avatarError}</p>}
+
+            {profile.avatarUrl && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAvatarError('');
+                  void updateProfile({ avatarUrl: undefined });
+                }}
+                className="mt-2 text-2xs text-on-surface-variant hover:text-error underline cursor-pointer"
+              >
+                Quitar foto
+              </button>
+            )}
+
+            <div className="mb-4" />
 
             <div className="w-full pt-4 border-t border-outline-variant/60 flex flex-col gap-2 text-left">
               <div className="flex justify-between items-center text-xs">
