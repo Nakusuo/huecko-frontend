@@ -14,6 +14,9 @@ const PUNTUAL_TAGS = ['Cita Médica', 'Viaje', 'Examen', 'Trámite', 'Evento Esp
 
 export default function SchedulePage() {
   const { slots, setSlots, deleteSlot } = useScheduleStore();
+  /* En el móvil la rejilla semanal obligaba a arrastrar 800 px a lo ancho para
+     leer un solo día. La vista pequeña es una lista de un día a la vez. */
+  const [mobileDay, setMobileDay] = useState<DayOfWeek>(() => days[(new Date().getDay() + 6) % 7]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
 
@@ -441,7 +444,120 @@ export default function SchedulePage() {
             onAction={openCreateModal}
           />
         ) : (
-          <div className="bg-surface-container/80 border border-outline-variant rounded-2xl p-6 md:p-8 overflow-x-auto shadow-sm backdrop-blur-md">
+          <>
+          {/* --- Vista móvil: un día a la vez, en lista --- */}
+          <div className="md:hidden space-y-4">
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              {days.map((day) => {
+                const total = slots.filter((s) => s.day === day).length;
+                const activo = day === mobileDay;
+
+                return (
+                  <button
+                    type="button"
+                    key={day}
+                    onClick={() => setMobileDay(day)}
+                    aria-pressed={activo}
+                    className={`shrink-0 min-w-14 px-3 py-2 rounded-xl border text-center transition-colors ${
+                      activo
+                        ? 'bg-primary border-primary text-on-primary'
+                        : 'bg-surface-container border-outline-variant text-on-surface-variant'
+                    }`}
+                  >
+                    <span className="block text-xs font-bold">{day}</span>
+                    <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-outline'}`}>
+                      {total === 0 ? 'libre' : `${total} ${total === 1 ? 'bloque' : 'bloques'}`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {(() => {
+              const bloquesDelDia = slots
+                .filter((s) => s.day === mobileDay)
+                .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+              if (bloquesDelDia.length === 0) {
+                return (
+                  <div className="rounded-2xl border border-dashed border-outline-variant bg-surface-container/60 p-8 text-center">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[40px] text-on-surface-variant">
+                      event_available
+                    </span>
+                    <p className="mt-1 text-sm font-semibold text-on-surface">Sin bloques el {mobileDay}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      Todo el día cuenta como libre para tus grupos.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openCreateModal}
+                      className="mt-4 px-4 py-2 rounded-xl bg-secondary text-on-secondary text-xs font-semibold cursor-pointer"
+                    >
+                      Agregar un bloque
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <ul className="space-y-2.5">
+                  {bloquesDelDia.map((slot) => {
+                    const isPuntual = slot.type === 'puntual';
+
+                    return (
+                      <li key={slot.id}>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(slot)}
+                          aria-label={`${slot.title}, de ${slot.startTime} a ${slot.endTime}. Editar o eliminar.`}
+                          className={`w-full text-left flex items-stretch gap-3 rounded-2xl border bg-surface-container/80 p-3.5 cursor-pointer active:scale-[0.99] transition-transform ${
+                            isPuntual ? 'border-dashed border-2 border-outline-variant' : 'border-outline-variant'
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="w-1.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: slot.customColor || 'var(--color-secondary)' }}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center justify-between gap-2">
+                              <span
+                                className="text-sm font-bold truncate"
+                                style={slot.customColor ? { color: slot.customColor } : undefined}
+                              >
+                                {slot.title}
+                              </span>
+                              <span className="text-xs font-mono font-medium text-on-surface-variant shrink-0">
+                                {slot.startTime}–{slot.endTime}
+                              </span>
+                            </span>
+                            <span className="mt-1 flex items-center gap-1.5 flex-wrap">
+                              {slot.tag && (
+                                <span className="text-2xs font-semibold text-on-surface-variant">{slot.tag}</span>
+                              )}
+                              {isPuntual && (
+                                <span className="text-2xs px-1.5 rounded bg-surface-container-highest font-bold text-on-surface">
+                                  {slot.specificDate || 'Puntual'}
+                                </span>
+                              )}
+                              {slot.isOcrImported && (
+                                <span className="text-2xs uppercase tracking-wider font-bold text-primary bg-surface-container px-1.5 rounded">
+                                  OCR
+                                </span>
+                              )}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
+          </div>
+
+          {/* --- Vista de escritorio: rejilla semanal --- */}
+          <div className="hidden md:block bg-surface-container/80 border border-outline-variant rounded-2xl p-6 md:p-8 overflow-x-auto shadow-sm backdrop-blur-md">
             <div className="min-w-[800px]">
               {/* Days Header */}
               <div className="grid grid-cols-8 gap-4 mb-4">
@@ -551,6 +667,7 @@ export default function SchedulePage() {
               </div>
             </div>
           </div>
+          </>
         )}
       </main>
 
