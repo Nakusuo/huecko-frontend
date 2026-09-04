@@ -10,13 +10,13 @@
  */
 
 export const endpoints = {
-  /** ⏳ Spring Security + JWT aún no está en el backend. */
+  /** ✅ AuthController. Devuelve `{token, user}`; el token viaja luego en Bearer. */
   auth: {
     login: '/auth/login',
     register: '/auth/register',
   },
 
-  /** ⏳ Perfil y preferencias del usuario autenticado. */
+  /** ✅ MeController (GET y PATCH). Toma el usuario del token, no de la ruta. */
   me: '/me',
 
   /** ✅ BloqueHorarioController. */
