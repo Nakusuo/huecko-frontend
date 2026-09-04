@@ -17,14 +17,26 @@ export default function AppRouter() {
       {/* Rutas Públicas de Autenticación */}
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+        element={
+          isAuthenticated ? (
+            <Navigate to="/dashboard" replace />
+          ) : (
+            <LoginPage />
+          )
+        }
       />
       <Route
         path="/register"
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
+        element={
+          isAuthenticated ? (
+            <Navigate to="/dashboard" replace />
+          ) : (
+            <RegisterPage />
+          )
+        }
       />
 
-      {/* Rutas Protegidas (Requieren autenticación) */}
+      {/* Rutas Protegidas */}
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
@@ -36,7 +48,12 @@ export default function AppRouter() {
       {/* Ruta por defecto */}
       <Route
         path="*"
-        element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />}
+        element={
+          <Navigate
+            to={isAuthenticated ? '/dashboard' : '/login'}
+            replace
+          />
+        }
       />
     </Routes>
   );
