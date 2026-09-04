@@ -13,17 +13,27 @@ export default function OnboardingPage() {
   const joinGroupByCode = useGroupsStore((s) => s.joinGroupByCode);
 
   const [step, setStep] = useState<OnboardingStep>(1);
-  const [profileType, setProfileType] = useState<'universitario' | 'trabajador' | 'mixto'>('universitario');
-  
-  // Grupo
+  const [profileType, setProfileType] = useState<
+    'universitario' | 'trabajador' | 'mixto'
+  >('universitario');
+
+  // Estado del Grupo
   const [groupAction, setGroupAction] = useState<'create' | 'join'>('create');
   const [groupName, setGroupName] = useState('Mis Amigos de Siempre');
-  const [groupDescription, setGroupDescription] = useState('Grupo para coordinar salidas, pichangas y estudio');
+  const [groupDescription, setGroupDescription] = useState(
+    'Coordinar salidas, reuniones y estudio'
+  );
   const [groupThreshold, setGroupThreshold] = useState<number>(100);
   const [invitationCodeInput, setInvitationCodeInput] = useState('');
-  
-  // Code state
-  const [activeInviteCode, setActiveInviteCode] = useState(() => `HUECKO-${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
+
+  // Código de invitación
+  const [activeInviteCode, setActiveInviteCode] = useState(() => {
+    const randomSuffix = Math.random()
+      .toString(36)
+      .substring(2, 6)
+      .toUpperCase();
+    return `HUECKO-${randomSuffix}`;
+  });
   const [copiedCode, setCopiedCode] = useState(false);
 
   const handleCopy = () => {
@@ -32,24 +42,22 @@ export default function OnboardingPage() {
     setTimeout(() => setCopiedCode(false), 2500);
   };
 
-  const handleStep2Submit = () => {
+  const handleStep2Submit = async () => {
     const userEmail = user?.email || 'alex.rodriguez@huecko.com';
     const userName = user?.nombre || 'Alex R.';
 
     if (groupAction === 'create') {
-      const newG = createGroup(
+      const newG = await createGroup(
         groupName || 'Mi Nuevo Grupo',
-        groupDescription || 'Coordinación de horarios y planes',
+        groupDescription || 'Coordinación de horarios',
         groupThreshold,
         userEmail,
         userName
       );
       setActiveInviteCode(newG.codigoInvitacion);
-    } else {
-      if (invitationCodeInput.trim()) {
-        joinGroupByCode(invitationCodeInput, userEmail, userName);
-        setActiveInviteCode(invitationCodeInput.toUpperCase());
-      }
+    } else if (invitationCodeInput.trim()) {
+      await joinGroupByCode(invitationCodeInput, userEmail, userName);
+      setActiveInviteCode(invitationCodeInput.toUpperCase());
     }
     setStep(3);
   };

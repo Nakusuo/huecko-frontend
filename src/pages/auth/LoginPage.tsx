@@ -44,19 +44,25 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     setServerError(null);
     try {
-      const response = await loginUser(data);
-      login(response.user, response.token);
+      const res = await loginUser(data);
+      login(res.user, res.token);
       navigate('/dashboard', { replace: true });
-    } catch (error) {
-      setServerError(
-        error instanceof Error ? error.message : 'Error inesperado. Intenta de nuevo.'
-      );
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Error al iniciar sesión';
+      setServerError(msg);
     }
   };
 
   const fillDemoCredentials = () => {
-    setValue('email', 'alex.rodriguez@huecko.com', { shouldValidate: true });
-    setValue('password', 'demo1234', { shouldValidate: true });
+    setValue('email', 'alex.rodriguez@huecko.com', {
+      shouldValidate: true,
+    });
+    setValue('password', 'demo1234', {
+      shouldValidate: true,
+    });
   };
 
   return (
