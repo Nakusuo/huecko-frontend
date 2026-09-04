@@ -9,7 +9,22 @@ npm install
 npm run dev
 ```
 
-Sin variables de entorno la app opera en modo demostración. Para conectarla al backend, copia `.env.example` a `.env` y define `VITE_API_URL` (por ejemplo `http://localhost:8080/api/v1`). El cliente agrega automáticamente `Authorization: Bearer <JWT>`.
+Sin variables de entorno la app opera en **modo demostración**: datos simulados y
+login con `alex.rodriguez@huecko.com` / `demo1234`, sin necesidad de servidor.
+
+Para conectarla a `huecko-backend`, copia `.env.example` a `.env.local` y define
+`VITE_API_URL=/api` (el proxy de Vite reenvía a `VITE_BACKEND_PROXY`, así no hace
+falta configurar CORS en desarrollo). El cliente agrega automáticamente
+`Authorization: Bearer <JWT>`.
+
+Para probar el modo conectado sin levantar Spring Boot hay un backend de mentira:
+
+```bash
+npm run dev:stub
+```
+
+Guía completa de la integración, con lo que falta del lado del backend, en
+[`docs/INTEGRACION_BACKEND.md`](docs/INTEGRACION_BACKEND.md).
 
 ## Alcance implementado
 
@@ -19,7 +34,8 @@ Sin variables de entorno la app opera en modo demostración. Para conectarla al 
 - Propuestas con 2–5 ventanas, votación, confirmación, retrasos e imprevistos/votación exprés.
 - Notificaciones y UI responsive para móvil y escritorio.
 
-El contrato que debe implementar Spring Boot está en [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
+El contrato objetivo que debe implementar Spring Boot está en [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md);
+el estado real de la integración, en [`docs/INTEGRACION_BACKEND.md`](docs/INTEGRACION_BACKEND.md).
 
 ## Nota de plantilla
 
