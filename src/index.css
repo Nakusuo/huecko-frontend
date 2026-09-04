@@ -13,18 +13,18 @@
   --color-primary: #3f5d45;
   --color-primary-hover: #34503a;
   --color-on-primary: #ffffff;
-  --color-primary-container: #e4eadf;
+  --color-primary-container: #e2ece5;
   --color-on-primary-container: #26352a;
 
   --color-secondary: #5f7359;
   --color-secondary-hover: #4f604e;
   --color-on-secondary: #ffffff;
-  --color-secondary-container: #e9ede4;
+  --color-secondary-container: #e8eee9;
   --color-on-secondary-container: #293229;
 
   --color-tertiary: #687668;
   --color-on-tertiary: #ffffff;
-  --color-tertiary-container: #e5e9e0;
+  --color-tertiary-container: #e6ebe6;
   --color-on-tertiary-container: #2e382f;
 
   --color-error: #ba1a1a;
@@ -34,7 +34,7 @@
 
   --color-success: #2f6b4f;
   --color-on-success: #ffffff;
-  --color-success-container: #dcece2;
+  --color-success-container: #dbeee2;
   --color-on-success-container: #10301f;
 
   --color-warning: #8a5a10;
@@ -42,32 +42,32 @@
   --color-warning-container: #fbeacd;
   --color-on-warning-container: #3a2504;
 
-  --color-background: #f7f5ef;
-  --color-on-background: #263027;
-  --color-surface: #f7f5ef;
-  --color-on-surface: #263027;
-  --color-surface-variant: #ece9df;
-  --color-on-surface-variant: #596058;
+  --color-background: #f7f8f7;
+  --color-on-background: #1b211d;
+  --color-surface: #f7f8f7;
+  --color-on-surface: #1b211d;
+  --color-surface-variant: #eaeeea;
+  --color-on-surface-variant: #525a53;
 
   /* `outline` es color de BORDE y de placeholder. Nunca de texto de lectura:
      sobre surface da 3.9:1 y no pasa AA. Para texto secundario usa
      `on-surface-variant` (5.9:1). */
-  --color-outline: #777d73;
-  --color-outline-variant: #d8d5c8;
+  --color-outline: #757c76;
+  --color-outline-variant: #dde0dc;
 
   --color-shadow: #000000;
   --color-scrim: #1a211b;
   --color-inverse-surface: #2e382f;
-  --color-inverse-on-surface: #f7f5ef;
+  --color-inverse-on-surface: #f7f8f7;
   --color-inverse-primary: #c8d5c4;
 
-  --color-surface-dim: #e7e4da;
-  --color-surface-bright: #fcfbf7;
+  --color-surface-dim: #e6eae6;
+  --color-surface-bright: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f3f1ea;
-  --color-surface-container: #eeece4;
-  --color-surface-container-high: #e8e6dc;
-  --color-surface-container-highest: #e2e0d6;
+  --color-surface-container-low: #fbfcfb;
+  --color-surface-container: #f1f4f1;
+  --color-surface-container-high: #e9ede9;
+  --color-surface-container-highest: #e1e6e1;
 
   /* Verde profundo de marca: paneles y degradados de identidad. */
   --color-brand-deep: #1f2c22;
@@ -90,11 +90,19 @@
      insignias, contadores, sellos de tiempo. Sustituye a los cuatro tamaños
      sueltos que había —8, 9, 10 y 11px—; los de 8 y 9px eran ilegibles. Nada
      que forme una frase debería bajar de `text-xs`. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
+
   --text-2xs: 0.6875rem; /* 11px */
   --text-2xs--line-height: 1.45;
 
-  --font-headline: 'EB Garamond', ui-serif, Georgia, serif;
-  --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-headline: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* --- Movimiento ---------------------------------------------------------
      Easing exponencial: los objetos reales desaceleran, no rebotan. */
@@ -211,6 +219,11 @@ body {
      y que el icono se parta durante la carga de la fuente. */
   user-select: none;
   line-height: 1;
+}
+
+.font-headline {
+  letter-spacing: -0.021em;
+  font-weight: 600;
 }
 
 .ambient-shadow {

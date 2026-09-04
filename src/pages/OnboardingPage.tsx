@@ -48,7 +48,7 @@ export default function OnboardingPage() {
 
     if (groupAction === 'create') {
       const newG = await createGroup(
-        groupName || 'Mi Nuevo Grupo',
+        groupName || 'Mi Nuevo grupo',
         groupDescription || 'Coordinación de horarios',
         groupThreshold,
         userEmail,
@@ -63,12 +63,12 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface text-on-surface pb-28 md:pb-12 pt-6 md:pt-24 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-surface text-on-surface pb-28 md:pb-12">
       <Navbar currentTab="dashboard" />
 
-      <main id="contenido" tabIndex={-1} className="max-w-3xl mx-auto space-y-8">
+      <main id="contenido" tabIndex={-1} className="max-w-3xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 pt-8">
         {/* Barra de Progreso del Asistente */}
-        <div className="bg-surface-container-lowest/80 border border-outline-variant/60 rounded-3xl p-6 shadow-xs">
+        <div className="bg-surface-container-lowest border border-outline-variant/60 rounded-3xl p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <span className="text-xs font-bold uppercase tracking-wider text-primary">
               Paso {step} de 4
@@ -107,7 +107,7 @@ export default function OnboardingPage() {
                 aria-pressed={profileType === 'universitario'}
                 className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center text-center ${
                   profileType === 'universitario'
-                    ? 'border-primary bg-surface-container/80 shadow-xs'
+                    ? 'border-primary bg-surface-container-lowest shadow-xs'
                     : 'border-outline-variant/50 hover:border-secondary bg-surface-container-lowest'
                 }`}
               >
@@ -123,7 +123,7 @@ export default function OnboardingPage() {
                 aria-pressed={profileType === 'trabajador'}
                 className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center text-center ${
                   profileType === 'trabajador'
-                    ? 'border-primary bg-surface-container/80 shadow-xs'
+                    ? 'border-primary bg-surface-container-lowest shadow-xs'
                     : 'border-outline-variant/50 hover:border-secondary bg-surface-container-lowest'
                 }`}
               >
@@ -139,7 +139,7 @@ export default function OnboardingPage() {
                 aria-pressed={profileType === 'mixto'}
                 className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center text-center ${
                   profileType === 'mixto'
-                    ? 'border-primary bg-surface-container/80 shadow-xs'
+                    ? 'border-primary bg-surface-container-lowest shadow-xs'
                     : 'border-outline-variant/50 hover:border-secondary bg-surface-container-lowest'
                 }`}
               >
@@ -151,17 +151,17 @@ export default function OnboardingPage() {
               </button>
             </div>
 
-            <div className="p-4 rounded-2xl bg-surface-container/70 border border-outline-variant/60 flex items-center justify-between">
+            <div className="p-4 rounded-2xl bg-surface-container border border-outline-variant/60 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">document_scanner</span>
                 <div>
                   <h4 className="text-xs font-bold text-on-surface">¿Tienes tu horario en PDF o Foto?</h4>
                   <p className="text-2xs text-on-surface-variant">
-                    Podrás subirlo vía OCR en cualquier momento desde "Mi Horario".
+                    Podrás subirlo vía OCR en cualquier momento desde "Mi horario".
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-bold text-primary bg-surface-container-lowest px-3 py-1 rounded-full border border-outline-variant/40">
+              <span className="text-xs font-bold text-primary bg-surface-container-lowest px-3 py-1 rounded-lg border border-outline-variant/40">
                 OCR Listo
               </span>
             </div>
@@ -202,7 +202,7 @@ export default function OnboardingPage() {
                     : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
-                Crear Nuevo Grupo
+                Crear grupo
               </button>
 
               <button
@@ -221,7 +221,7 @@ export default function OnboardingPage() {
             {groupAction === 'create' ? (
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-on-surface-variant block mb-1">Nombre del Grupo</label>
+                  <label className="text-xs font-bold text-on-surface-variant block mb-1">Nombre del grupo</label>
                   <input
                     type="text"
                     value={groupName}
@@ -242,7 +242,7 @@ export default function OnboardingPage() {
                   />
                 </div>
 
-                <div className="p-4 rounded-2xl bg-surface-container/60 border border-outline-variant/60 space-y-2">
+                <div className="p-4 rounded-2xl bg-surface-container border border-outline-variant/60 space-y-2">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-bold text-on-surface">
                       Umbral Mínimo de Disponibilidad Grupal
@@ -269,7 +269,7 @@ export default function OnboardingPage() {
               <div className="space-y-4 py-4">
                 <div>
                   <label className="text-xs font-bold text-on-surface-variant block mb-1">
-                    Código de Invitación (ej. HUECKO-78A9)
+                    Código de invitación (ej. HUECKO-78A9)
                   </label>
                   <input
                     type="text"
@@ -333,7 +333,7 @@ export default function OnboardingPage() {
                   <span aria-hidden="true" className="material-symbols-outlined text-[16px]">
                     {copiedCode ? 'check' : 'content_copy'}
                   </span>
-                  <span>{copiedCode ? '¡Copiado!' : 'Copiar Código'}</span>
+                  <span>{copiedCode ? '¡Copiado!' : 'Copiar código'}</span>
                 </button>
 
                 <a
@@ -364,7 +364,7 @@ export default function OnboardingPage() {
                 onClick={() => setStep(4)}
                 className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-2"
               >
-                <span>Finalizar Onboarding</span>
+                <span>Finalizar</span>
                 <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check_circle</span>
               </button>
             </div>
@@ -388,7 +388,7 @@ export default function OnboardingPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-lg mx-auto text-left">
-              <div className="p-3.5 rounded-2xl bg-surface-container/80 border border-outline-variant/60">
+              <div className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60">
                 <span className="text-2xs font-bold text-primary uppercase block">Perfil</span>
                 <span className="text-xs font-bold text-on-surface">
                   {profileType === 'universitario'
@@ -399,14 +399,14 @@ export default function OnboardingPage() {
                 </span>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-surface-container/80 border border-outline-variant/60">
+              <div className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60">
                 <span className="text-2xs font-bold text-primary uppercase block">Grupo</span>
                 <span className="text-xs font-bold text-on-surface truncate block">
                   {groupAction === 'create' ? groupName : 'Unido por código'}
                 </span>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-surface-container/80 border border-outline-variant/60">
+              <div className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60">
                 <span className="text-2xs font-bold text-primary uppercase block">Umbral</span>
                 <span className="text-xs font-bold text-on-surface">{groupThreshold}% libre</span>
               </div>
@@ -426,7 +426,7 @@ export default function OnboardingPage() {
                 onClick={() => navigate('/schedule')}
                 className="px-8 py-3.5 rounded-2xl bg-surface-container hover:bg-surface-variant text-primary-hover border border-outline-variant text-xs font-bold transition-all cursor-pointer active:scale-95"
               >
-                Ver Mi Horario Detallado
+                Ver Mi horario Detallado
               </button>
             </div>
           </div>
