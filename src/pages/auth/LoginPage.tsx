@@ -75,7 +75,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           <MobileLogo />
 
-          <div className="bg-surface-container/90 border border-outline-variant rounded-3xl p-7 md:p-9 shadow-lg shadow-secondary/10 backdrop-blur-md">
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-3xl p-7 md:p-9 shadow-lg shadow-secondary/10">
             <div className="mb-6">
               <h2 className="text-2xl md:text-3xl font-bold text-on-surface font-headline mb-1.5">
                 Bienvenido de vuelta
@@ -92,7 +92,7 @@ export default function LoginPage() {
                   htmlFor="email"
                   className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
-                  Correo Electrónico
+                  Correo electrónico
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
@@ -230,12 +230,12 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={fillDemoCredentials}
-                  className="text-2xs font-semibold text-primary bg-surface-container-lowest border border-outline-variant px-2.5 py-0.5 rounded-full hover:bg-primary-container/50 transition-colors cursor-pointer"
+                  className="text-2xs font-semibold text-primary bg-surface-container-lowest border border-outline-variant px-2.5 py-0.5 rounded-lg hover:bg-primary-container/50 transition-colors cursor-pointer"
                 >
                   Autocompletar
                 </button>
               </div>
-              <p className="text-xs text-on-surface-variant font-mono bg-surface-container-lowest/70 px-2 py-1 rounded-lg border border-outline-variant/40">
+              <p className="text-xs text-on-surface-variant font-mono bg-surface-container-lowest px-2 py-1 rounded-lg border border-outline-variant/40">
                 alex.rodriguez@huecko.com / demo1234
               </p>
             </div>
@@ -270,14 +270,14 @@ function BrandingPanel() {
           Huecko
         </h1>
         <p className="text-primary-container text-lg font-medium mb-8">
-          Coordinación Social, Naturalmente.
+          Coordinar horarios sin discutirlo en el grupo.
         </p>
 
         <div className="flex flex-wrap gap-2.5 justify-center mb-8">
           {FEATURE_PILLS.map((item) => (
             <span
               key={item.label}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-surface-container-lowest/10 border border-white/15 rounded-full text-xs text-surface-container-low backdrop-blur-sm shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-surface-container-lowest/10 border border-white/15 rounded-lg text-xs text-surface-container-low backdrop-blur-sm shadow-xs"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-primary-container">
                 {item.icon}
@@ -287,7 +287,7 @@ function BrandingPanel() {
           ))}
         </div>
 
-        <div className="p-4 bg-surface-container-lowest/10 border border-white/15 rounded-2xl backdrop-blur-md text-left shadow-lg shadow-black/10">
+        <div className="p-4 bg-surface-container-lowest/10 border border-white/15 rounded-2xl text-left shadow-lg shadow-black/10">
           <p className="text-surface-container-low text-sm italic leading-relaxed">
             "Por fin dejamos de discutir en el grupo de WhatsApp de cuándo nos juntamos."
           </p>
@@ -295,7 +295,7 @@ function BrandingPanel() {
             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-secondary to-primary-container flex items-center justify-center text-xs font-bold text-brand-deep">
               M
             </div>
-            <span className="text-xs text-primary-container">María C. — Estudiante Universitaria</span>
+            <span className="text-xs text-primary-container">María C., estudiante universitaria</span>
           </div>
         </div>
       </div>

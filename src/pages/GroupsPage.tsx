@@ -465,17 +465,17 @@ export default function GroupsPage() {
    * Planes y horario común de un grupo.
    *
    * Se renderiza pegado a la tarjeta del grupo seleccionado y no al final de
-   * la página: en el móvil, pulsar «Ver Horario en Común» dejaba el panel a
+   * la página: en el móvil, pulsar «Ver horario en común» dejaba el panel a
    * dos pantallas de distancia del grupo que lo abría.
    */
   const renderGroupPanel = (grp: Group) => (
     <div className="space-y-6">
-          <section className="bg-surface-container/80 border border-outline-variant rounded-2xl p-6 md:p-8 shadow-sm backdrop-blur-md">
+          <section className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 md:p-8 shadow-sm">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-outline-variant/60 pb-4">
               <div>
                 <h2 className="text-2xl font-bold text-on-surface flex items-center gap-2 font-headline">
                   <span aria-hidden="true" className="material-symbols-outlined text-primary">how_to_vote</span>
-                  Planes Propuestos y Votación: {grp.nombre}
+                  Planes propuestos y votación: {grp.nombre}
                 </h2>
                 <p className="text-on-surface-variant text-sm">
                   Propuestas de planes creadas para este grupo. Los miembros pueden emitir su voto antes de vencer el plazo.
@@ -487,7 +487,7 @@ export default function GroupsPage() {
                 className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
-                Proponer Nuevo Plan
+                Proponer plan
               </button>
             </div>
 
@@ -511,7 +511,7 @@ export default function GroupsPage() {
                     return (
                       <div
                         key={proposal.id}
-                        className={`p-5 rounded-2xl border flex flex-col justify-between backdrop-blur-md transition-all ${
+                        className={`p-5 rounded-2xl border flex flex-col justify-between transition-all ${
                           isInReplan
                             ? 'bg-warning-container/60 border-warning/40'
                             : isClosed
@@ -530,7 +530,7 @@ export default function GroupsPage() {
                               )}
                             </div>
                             <span
-                              className={`px-2.5 py-0.5 rounded-full text-2xs font-bold ${
+                              className={`px-2.5 py-0.5 rounded-lg text-2xs font-bold ${
                                 isInReplan
                                   ? 'bg-warning-container text-on-warning-container border border-warning/50'
                                   : isClosed
@@ -542,7 +542,7 @@ export default function GroupsPage() {
                                 ? 'Imprevisto'
                                 : isClosed
                                 ? 'Confirmado'
-                                : 'Votación Abierta'}
+                                : 'Votación abierta'}
                             </span>
                           </div>
 
@@ -552,7 +552,10 @@ export default function GroupsPage() {
                               {proposal.incidencias.map((inc) => (
                                 <div key={inc.id} className="text-xs flex justify-between items-center text-on-warning-container">
                                   <span>
-                                    ⚠️ <strong>{inc.userName}</strong>: {inc.motivo}
+                                    <span aria-hidden="true" className="material-symbols-outlined text-[14px] align-[-2px] mr-1">
+                                      warning
+                                    </span>
+                                    <strong>{inc.userName}</strong>: {inc.motivo}
                                   </span>
                                   <span className="text-2xs text-on-warning-container font-bold uppercase">
                                     {inc.tipo}
@@ -613,7 +616,7 @@ export default function GroupsPage() {
                                   className={`w-full text-left px-3 py-2 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
                                     hasVoted
                                       ? 'bg-inverse-primary/30 border-secondary'
-                                      : 'bg-surface-container-lowest/70 border-outline-variant/60 hover:border-secondary'
+                                      : 'bg-surface-container-lowest border-outline-variant/60 hover:border-secondary'
                                   } ${isClosed ? 'cursor-default opacity-85' : ''}`}
                                 >
                                   <div className="flex items-center gap-2 text-xs">
@@ -652,7 +655,7 @@ export default function GroupsPage() {
                               onClick={() => openReportIncidentModal(proposal)}
                               className="text-2xs text-on-warning-container hover:text-on-warning-container font-semibold cursor-pointer"
                             >
-                              Reportar Imprevisto
+                              Reportar imprevisto
                             </button>
 
                             {!isClosed && (
@@ -660,7 +663,7 @@ export default function GroupsPage() {
                                 onClick={() => handleCloseVotingManually(proposal.id)}
                                 className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer"
                               >
-                                Confirmar Plan
+                                Confirmar plan
                               </button>
                             )}
                           </div>
@@ -670,7 +673,7 @@ export default function GroupsPage() {
                   })}
               </div>
             ) : (
-              <div className="p-6 rounded-xl bg-surface-container-lowest/50 border border-dashed border-outline-variant text-center">
+              <div className="p-6 rounded-xl bg-surface-container-lowest border border-dashed border-outline-variant text-center">
                 <p className="text-on-surface-variant text-xs mb-3">No hay propuestas de planes activas en este grupo.</p>
                 <button
                   onClick={() => openProposePlanModal(grp)}
@@ -685,8 +688,8 @@ export default function GroupsPage() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-outline-variant/60 pb-4">
               <div>
                 <div className="flex items-center gap-3 mb-1">
-                  <h2 className="text-2xl font-bold text-on-surface font-headline">Horario en Común: {grp.nombre}</h2>
-                  <span className="px-3 py-1 rounded-full bg-primary-container border border-inverse-primary text-primary text-xs font-bold">
+                  <h2 className="text-2xl font-bold text-on-surface font-headline">Horario en común: {grp.nombre}</h2>
+                  <span className="px-3 py-1 rounded-lg bg-primary-container border border-inverse-primary text-primary text-xs font-bold">
                     Actualizado
                   </span>
                 </div>
@@ -714,7 +717,7 @@ export default function GroupsPage() {
                         {windows.length ? windows.map((window) => (
                           <div key={`${day}-${window.start}`} className="rounded-lg bg-primary-container border-l-4 border-secondary px-2.5 py-2">
                             <p className="text-xs font-bold text-on-primary-container">
-                              {window.start.toString().padStart(2, '0')}:00 – {window.end.toString().padStart(2, '0')}:00
+                              {window.start.toString().padStart(2, '0')}:00 - {window.end.toString().padStart(2, '0')}:00
                             </p>
                             <p className="mt-0.5 text-2xs text-on-surface-variant">
                               {window.minimumAvailability}% libre · {window.freeCount}/{grp.miembros.length}
@@ -734,15 +737,15 @@ export default function GroupsPage() {
   );
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex flex-col pt-6 md:pt-[104px]">
+    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
       <Navbar currentTab="groups" />
 
       {/* Main Content Canvas */}
-      <main id="contenido" tabIndex={-1} className="flex-grow w-full max-w-[1200px] mx-auto px-6 md:px-10 pb-24 md:pb-12">
+      <main id="contenido" tabIndex={-1} className="flex-grow w-full max-w-[1200px] mx-auto px-6 md:px-10 pt-8 pb-24 md:pb-12">
         {/* Header Section */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-on-surface mb-2 font-headline">Mis Grupos y Horario Común</h1>
+            <h1 className="text-3xl md:text-4xl font-bold text-on-surface mb-2 font-headline">Mis grupos y horario común</h1>
             <p className="text-on-surface-variant text-sm md:text-base">
               Administra tus grupos, edita integrantes y visualiza los <strong className="text-primary font-semibold">espacios libres resaltados</strong> de todos los miembros.
             </p>
@@ -757,14 +760,14 @@ export default function GroupsPage() {
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-secondary text-primary hover:bg-surface-container transition-all text-sm font-semibold cursor-pointer w-full md:w-auto"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[20px]">key</span>
-              Unirse con Código
+              Unirse con código
             </button>
             <button
               onClick={openCreateModal}
               className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary transition-all text-sm font-semibold shadow-md shadow-secondary/20 cursor-pointer w-full md:w-auto"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[20px]">group_add</span>
-              Crear Nuevo Grupo
+              Crear grupo
             </button>
           </div>
         </header>
@@ -788,7 +791,7 @@ export default function GroupsPage() {
             return (
               <Fragment key={group.id}>
               <div
-                className={`bg-surface-container/80 border rounded-2xl p-6 shadow-sm backdrop-blur-md flex flex-col justify-between transition-all ${
+                className={`bg-surface-container-lowest border rounded-2xl p-6 shadow-sm flex flex-col justify-between transition-all ${
                   isSelected
                     ? 'md:col-span-2 border-secondary ring-2 ring-secondary/30'
                     : 'border-outline-variant hover:border-outline-variant'
@@ -797,13 +800,13 @@ export default function GroupsPage() {
                 <div>
                   <div className="flex justify-between items-start mb-3">
                     <h3 className="text-xl font-bold text-on-surface">{group.nombre}</h3>
-                    <span className="px-2.5 py-1 rounded-full bg-inverse-primary/30 border border-secondary/40 text-primary-hover text-xs font-semibold">
+                    <span className="px-2.5 py-1 rounded-lg bg-inverse-primary/30 border border-secondary/40 text-primary-hover text-xs font-semibold">
                       Umbral {group.umbralDisponibilidad}%
                     </span>
                   </div>
                   <p className="text-on-surface-variant text-sm mb-4 leading-relaxed">{group.descripcion || 'Sin descripción.'}</p>
 
-                  {/* Código de Invitación Rápida */}
+                  {/* Código de invitación Rápida */}
                   <div className="flex items-center justify-between p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/60 mb-4">
                     <div className="flex items-center gap-2 text-xs text-on-surface-variant">
                       <span aria-hidden="true" className="material-symbols-outlined text-primary text-[18px]">key</span>
@@ -831,7 +834,7 @@ export default function GroupsPage() {
                         className="text-xs text-primary hover:text-primary-hover font-semibold flex items-center gap-1 cursor-pointer"
                       >
                         <span aria-hidden="true" className="material-symbols-outlined text-[14px]">edit</span>
-                        Editar Miembros / Grupo
+                        Editar miembros
                       </button>
                     </div>
 
@@ -886,7 +889,7 @@ export default function GroupsPage() {
                     onClick={() => openEditModal(group)}
                     className="text-xs text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
                   >
-                    Ajustar Umbral / Grupo
+                    Ajustar umbral
                   </button>
 
                   <div className="flex gap-2">
@@ -895,7 +898,7 @@ export default function GroupsPage() {
                       className="px-3.5 py-2 rounded-xl bg-inverse-primary/30 hover:bg-inverse-primary/50 text-primary-hover border border-secondary/40 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <span aria-hidden="true" className="material-symbols-outlined text-[16px]">campaign</span>
-                      Proponer Plan
+                      Proponer plan
                     </button>
 
                     <button
@@ -907,7 +910,7 @@ export default function GroupsPage() {
                       }`}
                     >
                       <span aria-hidden="true" className="material-symbols-outlined text-[16px]">grid_view</span>
-                      {isSelected ? 'Viendo Horario Común' : 'Ver Horario en Común'}
+                      {isSelected ? 'Viendo horario en común' : 'Ver horario en común'}
                     </button>
                   </div>
                 </div>
@@ -926,10 +929,10 @@ export default function GroupsPage() {
 
       </main>
 
-      {/* Modal: Crear Grupo */}
+      {/* Modal: Crear grupo */}
       {isCreateModalOpen && (
         <GroupFormModal
-          title="Crear Nuevo Grupo"
+          title="Crear grupo"
           nombre={nombre}
           setNombre={setNombre}
           descripcion={descripcion}
@@ -975,18 +978,18 @@ export default function GroupsPage() {
           onClose={() => setIsEditGroupModalOpen(false)}
           onSubmit={handleUpdateGroup}
           onDelete={() => handleDeleteGroup(selectedGroup.id)}
-          submitLabel="Guardar Cambios"
+          submitLabel="Guardar cambios"
         />
       )}
 
       {/* Modal para proponer un nuevo plan */}
       {isProposeModalOpen && selectedGroup && (
-        <div role="dialog" aria-modal="true" aria-label="Proponer plan" className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-md flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="Proponer plan" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
           <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">campaign</span>
-                Proponer Plan: {selectedGroup.nombre}
+                Proponer plan: {selectedGroup.nombre}
               </h2>
               <button aria-label="Cerrar"
                 onClick={() => setIsProposeModalOpen(false)}
@@ -1021,7 +1024,7 @@ export default function GroupsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Plazo de Votación</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Plazo de votación</label>
                 <select
                   value={proposalPlazo}
                   onChange={(e) => setProposalPlazo(e.target.value)}
@@ -1097,7 +1100,7 @@ export default function GroupsPage() {
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-primary">Opción {idx + 1}:</span>
                         <span className="text-on-surface font-medium">
-                          {w.dia} — {w.horaInicio} a {w.horaFin}
+                          {w.dia}, {w.horaInicio} a {w.horaFin}
                         </span>
                         <span className="text-2xs text-primary font-bold">
                           ({w.disponibilidadPorcentaje}% libre)
@@ -1140,7 +1143,7 @@ export default function GroupsPage() {
 
       {/* Modal para reportar un imprevisto */}
       {isIncidentModalOpen && targetProposalForIncident && (
-        <div role="dialog" aria-modal="true" aria-label="Avisar imprevisto o falta" className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-md flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="Avisar imprevisto o falta" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
           <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
@@ -1161,7 +1164,7 @@ export default function GroupsPage() {
                   Reporta un cambio de último minuto para el plan: <strong className="text-on-surface">{targetProposalForIncident.titulo}</strong>
                 </p>
 
-                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Tipo de Imprevisto</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Tipo de imprevisto</label>
                 <select
                   value={incidentType}
                   onChange={(e) => setIncidentType(e.target.value as 'falta' | 'tardanza' | 'imprevisto')}
@@ -1214,7 +1217,7 @@ export default function GroupsPage() {
 
       {/* Modal: Unirse a Grupo por Código */}
       {isJoinModalOpen && (
-        <div role="dialog" aria-modal="true" aria-label="Unirse a un grupo" className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-md flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="Unirse a un grupo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
           <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
@@ -1231,7 +1234,7 @@ export default function GroupsPage() {
 
             <form onSubmit={handleJoinSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Código de Invitación</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Código de invitación</label>
                 <input
                   type="text"
                   required
@@ -1257,7 +1260,7 @@ export default function GroupsPage() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
                 >
-                  Unirse al Grupo
+                  Unirse al grupo
                 </button>
               </div>
             </form>
@@ -1273,7 +1276,7 @@ export default function GroupsPage() {
           role="dialog"
           aria-modal="true"
           aria-label={`Ficha de ${memberDetail.nombre}`}
-          className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-md flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4"
         >
           <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex justify-between items-start gap-3 mb-4 pb-4 border-b border-outline-variant/60">
@@ -1395,7 +1398,7 @@ function GroupFormModal({
   submitLabel,
 }: GroupFormModalProps) {
   return (
-    <div role="dialog" aria-modal="true" aria-label="Formulario de grupo" className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-md flex items-center justify-center p-4">
+    <div role="dialog" aria-modal="true" aria-label="Formulario de grupo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
       <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
           <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
@@ -1409,7 +1412,7 @@ function GroupFormModal({
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre del Grupo *</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre del grupo *</label>
             <input
               type="text"
               required
@@ -1455,7 +1458,7 @@ function GroupFormModal({
 
           {/* Gestión de Integrantes */}
           <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Agregar Integrante</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Agregar integrante</label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
               <input
                 type="text"

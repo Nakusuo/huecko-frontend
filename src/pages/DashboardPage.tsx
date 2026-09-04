@@ -203,12 +203,12 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface text-on-surface pb-28 md:pb-12 pt-6 md:pt-24 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-surface text-on-surface pb-28 md:pb-12">
       <Navbar currentTab="dashboard" />
 
       {/* Notificación Flotante (Toast) */}
       {notificationToast && (
-        <div className="fixed bottom-20 md:bottom-8 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl backdrop-blur-md bg-surface-container-lowest border border-primary text-sm font-semibold animate-toast-in transition-all">
+        <div className="fixed bottom-20 md:bottom-8 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl bg-surface-container-lowest border border-primary text-sm font-semibold animate-toast-in transition-all">
           <span aria-hidden="true" className="material-symbols-outlined text-primary">
             {notificationToast.type === 'warning' ? 'schedule' : notificationToast.type === 'info' ? 'info' : 'check_circle'}
           </span>
@@ -216,19 +216,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <main id="contenido" tabIndex={-1} className="max-w-6xl mx-auto space-y-8">
-        {/* Cabecera Principal con Tipografía Editorial EB Garamond */}
+      <main id="contenido" tabIndex={-1} className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 pt-8">
+        {/* Cabecera de la página */}
         <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-2 border-b border-outline-variant/40">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-bold tracking-wider uppercase text-primary bg-surface-container px-3 py-1 rounded-full border border-outline-variant">
-                Huecko Inteligencia Social
-              </span>
-              <span className="text-xs text-on-surface-variant hidden sm:inline">
-                {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-headline font-bold text-on-surface mt-2 tracking-tight">
+            <p className="text-sm text-on-surface-variant first-letter:uppercase">
+              {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+            <h1 className="text-3xl sm:text-4xl font-headline font-bold text-on-surface mt-1">
               {getGreeting()}, <span className="text-primary">{displayName}.</span>
             </h1>
             <p className="text-sm md:text-base text-on-surface-variant mt-1">
@@ -239,7 +234,7 @@ export default function DashboardPage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => navigate('/schedule')}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-surface-container hover:bg-surface-variant text-primary-hover text-xs font-bold border border-outline-variant transition-all cursor-pointer shadow-xs active:scale-95"
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-surface-container hover:bg-surface-variant text-primary-hover text-xs font-bold border border-outline-variant transition-all cursor-pointer shadow-xs active:scale-95"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[18px]">document_scanner</span>
               <span>Importar OCR</span>
@@ -247,10 +242,10 @@ export default function DashboardPage() {
 
             <button
               onClick={() => navigate('/groups')}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer active:scale-95"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
-              <span>Proponer Plan</span>
+              <span>Proponer plan</span>
             </button>
           </div>
         </section>
@@ -264,7 +259,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-full bg-warning-container text-on-warning-container text-2xs font-bold uppercase">
+                  <span className="px-2 py-0.5 rounded-lg bg-warning-container text-on-warning-container text-2xs font-bold uppercase">
                     Votación exprés en curso
                   </span>
                   <span className="text-xs font-bold text-on-warning-container">Tiempo restante: 14:20 min</span>
@@ -323,11 +318,11 @@ export default function DashboardPage() {
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <button type="button"
             onClick={() => navigate('/groups')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container/80 border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-on-surface-variant">Grupos Activos</span>
-              <span className="w-8 h-8 rounded-xl bg-surface-container-lowest/80 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors">
+              <span className="text-xs font-semibold text-on-surface-variant">Grupos activos</span>
+              <span className="w-8 h-8 rounded-xl bg-surface-container-lowest flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors">
                 <span aria-hidden="true" className="material-symbols-outlined text-[20px]">groups</span>
               </span>
             </div>
@@ -340,17 +335,17 @@ export default function DashboardPage() {
 
           <button type="button"
             onClick={() => navigate('/groups')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container/80 border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-on-surface-variant">Votaciones Activas</span>
+              <span className="text-xs font-semibold text-on-surface-variant">Votaciones activas</span>
               <span className="w-8 h-8 rounded-xl bg-warning-container flex items-center justify-center text-on-warning-container">
                 <span aria-hidden="true" className="material-symbols-outlined text-[20px]">how_to_vote</span>
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-3xl font-bold text-on-surface">{pendingVotes.length}</span>
-              <span className="text-xs text-on-warning-container font-bold bg-warning-container/80 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-on-warning-container font-bold bg-warning-container/80 px-2 py-0.5 rounded-lg">
                 Por votar
               </span>
             </div>
@@ -359,11 +354,11 @@ export default function DashboardPage() {
 
           <button type="button"
             onClick={() => navigate('/schedule')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container/80 border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-on-surface-variant">Huecos Coincidentes</span>
-              <span className="w-8 h-8 rounded-xl bg-surface-container-lowest/80 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors">
+              <span className="text-xs font-semibold text-on-surface-variant">Huecos coincidentes</span>
+              <span className="w-8 h-8 rounded-xl bg-surface-container-lowest flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors">
                 <span aria-hidden="true" className="material-symbols-outlined text-[20px]">calendar_clock</span>
               </span>
             </div>
@@ -376,11 +371,11 @@ export default function DashboardPage() {
 
           <button type="button"
             onClick={() => navigate('/schedule')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container/80 border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-on-surface-variant">Mi Horario</span>
-              <span className="w-8 h-8 rounded-xl bg-surface-container-lowest/80 flex items-center justify-center text-primary">
+              <span className="text-xs font-semibold text-on-surface-variant">Mi horario</span>
+              <span className="w-8 h-8 rounded-xl bg-surface-container-lowest flex items-center justify-center text-primary">
                 <span aria-hidden="true" className="material-symbols-outlined text-[20px]">calendar_month</span>
               </span>
             </div>
@@ -392,13 +387,10 @@ export default function DashboardPage() {
           </button>
         </section>
 
-        {/* Sección Destacada: Próximo Evento / Up Next */}
+        {/* Próximo plan confirmado */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
-              <h2 className="text-lg font-bold text-on-surface">Próximo Plan Confirmado (Up Next)</h2>
-            </div>
+            <h2 className="text-lg font-semibold text-on-surface">Próximo plan confirmado</h2>
             {upcomingEvent && <span className="text-xs text-on-surface-variant">{upcomingEvent.groupName}</span>}
           </div>
 
@@ -407,7 +399,7 @@ export default function DashboardPage() {
               <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
                 <div className="space-y-3 max-w-2xl">
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 rounded-full bg-primary text-on-primary text-2xs font-bold uppercase tracking-wider">
+                    <span className="px-3 py-1 rounded-lg bg-primary text-on-primary text-2xs font-bold uppercase tracking-wider">
                       Confirmado
                     </span>
                     <span className="text-xs text-on-surface-variant font-semibold">
@@ -452,7 +444,7 @@ export default function DashboardPage() {
 
                     {/* Resumen de alertas si hay alguien con retraso */}
                     {upcomingEvent.attendees.some((a) => a.status === 'retrasado') && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-warning-container text-on-warning-container border border-warning/40 text-2xs font-semibold">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-warning-container text-on-warning-container border border-warning/40 text-2xs font-semibold">
                         <span aria-hidden="true" className="material-symbols-outlined text-[14px]">timer</span>
                         Retrasos reportados
                       </span>
@@ -465,7 +457,7 @@ export default function DashboardPage() {
                     onClick={() => setIsDetailModalOpen(true)}
                     className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer text-center active:scale-95"
                   >
-                    Ver Detalles del Evento
+                    Ver detalles
                   </button>
 
                   <button
@@ -482,7 +474,7 @@ export default function DashboardPage() {
               icon="event_busy"
               title="No tienes eventos confirmados próximos"
               description="Propón un plan en tus grupos para que Huecko sugiera los mejores horarios."
-              actionLabel="Proponer Plan"
+              actionLabel="Proponer plan"
               onAction={() => navigate('/groups')}
             />
           )}
@@ -490,20 +482,17 @@ export default function DashboardPage() {
 
         {/* SECCIÓN DOBLE: MI HORARIO DE HOY (IZQUIERDA) Y MIS GRUPOS ACTIVOS (DERECHA) */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Mi Horario de Hoy */}
+          {/* Mi horario de Hoy */}
           <div className="p-6 rounded-3xl bg-surface-container-lowest border border-outline-variant/70 shadow-sm space-y-4">
             <div className="flex justify-between items-center">
               <div>
-                <span className="text-2xs font-bold text-primary uppercase tracking-wider">
-                  Mi Agenda Personal
-                </span>
-                <h3 className="text-xl font-bold text-on-surface">Mi Horario de Hoy</h3>
+                <h3 className="text-lg font-semibold text-on-surface">Mi horario de hoy</h3>
               </div>
               <button
                 onClick={() => navigate('/schedule')}
                 className="px-3.5 py-1.5 rounded-xl bg-surface-container hover:bg-surface-variant text-primary-hover text-xs font-bold border border-outline-variant transition-all cursor-pointer"
               >
-                Ver Todo / OCR →
+                Ver todo →
               </button>
             </div>
 
@@ -512,7 +501,7 @@ export default function DashboardPage() {
                 todayBlocks.map((b) => (
                   <div
                     key={b.id}
-                    className="p-3.5 rounded-2xl border border-outline-variant/50 bg-surface/60 flex items-center justify-between hover:bg-surface-container-lowest transition-colors"
+                    className="p-3.5 rounded-2xl border border-outline-variant/50 bg-surface flex items-center justify-between hover:bg-surface-container-lowest transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <span
@@ -526,7 +515,7 @@ export default function DashboardPage() {
                     </div>
 
                     <span
-                      className={`text-2xs font-bold px-2 py-0.5 rounded-full ${
+                      className={`text-2xs font-bold px-2 py-0.5 rounded-lg ${
                         b.type === 'libre'
                           ? 'bg-success-container text-on-success-container'
                           : b.type === 'puntual'
@@ -539,7 +528,7 @@ export default function DashboardPage() {
                   </div>
                 ))
               ) : (
-                <div className="p-6 text-center rounded-2xl bg-surface/60 border border-dashed border-outline-variant space-y-2">
+                <div className="p-6 text-center rounded-2xl bg-surface border border-dashed border-outline-variant space-y-2">
                   <span aria-hidden="true" className="material-symbols-outlined text-3xl text-primary">event_available</span>
                   <p className="text-xs font-bold text-on-surface">No tienes clases ni actividades para hoy ({today})</p>
                   <p className="text-2xs text-on-surface-variant">
@@ -550,27 +539,24 @@ export default function DashboardPage() {
                     className="mt-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-xs hover:bg-primary-hover transition-all cursor-pointer inline-flex items-center gap-1"
                   >
                     <span aria-hidden="true" className="material-symbols-outlined text-[16px]">add</span>
-                    <span>Gestionar Mi Horario</span>
+                    <span>Gestionar mi horario</span>
                   </button>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Mis Grupos Activos */}
+          {/* Mis grupos activos */}
           <div className="p-6 rounded-3xl bg-surface-container-lowest border border-outline-variant/70 shadow-sm space-y-4">
             <div className="flex justify-between items-center">
               <div>
-                <span className="text-2xs font-bold text-primary uppercase tracking-wider">
-                  Comunidades & Amigos
-                </span>
-                <h3 className="text-xl font-bold text-on-surface">Mis Grupos Activos</h3>
+                <h3 className="text-lg font-semibold text-on-surface">Mis grupos activos</h3>
               </div>
               <button
                 onClick={() => navigate('/groups')}
                 className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all cursor-pointer shadow-xs"
               >
-                + Nuevo Grupo
+                + Nuevo grupo
               </button>
             </div>
 
@@ -580,7 +566,7 @@ export default function DashboardPage() {
                   <button type="button"
                     key={g.id}
                     onClick={() => navigate('/groups')}
-                    className="w-full text-left p-4 rounded-2xl border border-outline-variant/60 bg-surface-container/50 hover:bg-surface-container hover:border-primary transition-all cursor-pointer flex items-center justify-between group"
+                    className="w-full text-left p-4 rounded-2xl border border-outline-variant/60 bg-surface-container hover:bg-surface-container hover:border-primary transition-all cursor-pointer flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-3">
                       <div
@@ -600,14 +586,14 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="text-right">
-                      <span className="text-xs font-bold text-primary bg-surface-container-lowest px-2.5 py-1 rounded-full border border-outline-variant/60">
+                      <span className="text-xs font-bold text-primary bg-surface-container-lowest px-2.5 py-1 rounded-lg border border-outline-variant/60">
                         {g.matchPercentage}% libre
                       </span>
                     </div>
                   </button>
                 ))
               ) : (
-                <div className="p-6 text-center rounded-2xl bg-surface/60 border border-dashed border-outline-variant space-y-2">
+                <div className="p-6 text-center rounded-2xl bg-surface border border-dashed border-outline-variant space-y-2">
                   <span aria-hidden="true" className="material-symbols-outlined text-3xl text-primary">group_add</span>
                   <p className="text-xs font-bold text-on-surface">Aún no tienes grupos registrados</p>
                   <button
@@ -628,10 +614,10 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-2xs font-bold uppercase">
+                <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary text-2xs font-bold uppercase">
                   Tu voto importa
                 </span>
-                <h2 className="text-xl font-bold text-on-surface">Votación de Planes en Curso</h2>
+                <h2 className="text-xl font-bold text-on-surface">Votación de planes en curso</h2>
               </div>
               <p className="text-xs text-on-surface-variant">
                 Opciones generadas automáticamente a partir de la disponibilidad de tu grupo.
@@ -666,7 +652,7 @@ export default function DashboardPage() {
                       )}
                     </div>
 
-                    <span className="text-2xs font-mono font-medium px-2.5 py-1 rounded-full bg-warning-container text-on-warning-container border border-warning/30">
+                    <span className="text-2xs font-mono font-medium px-2.5 py-1 rounded-lg bg-warning-container text-on-warning-container border border-warning/30">
                       {vote.deadline}
                     </span>
                   </div>
@@ -682,7 +668,7 @@ export default function DashboardPage() {
                         className={`w-full text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
                           win.hasVoted
                             ? 'bg-inverse-primary/30 border-primary shadow-xs'
-                            : 'bg-surface/60 border-outline-variant/60 hover:border-primary'
+                            : 'bg-surface border-outline-variant/60 hover:border-primary'
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
@@ -705,7 +691,7 @@ export default function DashboardPage() {
                           </div>
                         </div>
 
-                        <span className="text-xs font-bold text-on-surface-variant bg-surface-container-lowest px-2.5 py-1 rounded-full border border-outline-variant/40">
+                        <span className="text-xs font-bold text-on-surface-variant bg-surface-container-lowest px-2.5 py-1 rounded-lg border border-outline-variant/40">
                           {win.votesCount} {win.votesCount === 1 ? 'voto' : 'votos'}
                         </span>
                       </button>
@@ -726,8 +712,8 @@ export default function DashboardPage() {
         </section>
 
         {/* Accesos Rápidos (Quick Hub) */}
-        <section className="p-6 rounded-3xl bg-surface-container/60 border border-outline-variant/50">
-          <h3 className="text-sm font-bold text-on-surface mb-3">Acciones Rápidas</h3>
+        <section className="p-6 rounded-3xl bg-surface-container border border-outline-variant/50">
+          <h3 className="text-sm font-bold text-on-surface mb-3">Acciones rápidas</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <button
               onClick={() => navigate('/groups')}
@@ -736,7 +722,7 @@ export default function DashboardPage() {
               <span aria-hidden="true" className="material-symbols-outlined text-primary mb-1 group-hover:scale-110 transition-transform">
                 group_add
               </span>
-              <span className="text-xs font-bold text-on-surface">Crear Grupo</span>
+              <span className="text-xs font-bold text-on-surface">Crear grupo</span>
             </button>
 
             <button
@@ -746,7 +732,7 @@ export default function DashboardPage() {
               <span aria-hidden="true" className="material-symbols-outlined text-primary mb-1 group-hover:scale-110 transition-transform">
                 edit_calendar
               </span>
-              <span className="text-xs font-bold text-on-surface">Ajustar Horario</span>
+              <span className="text-xs font-bold text-on-surface">Ajustar horario</span>
             </button>
 
 
@@ -757,7 +743,7 @@ export default function DashboardPage() {
               <span aria-hidden="true" className="material-symbols-outlined text-primary mb-1 group-hover:scale-110 transition-transform">
                 school
               </span>
-              <span className="text-xs font-bold text-on-surface">Tutorial Huecko</span>
+              <span className="text-xs font-bold text-on-surface">Tutorial de Huecko</span>
             </button>
           </div>
         </section>
@@ -775,7 +761,7 @@ export default function DashboardPage() {
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-on-surface/90 via-on-surface/30 to-transparent flex flex-col justify-end p-6">
-                <span className="inline-block px-2.5 py-0.5 rounded-full bg-primary text-on-primary text-2xs font-bold uppercase w-max mb-1">
+                <span className="inline-block px-2.5 py-0.5 rounded-lg bg-primary text-on-primary text-2xs font-bold uppercase w-max mb-1">
                   <span aria-hidden="true" className="material-symbols-outlined text-[18px]">check</span>
                   Confirmado
                 </span>
@@ -857,7 +843,7 @@ export default function DashboardPage() {
                           </span>
                         )}
                         {att.status === 'retrasado' && (
-                          <span className="text-2xs text-on-warning-container font-bold bg-warning-container px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <span className="text-2xs text-on-warning-container font-bold bg-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1">
                             <span aria-hidden="true" className="material-symbols-outlined text-[0.8125rem]">timer</span>
                             +{att.delayMinutes || 15} min
                           </span>
