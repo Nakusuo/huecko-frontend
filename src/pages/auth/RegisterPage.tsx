@@ -85,7 +85,7 @@ export default function RegisterPage() {
         <div className="w-full max-w-md py-4">
           <MobileLogo />
 
-          <div className="bg-surface-container/90 border border-outline-variant rounded-3xl p-7 md:p-9 shadow-lg shadow-secondary/10 backdrop-blur-md">
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-3xl p-7 md:p-9 shadow-lg shadow-secondary/10">
             <div className="mb-6">
               <h2 className="text-2xl md:text-3xl font-bold text-on-surface font-headline mb-1.5">
                 Crea tu cuenta
@@ -102,7 +102,7 @@ export default function RegisterPage() {
                   htmlFor="nombre"
                   className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
-                  Nombre Completo
+                  Nombre completo
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
@@ -135,7 +135,7 @@ export default function RegisterPage() {
                   htmlFor="email"
                   className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
-                  Correo Electrónico
+                  Correo electrónico
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
@@ -336,14 +336,14 @@ function BrandingPanel() {
           Huecko
         </h1>
         <p className="text-primary-container text-lg font-medium mb-8">
-          Coordinación Social, Naturalmente.
+          Coordinar horarios sin discutirlo en el grupo.
         </p>
 
         <div className="flex flex-wrap gap-2.5 justify-center mb-8">
           {FEATURE_PILLS.map((item) => (
             <span
               key={item.label}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-surface-container-lowest/10 border border-white/15 rounded-full text-xs text-surface-container-low backdrop-blur-sm shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-surface-container-lowest/10 border border-white/15 rounded-lg text-xs text-surface-container-low backdrop-blur-sm shadow-xs"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-primary-container">
                 {item.icon}
@@ -353,7 +353,7 @@ function BrandingPanel() {
           ))}
         </div>
 
-        <div className="p-4 bg-surface-container-lowest/10 border border-white/15 rounded-2xl backdrop-blur-md text-left shadow-lg shadow-black/10">
+        <div className="p-4 bg-surface-container-lowest/10 border border-white/15 rounded-2xl text-left shadow-lg shadow-black/10">
           <p className="text-surface-container-low text-sm italic leading-relaxed">
             "Coordina tus huecos libres entre clases y sal con tus amigos al instante."
           </p>
