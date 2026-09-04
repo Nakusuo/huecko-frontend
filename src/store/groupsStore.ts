@@ -1,25 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { groupsService } from '../services/groupsService';
+import { eventsService } from '../services/eventsService';
+import type {
+  Group,
+  GroupMember,
+  PlanProposal,
+  PlanIncidence,
+  TimeWindowProposal,
+} from '../types/groups.types';
+import type { DayOfWeek } from '../types/schedule.types';
+import { colorByIndex } from '../theme/palette';
 
-export type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
-
-export interface GroupMember {
-  email: string;
-  nombre: string;
-  isEssential: boolean;
-  color: string;
-  status: 'confirmado' | 'pendiente';
-}
-
-export interface Group {
-  id: string;
-  nombre: string;
-  descripcion: string;
-  codigoInvitacion: string;
-  creadoPor: string;
-  umbralDisponibilidad: number; // RF-06 %
-  miembros: GroupMember[];
-}
+export type { Group, GroupMember, PlanProposal, PlanIncidence, TimeWindowProposal, DayOfWeek };
 
 export interface GroupOccupiedSlot {
   id: string;
@@ -32,110 +25,84 @@ export interface GroupOccupiedSlot {
   title: string;
 }
 
-export interface TimeWindowProposal {
-  id: string;
-  dia: DayOfWeek;
-  horaInicio: string;
-  horaFin: string;
-  disponibilidadPorcentaje: number;
-  votosUsuarios: string[];
-}
-
-export interface PlanIncidence {
-  id: string;
-  userEmail: string;
-  userName: string;
-  tipo: 'falta' | 'tardanza' | 'imprevisto';
-  motivo: string;
-  minutosTardanza?: number;
-  fechaReporte: string;
-}
-
-export interface PlanProposal {
-  id: string;
-  groupId: string;
-  titulo: string;
-  lugar?: string;
-  creadoPor: string;
-  plazoVotacion: string;
-  estado: 'propuesto' | 'confirmado' | 'cancelado' | 'en_recoordinacion';
-  ventanasSugeridas: TimeWindowProposal[];
-  incidencias?: PlanIncidence[];
-  votosReplanificacion?: { cancel: string[]; reschedule: string[]; keep: string[] };
-}
-
 interface GroupsState {
   groups: Group[];
   selectedGroupId: string | null;
   occupiedSlots: GroupOccupiedSlot[];
   groupProposals: PlanProposal[];
+  isLoading: boolean;
+  syncError: string | null;
 
   setSelectedGroupId: (id: string) => void;
-  createGroup: (nombre: string, descripcion: string, umbralDisponibilidad: number, userEmail: string, userName: string) => Group;
-  joinGroupByCode: (codigo: string, userEmail: string, userName: string) => boolean;
-  updateGroupThreshold: (groupId: string, threshold: number) => void;
-  toggleMemberEssential: (groupId: string, memberEmail: string) => void;
+  fetchGroupsFromServer: () => Promise<void>;
+  createGroup: (nombre: string, descripcion: string, umbralDisponibilidad: number, userEmail: string, userName: string) => Promise<Group>;
+  joinGroupByCode: (codigo: string, userEmail: string, userName: string) => Promise<boolean>;
+  updateGroupThreshold: (groupId: string, threshold: number) => Promise<void>;
+  toggleMemberEssential: (groupId: string, memberEmail: string) => Promise<void>;
 
-  addProposal: (proposal: Omit<PlanProposal, 'id'>) => void;
-  voteProposalWindow: (proposalId: string, windowId: string, userEmail: string) => void;
-  closeVotingManually: (proposalId: string) => void;
-
-  reportIncident: (proposalId: string, incidence: Omit<PlanIncidence, 'id' | 'fechaReporte'>) => void;
-  voteReplanification: (proposalId: string, action: 'cancel' | 'reschedule' | 'keep', userEmail: string) => void;
+  addProposal: (proposal: Omit<PlanProposal, 'id'>) => Promise<void>;
+  voteProposalWindow: (proposalId: string, windowId: string, userEmail: string) => Promise<void>;
+  closeVotingManually: (proposalId: string) => Promise<void>;
+  reportIncident: (proposalId: string, incidence: Omit<PlanIncidence, 'id' | 'fechaReporte'>) => Promise<void>;
+  voteReplanification: (proposalId: string, action: 'cancel' | 'reschedule' | 'keep', userEmail: string) => Promise<void>;
+  withdrawIncident: (proposalId: string, userEmail: string) => void;
 }
 
 const INITIAL_GROUPS: Group[] = [
   {
     id: '1',
     nombre: 'Grupo Universitario - Ing. Software',
-    descripcion: 'Coordinación de horarios de clases y trabajos en grupo del ciclo.',
-    codigoInvitacion: 'HUECKO-78A9',
+    descripcion: 'Coordinación para proyecto final, entregables y sesiones de estudio de fin de ciclo.',
+    codigoInvitacion: 'UNIV-2026',
     creadoPor: 'alex.rodriguez@huecko.com',
-    umbralDisponibilidad: 100,
+    umbralDisponibilidad: 80,
     miembros: [
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: '#8b5cf6', status: 'confirmado' },
-      { email: 'maria.c@huecko.com', nombre: 'María C.', isEssential: false, color: '#ec4899', status: 'confirmado' },
-      { email: 'sam.p@huecko.com', nombre: 'Sam P.', isEssential: false, color: '#3b82f6', status: 'confirmado' },
+      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: true, color: colorByIndex(0), status: 'confirmado' },
+      { email: 'maria.c@huecko.com', nombre: 'María C.', isEssential: true, color: colorByIndex(1), status: 'confirmado' },
+      { email: 'sam.p@huecko.com', nombre: 'Sam P.', isEssential: false, color: colorByIndex(2), status: 'confirmado' },
+      { email: 'lucia.t@huecko.com', nombre: 'Lucía T.', isEssential: false, color: colorByIndex(3), status: 'confirmado' },
+      { email: 'diego.r@huecko.com', nombre: 'Diego R.', isEssential: false, color: colorByIndex(4), status: 'pendiente' },
     ],
   },
   {
     id: '2',
     nombre: 'Amigos de Fin de Semana',
-    descripcion: 'Salidas, viajes y actividades deportivas.',
-    codigoInvitacion: 'HUECKO-34X2',
-    creadoPor: 'alex.rodriguez@huecko.com',
-    umbralDisponibilidad: 80,
+    descripcion: 'Pichangas de fútbol, asados de domingo, salidas y cumpleaños del grupo.',
+    codigoInvitacion: 'WEEKEND-99',
+    creadoPor: 'carlos.m@huecko.com',
+    umbralDisponibilidad: 70,
     miembros: [
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: '#8b5cf6', status: 'confirmado' },
-      { email: 'carlos.m@huecko.com', nombre: 'Carlos M.', isEssential: false, color: '#10b981', status: 'confirmado' },
-      { email: 'lucia.g@huecko.com', nombre: 'Lucía G.', isEssential: true, color: '#f59e0b', status: 'pendiente' },
+      { email: 'carlos.m@huecko.com', nombre: 'Carlos M.', isEssential: true, color: colorByIndex(5), status: 'confirmado' },
+      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: false, color: colorByIndex(0), status: 'confirmado' },
+      { email: 'jorge.l@huecko.com', nombre: 'Jorge L.', isEssential: false, color: colorByIndex(6), status: 'confirmado' },
+      { email: 'valeria.v@huecko.com', nombre: 'Valeria V.', isEssential: false, color: colorByIndex(7), status: 'confirmado' },
     ],
   },
 ];
 
 const INITIAL_OCCUPIED_SLOTS: GroupOccupiedSlot[] = [
-  { id: '101', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Lun', startTime: '08:00', endTime: '11:00', title: 'Clase Algoritmos' },
-  { id: '102', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Lun', startTime: '10:00', endTime: '13:00', title: 'Trabajo Remoto' },
-  { id: '103', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Lun', startTime: '14:00', endTime: '18:00', title: 'Gimnasio & Estudio' },
-  { id: '104', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Mar', startTime: '10:00', endTime: '14:00', title: 'Turno Trabajo' },
-  { id: '105', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Mar', startTime: '08:00', endTime: '12:00', title: 'Clase Física' },
-  { id: '106', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Mié', startTime: '08:00', endTime: '10:00', title: 'Universidad' },
-  { id: '107', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Mié', startTime: '08:00', endTime: '11:00', title: 'Reunión Equipo' },
-  { id: '108', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Mié', startTime: '15:00', endTime: '18:00', title: 'Clase Inglés' },
-  { id: '109', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Jue', startTime: '10:00', endTime: '14:00', title: 'Turno Trabajo' },
-  { id: '110', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Jue', startTime: '12:00', endTime: '16:00', title: 'Cita Médica' },
-  { id: '111', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
+  { id: '101', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: colorByIndex(1), day: 'Lun', startTime: '08:00', endTime: '12:00', title: 'Clase Redes' },
+  { id: '102', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: colorByIndex(2), day: 'Lun', startTime: '09:00', endTime: '13:00', title: 'Prácticas Pro' },
+  { id: '103', userEmail: 'lucia.t@huecko.com', userName: 'Lucía T.', userColor: colorByIndex(3), day: 'Mar', startTime: '08:00', endTime: '11:00', title: 'Laboratorio' },
+  { id: '104', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: colorByIndex(1), day: 'Mar', startTime: '14:00', endTime: '18:00', title: 'Turno Tarde' },
+  { id: '105', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: colorByIndex(2), day: 'Mié', startTime: '08:00', endTime: '10:30', title: 'Cálculo' },
+  { id: '106', userEmail: 'lucia.t@huecko.com', userName: 'Lucía T.', userColor: colorByIndex(3), day: 'Jue', startTime: '10:00', endTime: '14:00', title: 'Inglés VI' },
+  { id: '107', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: colorByIndex(1), day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Arquitectura' },
+  { id: '108', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: colorByIndex(2), day: 'Vie', startTime: '11:00', endTime: '15:00', title: 'Trabajo' },
+  { id: '109', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Lun', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
+  { id: '110', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Mié', startTime: '08:00', endTime: '10:00', title: 'Universidad' },
+  { id: '111', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
 ];
 
 const INITIAL_PROPOSALS: PlanProposal[] = [
   {
     id: 'prop-1',
     groupId: '1',
-    titulo: 'Reunión de Trabajo de Grado',
+    titulo: 'Reunión de Trabajo de Grado & Cierre',
     lugar: 'Biblioteca Central / Google Meet',
     creadoPor: 'Alex R.',
-    plazoVotacion: 'Hoy a las 20:00',
-    estado: 'confirmado',
+    plazoVotacion: 'Finalizada',
+    estado: 'en_recoordinacion',
     ventanasSugeridas: [
       { id: 'w1', dia: 'Mié', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: 100, votosUsuarios: ['alex.rodriguez@huecko.com', 'maria.c@huecko.com', 'sam.p@huecko.com'] },
     ],
@@ -151,7 +118,78 @@ const INITIAL_PROPOSALS: PlanProposal[] = [
     ],
     votosReplanificacion: { cancel: [], reschedule: ['maria.c@huecko.com'], keep: [] },
   },
+  {
+    id: 'prop-2',
+    groupId: '2',
+    titulo: 'Pichanga & Parrilla de Domingo',
+    lugar: 'Canchas El Golazo',
+    creadoPor: 'Carlos M.',
+    plazoVotacion: 'Cierra hoy a las 20:00',
+    estado: 'propuesto',
+    ventanasSugeridas: [
+      { id: 'w-101', dia: 'Sáb', horaInicio: '16:00', horaFin: '18:00', disponibilidadPorcentaje: 85, votosUsuarios: ['alex.rodriguez@huecko.com', 'carlos.m@huecko.com'] },
+      { id: 'w-102', dia: 'Dom', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: 100, votosUsuarios: ['carlos.m@huecko.com'] },
+      { id: 'w-103', dia: 'Dom', horaInicio: '15:00', horaFin: '17:00', disponibilidadPorcentaje: 70, votosUsuarios: [] },
+    ],
+    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
+  },
+  {
+    id: 'prop-3',
+    groupId: '1',
+    titulo: 'Reunión de Avance de Tesis',
+    lugar: 'Google Meet / Biblioteca',
+    creadoPor: 'Alex R.',
+    plazoVotacion: 'Cierra mañana a las 12:00',
+    estado: 'propuesto',
+    ventanasSugeridas: [
+      { id: 'w-201', dia: 'Mié', horaInicio: '14:00', horaFin: '16:00', disponibilidadPorcentaje: 100, votosUsuarios: ['sam.p@huecko.com'] },
+      { id: 'w-202', dia: 'Jue', horaInicio: '10:00', horaFin: '12:00', disponibilidadPorcentaje: 75, votosUsuarios: ['alex.rodriguez@huecko.com'] },
+    ],
+    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
+  },
 ];
+
+/**
+ * Cierra la votación exprés en cuanto hay mayoría y aplica lo decidido.
+ *
+ * Antes los votos solo se acumulaban: nadie decidía nada, el plan se quedaba
+ * en re-coordinación indefinidamente y quien había avisado podía volver a
+ * avisar, lo que reabría la votación una y otra vez.
+ *
+ * En caso de empate gana la opción menos disruptiva: mantener antes que
+ * reprogramar, y reprogramar antes que cancelar.
+ */
+function resolverVotacionExpres(proposal: PlanProposal, miembros: number): PlanProposal {
+  if (miembros <= 0) return proposal;
+
+  const votos = proposal.votosReplanificacion ?? { cancel: [], reschedule: [], keep: [] };
+  const emitidos = votos.cancel.length + votos.reschedule.length + votos.keep.length;
+  const mayoria = Math.min(Math.floor(miembros / 2) + 1, miembros);
+  if (emitidos < mayoria) return proposal;
+
+  const preferencia = [
+    ['keep', votos.keep.length],
+    ['reschedule', votos.reschedule.length],
+    ['cancel', votos.cancel.length],
+  ] as const;
+  const [ganadora] = preferencia.reduce((mejor, actual) => (actual[1] > mejor[1] ? actual : mejor));
+
+  const estado: PlanProposal['estado'] =
+    ganadora === 'cancel' ? 'cancelado' : ganadora === 'reschedule' ? 'propuesto' : 'confirmado';
+
+  return {
+    ...proposal,
+    estado,
+    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
+    incidencias: (proposal.incidencias ?? []).map((i) => ({ ...i, resuelta: true })),
+    /* Reprogramar es volver a elegir hora: los votos de la ronda anterior ya
+       no dicen nada sobre las ventanas nuevas. */
+    ventanasSugeridas:
+      ganadora === 'reschedule'
+        ? proposal.ventanasSugeridas.map((v) => ({ ...v, votosUsuarios: [] }))
+        : proposal.ventanasSugeridas,
+  };
+}
 
 export const useGroupsStore = create<GroupsState>()(
   persist(
@@ -160,59 +198,124 @@ export const useGroupsStore = create<GroupsState>()(
       selectedGroupId: '1',
       occupiedSlots: INITIAL_OCCUPIED_SLOTS,
       groupProposals: INITIAL_PROPOSALS,
+      isLoading: false,
+      syncError: null,
 
       setSelectedGroupId: (id) => set({ selectedGroupId: id }),
 
-      createGroup: (nombre, descripcion, umbralDisponibilidad, userEmail, userName) => {
-        const newGroup: Group = {
-          id: `group-${Date.now()}`,
-          nombre,
-          descripcion,
-          codigoInvitacion: `HUECKO-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-          creadoPor: userEmail,
-          umbralDisponibilidad,
-          miembros: [
-            { email: userEmail, nombre: userName, isEssential: true, color: '#8b5cf6', status: 'confirmado' },
-          ],
-        };
-        set((state) => ({
-          groups: [...state.groups, newGroup],
-          selectedGroupId: newGroup.id,
-        }));
-        return newGroup;
+      fetchGroupsFromServer: async () => {
+        set({ isLoading: true, syncError: null });
+        try {
+          const serverGroups = await groupsService.getGroups();
+          if (serverGroups && serverGroups.length > 0) {
+            set({ groups: serverGroups, isLoading: false });
+          } else {
+            set({ isLoading: false });
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : 'Error al conectar grupos con el servidor';
+          set({ syncError: msg, isLoading: false });
+        }
       },
 
-      joinGroupByCode: (codigo, userEmail, userName) => {
-        const state = get();
-        const targetGroup = state.groups.find(
-          (g) => g.codigoInvitacion.trim().toUpperCase() === codigo.trim().toUpperCase()
-        );
-        if (!targetGroup) return false;
+      createGroup: async (nombre, descripcion, umbralDisponibilidad, userEmail, userName) => {
+        try {
+          const created = await groupsService.createGroup({
+            nombre,
+            descripcion,
+            umbral_disponibilidad: umbralDisponibilidad,
+          });
+          set((state) => ({
+            groups: [...state.groups, created],
+            selectedGroupId: created.id,
+          }));
+          return created;
+        } catch {
+          const newGroup: Group = {
+            id: `group-${Date.now()}`,
+            nombre,
+            descripcion,
+            codigoInvitacion: `HUECKO-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            creadoPor: userEmail,
+            umbralDisponibilidad,
+            miembros: [
+              { email: userEmail, nombre: userName, isEssential: true, color: colorByIndex(0), status: 'confirmado' },
+            ],
+          };
+          set((state) => ({
+            groups: [...state.groups, newGroup],
+            selectedGroupId: newGroup.id,
+          }));
+          return newGroup;
+        }
+      },
 
-        const alreadyMember = targetGroup.miembros.some((m) => m.email === userEmail);
-        if (alreadyMember) {
-          set({ selectedGroupId: targetGroup.id });
+      joinGroupByCode: async (codigo, userEmail, userName) => {
+        try {
+          const joinedGroup = await groupsService.joinGroup({ codigo_invitacion: codigo });
+          set((state) => {
+            const exists = state.groups.some((g) => g.id === joinedGroup.id);
+            return {
+              groups: exists
+                ? state.groups.map((g) => (g.id === joinedGroup.id ? joinedGroup : g))
+                : [...state.groups, joinedGroup],
+              selectedGroupId: joinedGroup.id,
+            };
+          });
+          return true;
+        } catch {
+          // Fallback local
+          const state = get();
+          const targetGroup = state.groups.find(
+            (g) => g.codigoInvitacion.trim().toUpperCase() === codigo.trim().toUpperCase()
+          );
+          if (!targetGroup) return false;
+
+          const alreadyMember = targetGroup.miembros.some((m) => m.email === userEmail);
+          if (alreadyMember) {
+            set({ selectedGroupId: targetGroup.id });
+            return true;
+          }
+
+          const updatedMembers: GroupMember[] = [
+            ...targetGroup.miembros,
+            { email: userEmail, nombre: userName, isEssential: false, color: colorByIndex(3), status: 'confirmado' },
+          ];
+
+          set((s) => ({
+            groups: s.groups.map((g) => (g.id === targetGroup.id ? { ...g, miembros: updatedMembers } : g)),
+            selectedGroupId: targetGroup.id,
+          }));
           return true;
         }
-
-        const updatedMembers: GroupMember[] = [
-          ...targetGroup.miembros,
-          { email: userEmail, nombre: userName, isEssential: false, color: '#10b981', status: 'confirmado' },
-        ];
-
-        set((s) => ({
-          groups: s.groups.map((g) => (g.id === targetGroup.id ? { ...g, miembros: updatedMembers } : g)),
-          selectedGroupId: targetGroup.id,
-        }));
-        return true;
       },
 
-      updateGroupThreshold: (groupId, threshold) =>
+      updateGroupThreshold: async (groupId, threshold) => {
+        try {
+          await groupsService.updateGroup(groupId, { umbral_disponibilidad: threshold });
+        } catch {
+          // Offline fallback
+        }
         set((state) => ({
           groups: state.groups.map((g) => (g.id === groupId ? { ...g, umbralDisponibilidad: threshold } : g)),
-        })),
+        }));
+      },
 
-      toggleMemberEssential: (groupId, memberEmail) =>
+      toggleMemberEssential: async (groupId, memberEmail) => {
+        const group = get().groups.find((g) => g.id === groupId);
+        const member = group?.miembros.find((m) => m.email === memberEmail);
+        const newEssentialState = !member?.isEssential;
+
+        try {
+          if (member?.userId || member?.id) {
+            await groupsService.updateMemberRole(groupId, member.userId || member.id || '', {
+              es_imprescindible: newEssentialState,
+            });
+          }
+        } catch {
+          // Offline fallback
+        }
+
         set((state) => ({
           groups: state.groups.map((g) => {
             if (g.id !== groupId) return g;
@@ -221,17 +324,41 @@ export const useGroupsStore = create<GroupsState>()(
             );
             return { ...g, miembros: updatedMembers };
           }),
-        })),
+        }));
+      },
 
-      addProposal: (proposalData) =>
-        set((state) => ({
-          groupProposals: [
-            { ...proposalData, id: `prop-${Date.now()}` },
-            ...state.groupProposals,
-          ],
-        })),
+      addProposal: async (proposalData) => {
+        try {
+          const created = await eventsService.createProposal(proposalData.groupId, {
+            titulo: proposalData.titulo,
+            lugar: proposalData.lugar,
+            fecha_cierre: proposalData.plazoVotacion,
+            ventanas: proposalData.ventanasSugeridas.map((v) => ({
+              dia: v.dia,
+              hora_inicio: v.horaInicio,
+              hora_fin: v.horaFin,
+            })),
+          });
+          set((state) => ({
+            groupProposals: [created, ...state.groupProposals],
+          }));
+        } catch {
+          set((state) => ({
+            groupProposals: [
+              { ...proposalData, id: `prop-${Date.now()}` },
+              ...state.groupProposals,
+            ],
+          }));
+        }
+      },
 
-      voteProposalWindow: (proposalId, windowId, userEmail) =>
+      voteProposalWindow: async (proposalId, windowId, userEmail) => {
+        try {
+          await eventsService.voteWindow(proposalId, windowId);
+        } catch {
+          // Fallback
+        }
+
         set((state) => ({
           groupProposals: state.groupProposals.map((p) => {
             if (p.id !== proposalId || p.estado === 'confirmado') return p;
@@ -247,16 +374,33 @@ export const useGroupsStore = create<GroupsState>()(
             });
             return { ...p, ventanasSugeridas: updatedWindows };
           }),
-        })),
+        }));
+      },
 
-      closeVotingManually: (proposalId) =>
+      closeVotingManually: async (proposalId) => {
+        try {
+          await eventsService.closeVoting(proposalId);
+        } catch {
+          // Fallback
+        }
+
         set((state) => ({
           groupProposals: state.groupProposals.map((p) =>
             p.id === proposalId ? { ...p, estado: 'confirmado' } : p
           ),
-        })),
+        }));
+      },
 
-      reportIncident: (proposalId, incidenceData) =>
+      reportIncident: async (proposalId, incidenceData) => {
+        try {
+          await eventsService.reportIncident(proposalId, {
+            reason: incidenceData.motivo,
+            type: incidenceData.tipo,
+          });
+        } catch {
+          // Fallback
+        }
+
         set((state) => {
           const newIncidence: PlanIncidence = {
             ...incidenceData,
@@ -265,23 +409,43 @@ export const useGroupsStore = create<GroupsState>()(
           };
           return {
             groupProposals: state.groupProposals.map((p) => {
-              if (p.id === proposalId) {
-                const current = p.incidencias || [];
-                return {
-                  ...p,
-                  estado: p.estado === 'confirmado' ? 'en_recoordinacion' : p.estado,
-                  incidencias: [newIncidence, ...current],
-                };
-              }
-              return p;
+              if (p.id !== proposalId) return p;
+
+              // Sobre un plan cancelado ya no hay nada que avisar.
+              if (p.estado === 'cancelado') return p;
+
+              const current = p.incidencias || [];
+              /* Una incidencia abierta por persona. Sin esta guarda, quien
+                 avisa puede volver a avisar en cuanto ha votado, y el plan no
+                 sale nunca de la re-coordinación. */
+              const yaAviso = current.some(
+                (i) => i.userEmail === incidenceData.userEmail && !i.resuelta
+              );
+              if (yaAviso) return p;
+
+              return {
+                ...p,
+                estado: p.estado === 'confirmado' ? 'en_recoordinacion' : p.estado,
+                incidencias: [newIncidence, ...current],
+              };
             }),
           };
-        }),
+        });
+      },
 
-      voteReplanification: (proposalId, action, userEmail) =>
+      voteReplanification: async (proposalId, action, userEmail) => {
+        try {
+          await eventsService.voteExpress(proposalId, action);
+        } catch {
+          // Fallback
+        }
+
         set((state) => ({
           groupProposals: state.groupProposals.map((p) => {
             if (p.id !== proposalId) return p;
+            // Solo se vota mientras hay algo que decidir.
+            if (p.estado !== 'en_recoordinacion') return p;
+
             const currentVotes = p.votosReplanificacion || { cancel: [], reschedule: [], keep: [] };
 
             const cleanCancel = currentVotes.cancel.filter((e) => e !== userEmail);
@@ -292,7 +456,7 @@ export const useGroupsStore = create<GroupsState>()(
             if (action === 'reschedule') cleanReschedule.push(userEmail);
             if (action === 'keep') cleanKeep.push(userEmail);
 
-            return {
+            const conVoto: PlanProposal = {
               ...p,
               votosReplanificacion: {
                 cancel: cleanCancel,
@@ -300,8 +464,38 @@ export const useGroupsStore = create<GroupsState>()(
                 keep: cleanKeep,
               },
             };
+
+            const miembros = state.groups.find((g) => g.id === p.groupId)?.miembros.length ?? 0;
+            return resolverVotacionExpres(conVoto, miembros);
           }),
-        })),
+        }));
+      },
+
+      withdrawIncident: (proposalId, userEmail) => {
+        set((state) => ({
+          groupProposals: state.groupProposals.map((p) => {
+            if (p.id !== proposalId) return p;
+
+            const restantes = (p.incidencias || []).filter(
+              (i) => !(i.userEmail === userEmail && !i.resuelta)
+            );
+            const quedanAbiertas = restantes.some((i) => !i.resuelta);
+
+            /* Si era el único aviso abierto, el plan vuelve a estar confirmado
+               y la votación desaparece: votar sobre un problema retirado no
+               decide nada. */
+            return {
+              ...p,
+              incidencias: restantes,
+              estado:
+                !quedanAbiertas && p.estado === 'en_recoordinacion' ? 'confirmado' : p.estado,
+              votosReplanificacion: quedanAbiertas
+                ? p.votosReplanificacion
+                : { cancel: [], reschedule: [], keep: [] },
+            };
+          }),
+        }));
+      },
     }),
     {
       name: 'huecko-groups',
