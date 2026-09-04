@@ -45,6 +45,7 @@ export default function GroupsPage() {
     closeVotingManually,
     reportIncident,
     voteReplanification,
+    withdrawIncident,
   } = useGroupsStore();
 
   const { addNotification } = useNotificationStore();
@@ -94,6 +95,10 @@ export default function GroupsPage() {
   useModalDismiss(isJoinModalOpen, () => setIsJoinModalOpen(false));
   useModalDismiss(Boolean(memberDetail), () => setMemberRef(null));
   const [joinError, setJoinError] = useState('');
+
+  /* Mismo criterio que en «Mi horario»: en el móvil se elige un día y se ve ese
+     día, en vez de arrastrar siete columnas a lo ancho. */
+  const [sharedDay, setSharedDay] = useState<DayOfWeek>(() => days[(new Date().getDay() + 6) % 7]);
 
   const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -477,9 +482,6 @@ export default function GroupsPage() {
                   <span aria-hidden="true" className="material-symbols-outlined text-primary">how_to_vote</span>
                   Planes propuestos y votación: {grp.nombre}
                 </h2>
-                <p className="text-on-surface-variant text-sm">
-                  Propuestas de planes creadas para este grupo. Los miembros pueden emitir su voto antes de vencer el plazo.
-                </p>
               </div>
 
               <button
@@ -507,6 +509,19 @@ export default function GroupsPage() {
                       : proposal.votosReplanificacion?.keep.includes(userEmail)
                       ? 'keep'
                       : null;
+                    const avisosAbiertos = (proposal.incidencias || []).filter((i) => !i.resuelta);
+                    const miAvisoAbierto = avisosAbiertos.find((i) => i.userEmail === userEmail);
+                    const planCancelado = proposal.estado === 'cancelado';
+                    const miembrosDelGrupo = grp.miembros.length;
+                    const votosEmitidos = proposal.votosReplanificacion
+                      ? proposal.votosReplanificacion.cancel.length +
+                        proposal.votosReplanificacion.reschedule.length +
+                        proposal.votosReplanificacion.keep.length
+                      : 0;
+                    const votosParaCerrar = Math.min(
+                      Math.floor(miembrosDelGrupo / 2) + 1,
+                      miembrosDelGrupo
+                    );
 
                     return (
                       <div
@@ -547,9 +562,9 @@ export default function GroupsPage() {
                           </div>
 
                           {/* ALERTA COMPACTA DE INCIDENCIAS */}
-                          {proposal.incidencias && proposal.incidencias.length > 0 && (
+                          {avisosAbiertos.length > 0 && (
                             <div className="mb-3 p-3 rounded-xl bg-warning-container border border-warning/30 space-y-2">
-                              {proposal.incidencias.map((inc) => (
+                              {avisosAbiertos.map((inc) => (
                                 <div key={inc.id} className="text-xs flex justify-between items-center text-on-warning-container">
                                   <span>
                                     <span aria-hidden="true" className="material-symbols-outlined text-[14px] align-[-2px] mr-1">
@@ -563,9 +578,15 @@ export default function GroupsPage() {
                                 </div>
                               ))}
 
-                              {/* Votación Grupal Simplificada */}
+                              {/* Votación exprés: solo mientras el plan está en re-coordinación. */}
+                              {isInReplan && (
                               <div className="pt-2 border-t border-warning/30 flex flex-wrap items-center justify-between gap-2 text-xs">
-                                <span className="text-2xs text-on-warning-container font-semibold shrink-0">¿Qué hacemos?</span>
+                                <span className="text-2xs text-on-warning-container font-semibold shrink-0">
+                                  ¿Qué hacemos?
+                                  <span className="block font-normal opacity-80">
+                                    {votosEmitidos}/{votosParaCerrar} votos para decidir
+                                  </span>
+                                </span>
                                 <div className="flex flex-wrap gap-1.5 w-full justify-end">
                                   <button
                                     onClick={() => handleReplanVote(proposal.id, 'reschedule')}
@@ -599,6 +620,7 @@ export default function GroupsPage() {
                                   </button>
                                 </div>
                               </div>
+                              )}
                             </div>
                           )}
 
@@ -651,12 +673,24 @@ export default function GroupsPage() {
                           <span className="text-2xs font-mono">Plazo: {proposal.plazoVotacion}</span>
 
                           <div className="flex gap-2">
-                            <button
-                              onClick={() => openReportIncidentModal(proposal)}
-                              className="text-2xs text-on-warning-container hover:text-on-warning-container font-semibold cursor-pointer"
-                            >
-                              Reportar imprevisto
-                            </button>
+                            {/* Un plan cancelado no admite avisos, y quien ya
+                                avisó retira el suyo en vez de mandar otro. */}
+                            {!planCancelado &&
+                              (miAvisoAbierto ? (
+                                <button
+                                  onClick={() => withdrawIncident(proposal.id, userEmail)}
+                                  className="text-2xs text-on-surface-variant hover:text-on-surface font-semibold cursor-pointer underline"
+                                >
+                                  Retirar mi imprevisto
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => openReportIncidentModal(proposal)}
+                                  className="text-2xs text-on-warning-container hover:text-on-warning-container font-semibold cursor-pointer"
+                                >
+                                  Reportar imprevisto
+                                </button>
+                              ))}
 
                             {!isClosed && (
                               <button
@@ -693,9 +727,6 @@ export default function GroupsPage() {
                     Actualizado
                   </span>
                 </div>
-                <p className="text-on-surface-variant text-sm">
-                  Franjas continuas que cumplen el umbral de <strong>{grp.umbralDisponibilidad}%</strong>. La información ocupada se muestra sin exponer detalles personales.
-                </p>
               </div>
 
               <div className="bg-surface-bright px-4 py-2 rounded-xl border border-outline-variant text-xs text-on-surface-variant">
@@ -705,7 +736,7 @@ export default function GroupsPage() {
 
             {/* Agenda de coincidencias: una lectura rápida, sin 84 casillas. */}
             <div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+              <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-7 gap-3">
                 {days.map((day) => {
                   const windows = getRecommendedWindows(grp, day);
                   return (
@@ -731,6 +762,72 @@ export default function GroupsPage() {
                   );
                 })}
               </div>
+
+              {/* Vista móvil: un día a la vez */}
+              <div className="md:hidden space-y-4">
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                  {days.map((day) => {
+                    const libres = getRecommendedWindows(grp, day).length;
+                    const activo = day === sharedDay;
+
+                    return (
+                      <button
+                        type="button"
+                        key={day}
+                        onClick={() => setSharedDay(day)}
+                        aria-pressed={activo}
+                        className={`shrink-0 min-w-14 px-3 py-2 rounded-lg border text-center transition-colors ${
+                          activo
+                            ? 'bg-primary border-primary text-on-primary'
+                            : 'bg-surface-container border-outline-variant text-on-surface-variant'
+                        }`}
+                      >
+                        <span className="block text-xs font-bold">{day}</span>
+                        <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-outline'}`}>
+                          {libres === 0 ? 'sin hueco' : `${libres} ${libres === 1 ? 'franja' : 'franjas'}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {(() => {
+                  const windows = getRecommendedWindows(grp, sharedDay);
+
+                  if (windows.length === 0) {
+                    return (
+                      <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container/60 p-8 text-center">
+                        <span aria-hidden="true" className="material-symbols-outlined text-[40px] text-on-surface-variant">
+                          event_busy
+                        </span>
+                        <p className="mt-1 text-sm font-semibold text-on-surface">Sin huecos el {sharedDay}</p>
+                        <p className="mt-1 text-xs text-on-surface-variant">
+                          Ninguna franja llega al {grp.umbralDisponibilidad}% del grupo.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <ul className="space-y-2.5">
+                      {windows.map((window) => (
+                        <li
+                          key={`${sharedDay}-${window.start}`}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-bright px-4 py-3"
+                        >
+                          <span className="text-sm font-bold text-on-surface font-mono">
+                            {window.start.toString().padStart(2, '0')}:00 - {window.end.toString().padStart(2, '0')}:00
+                          </span>
+                          <span className="text-2xs text-on-surface-variant text-right shrink-0">
+                            {window.minimumAvailability}% libre
+                            <span className="block">{window.freeCount}/{grp.miembros.length} personas</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+              </div>
             </div>
           </section>
     </div>
@@ -750,7 +847,7 @@ export default function GroupsPage() {
               Administra tus grupos, edita integrantes y visualiza los <strong className="text-primary font-semibold">espacios libres resaltados</strong> de todos los miembros.
             </p>
           </div>
-          <div className="flex gap-3 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             <button
               onClick={() => {
                 setJoinCodeInput('');
