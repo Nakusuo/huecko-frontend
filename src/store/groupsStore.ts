@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { colorByIndex } from '../theme/palette';
 
 export type DayOfWeek = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
 
@@ -93,9 +94,9 @@ const INITIAL_GROUPS: Group[] = [
     creadoPor: 'alex.rodriguez@huecko.com',
     umbralDisponibilidad: 100,
     miembros: [
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: '#8b5cf6', status: 'confirmado' },
-      { email: 'maria.c@huecko.com', nombre: 'María C.', isEssential: false, color: '#ec4899', status: 'confirmado' },
-      { email: 'sam.p@huecko.com', nombre: 'Sam P.', isEssential: false, color: '#3b82f6', status: 'confirmado' },
+      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: colorByIndex(0), status: 'confirmado' },
+      { email: 'maria.c@huecko.com', nombre: 'María C.', isEssential: false, color: colorByIndex(1), status: 'confirmado' },
+      { email: 'sam.p@huecko.com', nombre: 'Sam P.', isEssential: false, color: colorByIndex(2), status: 'confirmado' },
     ],
   },
   {
@@ -106,25 +107,25 @@ const INITIAL_GROUPS: Group[] = [
     creadoPor: 'alex.rodriguez@huecko.com',
     umbralDisponibilidad: 80,
     miembros: [
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: '#8b5cf6', status: 'confirmado' },
-      { email: 'carlos.m@huecko.com', nombre: 'Carlos M.', isEssential: false, color: '#10b981', status: 'confirmado' },
-      { email: 'lucia.g@huecko.com', nombre: 'Lucía G.', isEssential: true, color: '#f59e0b', status: 'pendiente' },
+      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: colorByIndex(0), status: 'confirmado' },
+      { email: 'carlos.m@huecko.com', nombre: 'Carlos M.', isEssential: false, color: colorByIndex(3), status: 'confirmado' },
+      { email: 'lucia.g@huecko.com', nombre: 'Lucía G.', isEssential: true, color: colorByIndex(4), status: 'pendiente' },
     ],
   },
 ];
 
 const INITIAL_OCCUPIED_SLOTS: GroupOccupiedSlot[] = [
-  { id: '101', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Lun', startTime: '08:00', endTime: '11:00', title: 'Clase Algoritmos' },
-  { id: '102', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Lun', startTime: '10:00', endTime: '13:00', title: 'Trabajo Remoto' },
-  { id: '103', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Lun', startTime: '14:00', endTime: '18:00', title: 'Gimnasio & Estudio' },
-  { id: '104', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Mar', startTime: '10:00', endTime: '14:00', title: 'Turno Trabajo' },
-  { id: '105', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Mar', startTime: '08:00', endTime: '12:00', title: 'Clase Física' },
-  { id: '106', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Mié', startTime: '08:00', endTime: '10:00', title: 'Universidad' },
-  { id: '107', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Mié', startTime: '08:00', endTime: '11:00', title: 'Reunión Equipo' },
-  { id: '108', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Mié', startTime: '15:00', endTime: '18:00', title: 'Clase Inglés' },
-  { id: '109', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Jue', startTime: '10:00', endTime: '14:00', title: 'Turno Trabajo' },
-  { id: '110', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Jue', startTime: '12:00', endTime: '16:00', title: 'Cita Médica' },
-  { id: '111', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
+  { id: '101', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Lun', startTime: '08:00', endTime: '11:00', title: 'Clase Algoritmos' },
+  { id: '102', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: colorByIndex(1), day: 'Lun', startTime: '10:00', endTime: '13:00', title: 'Trabajo Remoto' },
+  { id: '103', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: colorByIndex(2), day: 'Lun', startTime: '14:00', endTime: '18:00', title: 'Gimnasio & Estudio' },
+  { id: '104', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Mar', startTime: '10:00', endTime: '14:00', title: 'Turno Trabajo' },
+  { id: '105', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: colorByIndex(2), day: 'Mar', startTime: '08:00', endTime: '12:00', title: 'Clase Física' },
+  { id: '106', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Mié', startTime: '08:00', endTime: '10:00', title: 'Universidad' },
+  { id: '107', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: colorByIndex(1), day: 'Mié', startTime: '08:00', endTime: '11:00', title: 'Reunión Equipo' },
+  { id: '108', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: colorByIndex(2), day: 'Mié', startTime: '15:00', endTime: '18:00', title: 'Clase Inglés' },
+  { id: '109', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Jue', startTime: '10:00', endTime: '14:00', title: 'Turno Trabajo' },
+  { id: '110', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: colorByIndex(1), day: 'Jue', startTime: '12:00', endTime: '16:00', title: 'Cita Médica' },
+  { id: '111', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
 ];
 
 const INITIAL_PROPOSALS: PlanProposal[] = [
@@ -201,7 +202,7 @@ export const useGroupsStore = create<GroupsState>()(
           creadoPor: userEmail,
           umbralDisponibilidad,
           miembros: [
-            { email: userEmail, nombre: userName, isEssential: true, color: '#8b5cf6', status: 'confirmado' },
+            { email: userEmail, nombre: userName, isEssential: true, color: colorByIndex(0), status: 'confirmado' },
           ],
         };
         set((state) => ({
@@ -226,7 +227,7 @@ export const useGroupsStore = create<GroupsState>()(
 
         const updatedMembers: GroupMember[] = [
           ...targetGroup.miembros,
-          { email: userEmail, nombre: userName, isEssential: false, color: '#10b981', status: 'confirmado' },
+          { email: userEmail, nombre: userName, isEssential: false, color: colorByIndex(3), status: 'confirmado' },
         ];
 
         set((s) => ({

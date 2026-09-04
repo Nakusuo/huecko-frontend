@@ -1,61 +1,162 @@
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Huecko — sistema de diseño
+   Fuente única de verdad para color, tipografía y movimiento.
+   Las fuentes se cargan en index.html (con preconnect) para no bloquear el
+   render con un @import encadenado.
+   --------------------------------------------------------------------------- */
+
 @theme {
+  /* --- Color: roles Material 3 --------------------------------------------
+     Cambiar la marca = cambiar este bloque. Ningún componente conoce un hex. */
   --color-primary: #3f5d45;
+  --color-primary-hover: #34503a;
   --color-on-primary: #ffffff;
   --color-primary-container: #e4eadf;
   --color-on-primary-container: #26352a;
-  --color-secondary: #72876e;
+
+  --color-secondary: #5f7359;
+  --color-secondary-hover: #4f604e;
   --color-on-secondary: #ffffff;
   --color-secondary-container: #e9ede4;
   --color-on-secondary-container: #293229;
+
   --color-tertiary: #687668;
   --color-on-tertiary: #ffffff;
-  --color-tertiary-container: #bcebe9;
-  --color-on-tertiary-container: #002021;
+  --color-tertiary-container: #e5e9e0;
+  --color-on-tertiary-container: #2e382f;
+
   --color-error: #ba1a1a;
   --color-on-error: #ffffff;
   --color-error-container: #ffdad6;
   --color-on-error-container: #410002;
+
+  --color-success: #2f6b4f;
+  --color-on-success: #ffffff;
+  --color-success-container: #dcece2;
+  --color-on-success-container: #10301f;
+
+  --color-warning: #8a5a10;
+  --color-on-warning: #ffffff;
+  --color-warning-container: #fbeacd;
+  --color-on-warning-container: #3a2504;
+
   --color-background: #f7f5ef;
   --color-on-background: #263027;
   --color-surface: #f7f5ef;
   --color-on-surface: #263027;
   --color-surface-variant: #ece9df;
   --color-on-surface-variant: #596058;
+
+  /* `outline` es color de BORDE y de placeholder. Nunca de texto de lectura:
+     sobre surface da 3.9:1 y no pasa AA. Para texto secundario usa
+     `on-surface-variant` (5.9:1). */
   --color-outline: #777d73;
   --color-outline-variant: #d8d5c8;
+
   --color-shadow: #000000;
-  --color-scrim: #000000;
+  --color-scrim: #1a211b;
   --color-inverse-surface: #2e382f;
   --color-inverse-on-surface: #f7f5ef;
   --color-inverse-primary: #c8d5c4;
-  --color-primary-fixed: #e4eadf;
-  --color-on-primary-fixed: #26352a;
-  --color-primary-fixed-dim: #c8d5c4;
-  --color-on-primary-fixed-variant: #3f5d45;
-  --color-secondary-fixed: #e9ede4;
-  --color-on-secondary-fixed: #293229;
-  --color-secondary-fixed-dim: #ccd7c8;
-  --color-on-secondary-fixed-variant: #4f604e;
-  --color-tertiary-fixed: #e5e9e0;
-  --color-on-tertiary-fixed: #2e382f;
-  --color-tertiary-fixed-dim: #ccd3c9;
-  --color-on-tertiary-fixed-variant: #536153;
+
   --color-surface-dim: #e7e4da;
-  --color-surface-bright: #f7f5ef;
+  --color-surface-bright: #fcfbf7;
   --color-surface-container-lowest: #ffffff;
   --color-surface-container-low: #f3f1ea;
   --color-surface-container: #eeece4;
   --color-surface-container-high: #e8e6dc;
   --color-surface-container-highest: #e2e0d6;
 
-  --font-headline: 'EB Garamond', serif;
-  --font-body: 'Inter', sans-serif;
+  /* Verde profundo de marca: paneles y degradados de identidad. */
+  --color-brand-deep: #1f2c22;
+  --color-brand-mid: #34503a;
+
+  /* Colores de categoría de bloques y grupos (datos, no cromo de interfaz). */
+  --color-cat-clase: #8a5a10;
+  --color-cat-trabajo: #3c5a80;
+  --color-cat-libre: #2f6b4f;
+  --color-cat-puntual: #6b4b7a;
+  --color-cat-social: #9a5a52;
+  --color-cat-estudio: #5e7383;
+
+  /* Verde de marca de WhatsApp: color ajeno, no se tokeniza por rol. */
+  --color-whatsapp: #25d366;
+  --color-whatsapp-hover: #1eb455;
+
+  /* --- Tipografía ---------------------------------------------------------
+     Un único escalón por debajo de `text-xs` (12px), para metadatos densos:
+     insignias, contadores, sellos de tiempo. Sustituye a los cuatro tamaños
+     sueltos que había —8, 9, 10 y 11px—; los de 8 y 9px eran ilegibles. Nada
+     que forme una frase debería bajar de `text-xs`. */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-2xs--line-height: 1.45;
+
+  --font-headline: 'EB Garamond', ui-serif, Georgia, serif;
+  --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* --- Movimiento ---------------------------------------------------------
+     Easing exponencial: los objetos reales desaceleran, no rebotan. */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-fade-in: fade-in 220ms var(--ease-out-quart) both;
+  --animate-rise-in: rise-in 260ms var(--ease-out-quart) both;
+  --animate-modal-in: modal-in 200ms var(--ease-out-expo) both;
+  --animate-scrim-in: fade-in 160ms var(--ease-out-quart) both;
+  --animate-toast-in: toast-in 280ms var(--ease-out-expo) both;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes modal-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
 }
 
-*, *::before, *::after {
+/* ---------------------------------------------------------------------------
+   Base
+   --------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -63,19 +164,74 @@ body {
   margin: 0;
   font-family: var(--font-body);
   background-color: var(--color-surface);
-  color: var(--color-on-surface); /* #161d15 */
+  color: var(--color-on-surface);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Anillo de foco visible y consistente en toda la app.
+   Se aplica solo a navegación por teclado, nunca al clic de ratón. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Los componentes que anulan el outline para dibujar su propio anillo
+   siguen recibiendo uno; nunca se queda un elemento sin indicador. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Salto al contenido: primer tabulador de cada página. */
+.skip-link {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  translate: -50% -120%;
+  z-index: 100;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0 0 0.75rem 0.75rem;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: translate 180ms var(--ease-out-quart);
+}
+
+.skip-link:focus-visible {
+  translate: -50% 0;
 }
 
 .material-symbols-outlined {
   /* ICONO: reemplazar estos spans por tus iconos propios cuando estén listos. */
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  /* Evita que el nombre de la ligadura ("notifications") se lea en voz alta
+     y que el icono se parta durante la carga de la fuente. */
+  user-select: none;
+  line-height: 1;
 }
 
 .ambient-shadow {
-  box-shadow: 0px 10px 30px rgba(65, 104, 64, 0.05);
+  box-shadow: 0 10px 30px rgb(38 48 39 / 0.06);
 }
 
 .glow-effect {
-  box-shadow: inset 0 0 12px rgba(168, 201, 160, 0.4);
+  box-shadow: inset 0 0 12px rgb(114 135 110 / 0.35);
+}
+
+/* ---------------------------------------------------------------------------
+   Accesibilidad: respeta a quien pide menos movimiento
+   --------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

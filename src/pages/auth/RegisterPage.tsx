@@ -71,7 +71,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4fbf1] flex text-[#161d15]">
+    <div className="min-h-screen bg-surface flex text-on-surface">
       {/* Branding Panel (Desktop) */}
       <BrandingPanel />
 
@@ -80,12 +80,12 @@ export default function RegisterPage() {
         <div className="w-full max-w-md py-4">
           <MobileLogo />
 
-          <div className="bg-[#e9f0e4]/90 border border-[#d5e3cf] rounded-3xl p-7 md:p-9 shadow-lg shadow-[#7fae7a]/10 backdrop-blur-md">
+          <div className="bg-surface-container/90 border border-outline-variant rounded-3xl p-7 md:p-9 shadow-lg shadow-secondary/10 backdrop-blur-md">
             <div className="mb-6">
-              <h2 className="text-2xl md:text-3xl font-bold text-[#161d15] font-headline mb-1.5">
+              <h2 className="text-2xl md:text-3xl font-bold text-on-surface font-headline mb-1.5">
                 Crea tu cuenta
               </h2>
-              <p className="text-[#40493e] text-sm">
+              <p className="text-on-surface-variant text-sm">
                 Únete a Huecko y empieza a coordinar horarios sin esfuerzo.
               </p>
             </div>
@@ -95,13 +95,13 @@ export default function RegisterPage() {
               <div className="space-y-1.5">
                 <label
                   htmlFor="nombre"
-                  className="block text-xs font-semibold uppercase tracking-wider text-[#40493e]"
+                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
                   Nombre Completo
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#70796d] flex items-center">
-                    <span className="material-symbols-outlined text-[20px]">person</span>
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[20px]">person</span>
                   </span>
                   <input
                     id="nombre"
@@ -109,16 +109,16 @@ export default function RegisterPage() {
                     autoComplete="name"
                     placeholder="Alex Rodríguez"
                     {...register('nombre')}
-                    className={`w-full pl-11 pr-4 py-3 rounded-xl text-sm bg-white text-[#161d15] placeholder-[#8a9486] border outline-none transition-all duration-200 focus:ring-2 focus:ring-[#7fae7a]/30 focus:border-[#416840] ${
+                    className={`w-full pl-11 pr-4 py-3 rounded-xl text-sm bg-surface-container-lowest text-on-surface placeholder-outline border outline-none transition-all duration-200 focus:ring-2 focus:ring-secondary/30 focus:border-primary ${
                       errors.nombre
-                        ? 'border-red-400 bg-red-50/50'
-                        : 'border-[#c0c9bb] hover:border-[#7fae7a]'
+                        ? 'border-error/50 bg-error-container/50'
+                        : 'border-outline-variant hover:border-secondary'
                     }`}
                   />
                 </div>
                 {errors.nombre && (
-                  <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
-                    <span className="material-symbols-outlined text-[14px]">error</span>
+                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
                     {errors.nombre.message}
                   </p>
                 )}
@@ -128,13 +128,13 @@ export default function RegisterPage() {
               <div className="space-y-1.5">
                 <label
                   htmlFor="email"
-                  className="block text-xs font-semibold uppercase tracking-wider text-[#40493e]"
+                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
                   Correo Electrónico
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#70796d] flex items-center">
-                    <span className="material-symbols-outlined text-[20px]">mail</span>
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[20px]">mail</span>
                   </span>
                   <input
                     id="email"
@@ -142,16 +142,16 @@ export default function RegisterPage() {
                     autoComplete="email"
                     placeholder="tu@correo.com"
                     {...register('email')}
-                    className={`w-full pl-11 pr-4 py-3 rounded-xl text-sm bg-white text-[#161d15] placeholder-[#8a9486] border outline-none transition-all duration-200 focus:ring-2 focus:ring-[#7fae7a]/30 focus:border-[#416840] ${
+                    className={`w-full pl-11 pr-4 py-3 rounded-xl text-sm bg-surface-container-lowest text-on-surface placeholder-outline border outline-none transition-all duration-200 focus:ring-2 focus:ring-secondary/30 focus:border-primary ${
                       errors.email
-                        ? 'border-red-400 bg-red-50/50'
-                        : 'border-[#c0c9bb] hover:border-[#7fae7a]'
+                        ? 'border-error/50 bg-error-container/50'
+                        : 'border-outline-variant hover:border-secondary'
                     }`}
                   />
                 </div>
                 {errors.email && (
-                  <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
-                    <span className="material-symbols-outlined text-[14px]">error</span>
+                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
                     {errors.email.message}
                   </p>
                 )}
@@ -161,13 +161,13 @@ export default function RegisterPage() {
               <div className="space-y-1.5">
                 <label
                   htmlFor="password"
-                  className="block text-xs font-semibold uppercase tracking-wider text-[#40493e]"
+                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
                   Contraseña
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#70796d] flex items-center">
-                    <span className="material-symbols-outlined text-[20px]">lock</span>
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[20px]">lock</span>
                   </span>
                   <input
                     id="password"
@@ -175,26 +175,26 @@ export default function RegisterPage() {
                     autoComplete="new-password"
                     placeholder="••••••••"
                     {...register('password')}
-                    className={`w-full pl-11 pr-12 py-3 rounded-xl text-sm bg-white text-[#161d15] placeholder-[#8a9486] border outline-none transition-all duration-200 focus:ring-2 focus:ring-[#7fae7a]/30 focus:border-[#416840] ${
+                    className={`w-full pl-11 pr-12 py-3 rounded-xl text-sm bg-surface-container-lowest text-on-surface placeholder-outline border outline-none transition-all duration-200 focus:ring-2 focus:ring-secondary/30 focus:border-primary ${
                       errors.password
-                        ? 'border-red-400 bg-red-50/50'
-                        : 'border-[#c0c9bb] hover:border-[#7fae7a]'
+                        ? 'border-error/50 bg-error-container/50'
+                        : 'border-outline-variant hover:border-secondary'
                     }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#70796d] hover:text-[#161d15] transition-colors p-1 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors p-1 cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-[20px]">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
                       {showPassword ? 'visibility_off' : 'visibility'}
                     </span>
                   </button>
                 </div>
                 {errors.password && (
-                  <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
-                    <span className="material-symbols-outlined text-[14px]">error</span>
+                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
                     {errors.password.message}
                   </p>
                 )}
@@ -204,13 +204,13 @@ export default function RegisterPage() {
               <div className="space-y-1.5">
                 <label
                   htmlFor="confirmPassword"
-                  className="block text-xs font-semibold uppercase tracking-wider text-[#40493e]"
+                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
                   Confirmar Contraseña
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#70796d] flex items-center">
-                    <span className="material-symbols-outlined text-[20px]">lock_reset</span>
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[20px]">lock_reset</span>
                   </span>
                   <input
                     id="confirmPassword"
@@ -218,26 +218,26 @@ export default function RegisterPage() {
                     autoComplete="new-password"
                     placeholder="••••••••"
                     {...register('confirmPassword')}
-                    className={`w-full pl-11 pr-12 py-3 rounded-xl text-sm bg-white text-[#161d15] placeholder-[#8a9486] border outline-none transition-all duration-200 focus:ring-2 focus:ring-[#7fae7a]/30 focus:border-[#416840] ${
+                    className={`w-full pl-11 pr-12 py-3 rounded-xl text-sm bg-surface-container-lowest text-on-surface placeholder-outline border outline-none transition-all duration-200 focus:ring-2 focus:ring-secondary/30 focus:border-primary ${
                       errors.confirmPassword
-                        ? 'border-red-400 bg-red-50/50'
-                        : 'border-[#c0c9bb] hover:border-[#7fae7a]'
+                        ? 'border-error/50 bg-error-container/50'
+                        : 'border-outline-variant hover:border-secondary'
                     }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword((prev) => !prev)}
                     aria-label={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#70796d] hover:text-[#161d15] transition-colors p-1 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors p-1 cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-[20px]">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
                       {showConfirmPassword ? 'visibility_off' : 'visibility'}
                     </span>
                   </button>
                 </div>
                 {errors.confirmPassword && (
-                  <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
-                    <span className="material-symbols-outlined text-[14px]">error</span>
+                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
                     {errors.confirmPassword.message}
                   </p>
                 )}
@@ -245,8 +245,8 @@ export default function RegisterPage() {
 
               {/* Error del Servidor */}
               {serverError && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
-                  <span className="material-symbols-outlined text-[18px] shrink-0 text-red-600">
+                <div className="p-3 rounded-xl bg-error-container border border-error/30 text-xs text-error flex items-start gap-2">
+                  <span aria-hidden="true" className="material-symbols-outlined text-[18px] shrink-0 text-error">
                     cancel
                   </span>
                   <span>{serverError}</span>
@@ -260,8 +260,8 @@ export default function RegisterPage() {
                 disabled={isSubmitting}
                 className="
                   w-full py-3 px-4 rounded-xl font-semibold text-sm mt-3
-                  bg-[#416840] hover:bg-[#345333] active:scale-[0.98]
-                  text-white shadow-md shadow-[#416840]/25
+                  bg-primary hover:bg-primary-hover active:scale-[0.98]
+                  text-on-primary shadow-md shadow-primary/25
                   transition-all duration-200 cursor-pointer
                   disabled:opacity-60 disabled:cursor-not-allowed
                   flex items-center justify-center gap-2
@@ -269,7 +269,7 @@ export default function RegisterPage() {
               >
                 {isSubmitting ? (
                   <>
-                    <span className="material-symbols-outlined animate-spin text-[18px]">
+                    <span aria-hidden="true" className="material-symbols-outlined animate-spin text-[18px]">
                       progress_activity
                     </span>
                     <span>Creando cuenta...</span>
@@ -277,7 +277,7 @@ export default function RegisterPage() {
                 ) : (
                   <>
                     <span>Crear cuenta</span>
-                    <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                    <span aria-hidden="true" className="material-symbols-outlined text-[18px]">arrow_forward</span>
                   </>
                 )}
               </button>
@@ -285,17 +285,17 @@ export default function RegisterPage() {
 
             {/* Separador */}
             <div className="my-5 flex items-center gap-3">
-              <div className="flex-1 h-px bg-[#c0c9bb]/60" />
-              <span className="text-xs text-[#70796d]">o</span>
-              <div className="flex-1 h-px bg-[#c0c9bb]/60" />
+              <div className="flex-1 h-px bg-outline-variant/60" />
+              <span className="text-xs text-on-surface-variant">o</span>
+              <div className="flex-1 h-px bg-outline-variant/60" />
             </div>
 
             {/* Enlace Login */}
-            <p className="text-center text-sm text-[#40493e]">
+            <p className="text-center text-sm text-on-surface-variant">
               ¿Ya tienes una cuenta?{' '}
               <Link
                 to="/login"
-                className="text-[#416840] hover:text-[#2a4f2b] font-bold underline transition-colors"
+                className="text-primary hover:text-primary-hover font-bold underline transition-colors"
               >
                 Inicia sesión aquí
               </Link>
@@ -309,20 +309,20 @@ export default function RegisterPage() {
 
 function BrandingPanel() {
   return (
-    <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center p-12 bg-gradient-to-br from-[#1e3b1f] via-[#2a4f2b] to-[#416840] text-white">
+    <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center p-12 bg-gradient-to-br from-brand-deep via-primary-hover to-primary text-white">
       {/* Decorative Orbs */}
-      <div className="absolute top-1/4 -left-20 w-80 h-80 bg-[#7fae7a]/25 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-[#c3e5bb]/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-3/4 left-1/3 w-48 h-48 bg-[#bcebe9]/15 rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute top-1/4 -left-20 w-80 h-80 bg-secondary/25 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-primary-container/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-3/4 left-1/3 w-48 h-48 bg-tertiary-container/15 rounded-full blur-2xl pointer-events-none" />
 
       <div className="relative z-10 text-center max-w-md">
         <div className="mb-6 flex items-center justify-center">
           <div className="relative">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#7fae7a] to-[#416840] flex items-center justify-center shadow-2xl shadow-black/30 border border-white/20">
+            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-secondary to-primary flex items-center justify-center shadow-2xl shadow-black/30 border border-white/20">
               <span className="text-4xl font-black text-white tracking-tighter">H</span>
             </div>
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#c3e5bb] rounded-full border-2 border-[#1e3b1f] flex items-center justify-center">
-              <div className="w-2 h-2 bg-[#416840] rounded-full" />
+            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-primary-container rounded-full border-2 border-brand-deep flex items-center justify-center">
+              <div className="w-2 h-2 bg-primary rounded-full" />
             </div>
           </div>
         </div>
@@ -330,7 +330,7 @@ function BrandingPanel() {
         <h1 className="text-5xl font-bold font-headline mb-2 tracking-tight text-white">
           Huecko
         </h1>
-        <p className="text-[#c3e5bb] text-lg font-medium mb-8">
+        <p className="text-primary-container text-lg font-medium mb-8">
           Coordinación Social, Naturalmente.
         </p>
 
@@ -338,9 +338,9 @@ function BrandingPanel() {
           {FEATURE_PILLS.map((item) => (
             <span
               key={item.label}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white/10 border border-white/15 rounded-full text-xs text-[#eff6eb] backdrop-blur-sm shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-surface-container-lowest/10 border border-white/15 rounded-full text-xs text-surface-container-low backdrop-blur-sm shadow-xs"
             >
-              <span className="material-symbols-outlined text-[16px] text-[#c3e5bb]">
+              <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-primary-container">
                 {item.icon}
               </span>
               {item.label}
@@ -348,15 +348,15 @@ function BrandingPanel() {
           ))}
         </div>
 
-        <div className="p-4 bg-white/10 border border-white/15 rounded-2xl backdrop-blur-md text-left shadow-lg shadow-black/10">
-          <p className="text-[#eff6eb] text-sm italic leading-relaxed">
+        <div className="p-4 bg-surface-container-lowest/10 border border-white/15 rounded-2xl backdrop-blur-md text-left shadow-lg shadow-black/10">
+          <p className="text-surface-container-low text-sm italic leading-relaxed">
             "Coordina tus huecos libres entre clases y sal con tus amigos al instante."
           </p>
           <div className="mt-3 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#7fae7a] to-[#c3e5bb] flex items-center justify-center text-xs font-bold text-[#1e3b1f]">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-secondary to-primary-container flex items-center justify-center text-xs font-bold text-brand-deep">
               H
             </div>
-            <span className="text-xs text-[#c3e5bb]">Comunidad Universitaria Huecko</span>
+            <span className="text-xs text-primary-container">Comunidad Universitaria Huecko</span>
           </div>
         </div>
       </div>
@@ -367,10 +367,10 @@ function BrandingPanel() {
 function MobileLogo() {
   return (
     <div className="lg:hidden flex items-center gap-3 mb-6 justify-center">
-      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#7fae7a] to-[#416840] flex items-center justify-center shadow-md shadow-[#7fae7a]/20">
+      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-secondary to-primary flex items-center justify-center shadow-md shadow-secondary/20">
         <span className="text-xl font-black text-white">H</span>
       </div>
-      <span className="text-2xl font-bold font-headline text-[#161d15] tracking-tight">Huecko</span>
+      <span className="text-2xl font-bold font-headline text-on-surface tracking-tight">Huecko</span>
     </div>
   );
 }
