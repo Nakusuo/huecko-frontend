@@ -7,11 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "dev:stub": "node tools/stub-backend.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
     "axios": "^1.19.0",
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-hook-form": "^7.86.0",
