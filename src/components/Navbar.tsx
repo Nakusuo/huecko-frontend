@@ -1,122 +1,194 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { isApiEnabled } from '../lib/apiClient';
 
+export type NavTab = 'dashboard' | 'schedule' | 'groups' | 'profile';
+
 interface NavbarProps {
-  currentTab?: 'dashboard' | 'schedule' | 'groups' | 'profile';
+  currentTab: NavTab;
 }
+
+interface NavItem {
+  tab: NavTab;
+  to: string;
+  /** Etiqueta completa, para la barra de escritorio. */
+  label: string;
+  /** Etiqueta corta, para la barra inferior en móvil. */
+  shortLabel: string;
+  icon: string;
+}
+
+/**
+ * Un único origen para los destinos de navegación.
+ * Antes este arreglo estaba desplegado a mano diez veces —cinco en la barra
+ * superior y cinco en la inferior—, así que cada destino nuevo había que
+ * añadirlo en dos sitios y era fácil que divergieran.
+ */
+const NAV_ITEMS: NavItem[] = [
+  { tab: 'dashboard', to: '/dashboard', label: 'Dashboard', shortLabel: 'Inicio', icon: 'dashboard' },
+  { tab: 'schedule', to: '/schedule', label: 'Mi Horario', shortLabel: 'Horario', icon: 'calendar_month' },
+  { tab: 'groups', to: '/groups', label: 'Mis Grupos', shortLabel: 'Grupos', icon: 'group' },
+];
 
 export default function Navbar({ currentTab }: NavbarProps) {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
+  const { notifications, markAsRead, markAllAsRead } = useNotificationStore();
 
-  // Notifications
-  const notifications = useNotificationStore((s) => s.notifications);
-  const markAsRead = useNotificationStore((s) => s.markAsRead);
-  const markAllAsRead = useNotificationStore((s) => s.markAllAsRead);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const notifTriggerRef = useRef<HTMLButtonElement>(null);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
+
+  /* El desplegable de notificaciones se cerraba solo al volver a pulsar la
+     campana: ni Escape ni un clic fuera lo cerraban, así que se quedaba abierto
+     tapando la página mientras navegabas. */
+  useEffect(() => {
+    if (!isNotifOpen) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (notifRef.current?.contains(target) || notifTriggerRef.current?.contains(target)) return;
+      setIsNotifOpen(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsNotifOpen(false);
+      // Devuelve el foco a la campana, para no perder el sitio al cerrar.
+      notifTriggerRef.current?.focus();
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isNotifOpen]);
+
+  const desktopLinkClass = (tab: NavTab) =>
+    `text-sm font-medium transition-colors rounded-md px-1 ${
+      currentTab === tab
+        ? 'text-primary border-b-2 border-secondary pb-1 font-bold'
+        : 'text-on-surface-variant hover:text-on-surface'
+    }`;
+
+  const mobileLinkClass = (tab: NavTab) =>
+    `flex flex-col items-center justify-center gap-0.5 min-w-16 min-h-12 px-2 py-1.5 rounded-xl transition-colors ${
+      currentTab === tab
+        ? 'text-primary font-bold'
+        : 'text-on-surface-variant hover:text-on-surface'
+    }`;
 
   return (
     <>
-      {/* TopNavBar (Desktop) */}
-      <nav className="hidden md:flex justify-between items-center px-8 py-3.5 bg-[#e9f0e4] border-b border-[#d5e3cf] sticky top-0 z-50 backdrop-blur-md bg-opacity-95 shadow-xs">
-        <div className="flex items-center gap-4">
-          <div
-            className="flex items-center gap-3 cursor-pointer"
-            onClick={() => navigate('/dashboard')}
-          >
-            <div className="w-9 h-9 rounded-xl bg-[#3f5d45] flex items-center justify-center font-black text-white text-lg shadow-sm">
-              H
-            </div>
-            <span className="text-xl font-bold text-[#161d15] tracking-tight">Huecko</span>
-          </div>
+      <a href="#contenido" className="skip-link">
+        Saltar al contenido
+      </a>
 
-          {/* Badge de conexión Backend */}
-          <div
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
-              isApiEnabled
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : 'bg-amber-50 text-amber-700 border-amber-200'
-            }`}
-            title={isApiEnabled ? 'Conectado a la API Backend de Huecko' : 'Operando en Modo Demostración local'}
+      {/* --- Barra superior (escritorio) --- */}
+      <nav
+        aria-label="Navegación principal"
+        className="hidden md:flex bg-surface fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-7xl rounded-full border border-outline-variant shadow-sm justify-between items-center px-8 py-3 z-50"
+      >
+        <Link to="/dashboard" className="flex items-center gap-3 rounded-full">
+          <span
+            aria-hidden="true"
+            className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center font-black text-on-primary text-lg"
           >
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isApiEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-              }`}
-            />
-            <span>{isApiEnabled ? 'API Conectada' : 'Modo Demo'}</span>
-          </div>
-        </div>
+            H
+          </span>
+          <span className="text-xl font-bold text-on-surface tracking-tight">Huecko</span>
+        </Link>
+
+        {/* Distingue de un vistazo si la app habla con el backend o corre en
+            modo demostración; sin esto, un fallo de conexión se confunde con
+            datos reales que simplemente están vacíos. */}
+        <span
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-medium border ${
+            isApiEnabled
+              ? 'bg-success-container text-on-success-container border-success/30'
+              : 'bg-warning-container text-on-warning-container border-warning/30'
+          }`}
+          title={
+            isApiEnabled
+              ? 'Conectado al backend de Huecko'
+              : 'Operando con datos simulados en local'
+          }
+        >
+          <span
+            aria-hidden="true"
+            className={`w-2 h-2 rounded-full ${isApiEnabled ? 'bg-success' : 'bg-warning'}`}
+          />
+          {isApiEnabled ? 'API conectada' : 'Modo demo'}
+        </span>
 
         <div className="flex gap-7 items-center">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className={`text-sm font-medium transition-colors cursor-pointer ${
-              currentTab === 'dashboard'
-                ? 'text-[#416840] border-b-2 border-[#7fae7a] pb-1 font-bold'
-                : 'text-[#40493e] hover:text-[#161d15]'
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => navigate('/schedule')}
-            className={`text-sm font-medium transition-colors cursor-pointer ${
-              currentTab === 'schedule'
-                ? 'text-[#416840] border-b-2 border-[#7fae7a] pb-1 font-bold'
-                : 'text-[#40493e] hover:text-[#161d15]'
-            }`}
-          >
-            Mi Horario
-          </button>
-          <button
-            onClick={() => navigate('/groups')}
-            className={`text-sm font-medium transition-colors cursor-pointer ${
-              currentTab === 'groups'
-                ? 'text-[#416840] border-b-2 border-[#7fae7a] pb-1 font-bold'
-                : 'text-[#40493e] hover:text-[#161d15]'
-            }`}
-          >
-            Mis Grupos
-          </button>
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.tab}
+              to={item.to}
+              aria-current={currentTab === item.tab ? 'page' : undefined}
+              className={desktopLinkClass(item.tab)}
+            >
+              {item.label}
+            </Link>
+          ))}
         </div>
 
-        <div className="flex items-center gap-4 relative">
+        <div className="flex items-center gap-4">
           {/* Centro de notificaciones */}
           <div className="relative">
             <button
-              onClick={() => setIsNotifOpen(!isNotifOpen)}
-              className="p-2 text-[#40493e] hover:text-[#161d15] hover:bg-[#d5e3cf]/50 rounded-full transition-colors relative cursor-pointer flex items-center justify-center"
-              title="Notificaciones"
+              ref={notifTriggerRef}
+              type="button"
+              onClick={() => setIsNotifOpen((open) => !open)}
+              aria-expanded={isNotifOpen}
+              aria-haspopup="true"
+              aria-label={
+                unreadCount > 0
+                  ? `Notificaciones, ${unreadCount} sin leer`
+                  : 'Notificaciones'
+              }
+              className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-full transition-colors relative flex items-center justify-center"
             >
-              <span className="material-symbols-outlined text-xl">notifications</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-xl">
+                notifications
+              </span>
               {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 bg-amber-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                <span
+                  aria-hidden="true"
+                  className="absolute top-0.5 right-0.5 bg-error text-on-error text-2xs font-bold min-w-4 h-4 px-1 rounded-full flex items-center justify-center"
+                >
                   {unreadCount}
                 </span>
               )}
             </button>
 
-            {/* Notifications Menu */}
             {isNotifOpen && (
-              <div className="absolute right-0 mt-3 w-80 bg-white border border-[#d5e3cf] rounded-2xl shadow-xl p-4 z-50 animate-fadeIn">
-                <div className="flex justify-between items-center pb-2 border-b border-[#e9f0e4] mb-3">
-                  <h4 className="font-bold text-sm text-[#161d15]">Notificaciones</h4>
+              <div
+                ref={notifRef}
+                role="dialog"
+                aria-label="Notificaciones"
+                className="absolute right-0 mt-3 w-80 bg-surface-container-lowest border border-outline-variant rounded-2xl shadow-xl p-4 z-50 animate-fade-in"
+              >
+                <div className="flex justify-between items-center pb-2 border-b border-outline-variant mb-3">
+                  <h2 className="font-bold text-sm text-on-surface">Notificaciones</h2>
                   {unreadCount > 0 && (
                     <button
+                      type="button"
                       onClick={markAllAsRead}
-                      className="text-xs text-[#416840] hover:underline font-medium cursor-pointer"
+                      className="text-xs text-primary hover:underline font-medium rounded-md"
                     >
                       Marcar leídas
                     </button>
@@ -125,28 +197,38 @@ export default function Navbar({ currentTab }: NavbarProps) {
 
                 <div className="max-h-64 overflow-y-auto space-y-2">
                   {notifications.length === 0 ? (
-                    <p className="text-xs text-[#70796d] text-center py-4">No tienes notificaciones.</p>
+                    <p className="text-xs text-on-surface-variant text-center py-4">
+                      No tienes notificaciones.
+                    </p>
                   ) : (
                     notifications.map((n) => (
-                      <div
+                      /* Antes era un <div onClick>: no recibía el foco al tabular
+                         ni respondía a Intro o Espacio. */
+                      <button
                         key={n.id}
+                        type="button"
                         onClick={() => {
                           markAsRead(n.id);
                           if (n.groupId) navigate('/groups');
                           setIsNotifOpen(false);
                         }}
-                        className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-colors ${
+                        className={`w-full text-left p-2.5 rounded-xl border text-xs transition-colors ${
                           !n.read
-                            ? 'bg-[#f4fbf1] border-[#7fae7a]/40 font-medium'
-                            : 'bg-gray-50 border-gray-100 text-gray-600'
+                            ? 'bg-primary-container/50 border-secondary/40 font-medium hover:bg-primary-container'
+                            : 'bg-surface-container-low border-outline-variant/60 text-on-surface-variant hover:bg-surface-container'
                         }`}
                       >
-                        <div className="flex justify-between items-start mb-1">
-                          <span className="font-bold text-[#161d15]">{n.title}</span>
-                          <span className="text-[10px] text-gray-400">{n.timestamp}</span>
-                        </div>
-                        <p className="text-[11px] text-[#40493e]">{n.description}</p>
-                      </div>
+                        <span className="flex justify-between items-start gap-2 mb-1">
+                          <span className="font-bold text-on-surface">{n.title}</span>
+                          <span className="text-2xs text-on-surface-variant shrink-0">
+                            {n.timestamp}
+                          </span>
+                        </span>
+                        <span className="block text-2xs text-on-surface-variant">
+                          {n.description}
+                        </span>
+                        {!n.read && <span className="sr-only">(sin leer)</span>}
+                      </button>
                     ))
                   )}
                 </div>
@@ -154,77 +236,54 @@ export default function Navbar({ currentTab }: NavbarProps) {
             )}
           </div>
 
-          <button
-            onClick={() => navigate('/profile')}
-            className={`text-sm font-semibold transition-all cursor-pointer rounded-full px-5 py-2 ${
+          <Link
+            to="/profile"
+            aria-current={currentTab === 'profile' ? 'page' : undefined}
+            className={`text-sm font-semibold transition-colors rounded-full px-5 py-2 ${
               currentTab === 'profile'
-                ? 'bg-[#416840] text-white shadow-md shadow-[#7fae7a]/20'
-                : 'bg-[#7fae7a] hover:bg-[#6f9e6a] text-white shadow-sm'
+                ? 'bg-primary text-on-primary shadow-sm'
+                : 'bg-primary-container text-on-primary-container hover:bg-secondary-container'
             }`}
           >
-            {user?.nombre ? user.nombre.split(' ')[0] : 'Mi Perfil'}
-          </button>
+            {user?.nombre?.split(' ')[0] || 'Mi Perfil'}
+          </Link>
 
           <button
+            type="button"
             onClick={handleLogout}
-            title="Cerrar sesión"
-            className="flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200/80 px-3.5 py-2 rounded-full transition-all cursor-pointer shadow-xs active:scale-95"
+            className="flex items-center gap-1.5 text-xs font-semibold text-error hover:bg-error-container border border-error/30 px-3.5 py-2 rounded-full transition-colors active:scale-95"
           >
-            <span className="material-symbols-outlined text-[18px]">logout</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+              logout
+            </span>
             <span>Salir</span>
           </button>
         </div>
       </nav>
 
-      {/* BottomNavBar (Mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-1 pb-6 pt-3 bg-[#e9f0e4] border-t border-[#d5e3cf]">
-        <button
-          onClick={() => navigate('/dashboard')}
-          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
-            currentTab === 'dashboard' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
-          }`}
-        >
-          <span className="material-symbols-outlined">dashboard</span>
-          <span className="text-[10px]">Inicio</span>
-        </button>
-
-        <button
-          onClick={() => navigate('/schedule')}
-          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
-            currentTab === 'schedule' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
-          }`}
-        >
-          <span className="material-symbols-outlined">calendar_month</span>
-          <span className="text-[10px]">Horario</span>
-        </button>
-
-        <button
-          onClick={() => navigate('/groups')}
-          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
-            currentTab === 'groups' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
-          }`}
-        >
-          <span className="material-symbols-outlined">group</span>
-          <span className="text-[10px]">Grupos</span>
-        </button>
-
-        <button
-          onClick={() => navigate('/profile')}
-          className={`flex flex-col items-center justify-center px-2 py-1.5 transition-colors cursor-pointer ${
-            currentTab === 'profile' ? 'text-[#416840] font-bold' : 'text-[#40493e] hover:text-[#161d15]'
-          }`}
-        >
-          <span className="material-symbols-outlined">person</span>
-          <span className="text-[10px]">Perfil</span>
-        </button>
-
-        <button
-          onClick={handleLogout}
-          className="flex flex-col items-center justify-center px-2 py-1.5 text-red-600 hover:text-red-700 transition-colors cursor-pointer active:scale-95"
-        >
-          <span className="material-symbols-outlined">logout</span>
-          <span className="text-[10px]">Salir</span>
-        </button>
+      {/* --- Barra inferior (móvil) ---
+          «Salir» ya no vive aquí: era un sexto destino en una barra pensada para
+          cinco, y colocaba una acción destructiva a un dedo de distancia de la
+          navegación normal. Cerrar sesión sigue estando en Mi Perfil. */}
+      <nav
+        aria-label="Navegación principal"
+        className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-surface-container border-t border-outline-variant"
+      >
+        {[...NAV_ITEMS, { tab: 'profile' as NavTab, to: '/profile', label: 'Mi Perfil', shortLabel: 'Perfil', icon: 'person' }].map(
+          (item) => (
+            <Link
+              key={item.tab}
+              to={item.to}
+              aria-current={currentTab === item.tab ? 'page' : undefined}
+              className={mobileLinkClass(item.tab)}
+            >
+              <span aria-hidden="true" className="material-symbols-outlined">
+                {item.icon}
+              </span>
+              <span className="text-2xs">{item.shortLabel}</span>
+            </Link>
+          )
+        )}
       </nav>
     </>
   );

@@ -10,6 +10,7 @@ import type {
   TimeWindowProposal,
 } from '../types/groups.types';
 import type { DayOfWeek } from '../types/schedule.types';
+import { colorByIndex } from '../theme/palette';
 
 export type { Group, GroupMember, PlanProposal, PlanIncidence, TimeWindowProposal, DayOfWeek };
 
@@ -55,11 +56,11 @@ const INITIAL_GROUPS: Group[] = [
     creadoPor: 'alex.rodriguez@huecko.com',
     umbralDisponibilidad: 80,
     miembros: [
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: true, color: '#8b5cf6', status: 'confirmado' },
-      { email: 'maria.c@huecko.com', nombre: 'María C.', isEssential: true, color: '#ec4899', status: 'confirmado' },
-      { email: 'sam.p@huecko.com', nombre: 'Sam P.', isEssential: false, color: '#3b82f6', status: 'confirmado' },
-      { email: 'lucia.t@huecko.com', nombre: 'Lucía T.', isEssential: false, color: '#10b981', status: 'confirmado' },
-      { email: 'diego.r@huecko.com', nombre: 'Diego R.', isEssential: false, color: '#f59e0b', status: 'pendiente' },
+      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: true, color: colorByIndex(0), status: 'confirmado' },
+      { email: 'maria.c@huecko.com', nombre: 'María C.', isEssential: true, color: colorByIndex(1), status: 'confirmado' },
+      { email: 'sam.p@huecko.com', nombre: 'Sam P.', isEssential: false, color: colorByIndex(2), status: 'confirmado' },
+      { email: 'lucia.t@huecko.com', nombre: 'Lucía T.', isEssential: false, color: colorByIndex(3), status: 'confirmado' },
+      { email: 'diego.r@huecko.com', nombre: 'Diego R.', isEssential: false, color: colorByIndex(4), status: 'pendiente' },
     ],
   },
   {
@@ -70,26 +71,26 @@ const INITIAL_GROUPS: Group[] = [
     creadoPor: 'carlos.m@huecko.com',
     umbralDisponibilidad: 70,
     miembros: [
-      { email: 'carlos.m@huecko.com', nombre: 'Carlos M.', isEssential: true, color: '#ef4444', status: 'confirmado' },
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: false, color: '#8b5cf6', status: 'confirmado' },
-      { email: 'jorge.l@huecko.com', nombre: 'Jorge L.', isEssential: false, color: '#06b6d4', status: 'confirmado' },
-      { email: 'valeria.v@huecko.com', nombre: 'Valeria V.', isEssential: false, color: '#a855f7', status: 'confirmado' },
+      { email: 'carlos.m@huecko.com', nombre: 'Carlos M.', isEssential: true, color: colorByIndex(5), status: 'confirmado' },
+      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: false, color: colorByIndex(0), status: 'confirmado' },
+      { email: 'jorge.l@huecko.com', nombre: 'Jorge L.', isEssential: false, color: colorByIndex(6), status: 'confirmado' },
+      { email: 'valeria.v@huecko.com', nombre: 'Valeria V.', isEssential: false, color: colorByIndex(7), status: 'confirmado' },
     ],
   },
 ];
 
 const INITIAL_OCCUPIED_SLOTS: GroupOccupiedSlot[] = [
-  { id: '101', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Lun', startTime: '08:00', endTime: '12:00', title: 'Clase Redes' },
-  { id: '102', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Lun', startTime: '09:00', endTime: '13:00', title: 'Prácticas Pro' },
-  { id: '103', userEmail: 'lucia.t@huecko.com', userName: 'Lucía T.', userColor: '#10b981', day: 'Mar', startTime: '08:00', endTime: '11:00', title: 'Laboratorio' },
-  { id: '104', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Mar', startTime: '14:00', endTime: '18:00', title: 'Turno Tarde' },
-  { id: '105', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Mié', startTime: '08:00', endTime: '10:30', title: 'Cálculo' },
-  { id: '106', userEmail: 'lucia.t@huecko.com', userName: 'Lucía T.', userColor: '#10b981', day: 'Jue', startTime: '10:00', endTime: '14:00', title: 'Inglés VI' },
-  { id: '107', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: '#ec4899', day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Arquitectura' },
-  { id: '108', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: '#3b82f6', day: 'Vie', startTime: '11:00', endTime: '15:00', title: 'Trabajo' },
-  { id: '109', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Lun', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
-  { id: '110', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Mié', startTime: '08:00', endTime: '10:00', title: 'Universidad' },
-  { id: '111', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: '#8b5cf6', day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
+  { id: '101', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: colorByIndex(1), day: 'Lun', startTime: '08:00', endTime: '12:00', title: 'Clase Redes' },
+  { id: '102', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: colorByIndex(2), day: 'Lun', startTime: '09:00', endTime: '13:00', title: 'Prácticas Pro' },
+  { id: '103', userEmail: 'lucia.t@huecko.com', userName: 'Lucía T.', userColor: colorByIndex(3), day: 'Mar', startTime: '08:00', endTime: '11:00', title: 'Laboratorio' },
+  { id: '104', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: colorByIndex(1), day: 'Mar', startTime: '14:00', endTime: '18:00', title: 'Turno Tarde' },
+  { id: '105', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: colorByIndex(2), day: 'Mié', startTime: '08:00', endTime: '10:30', title: 'Cálculo' },
+  { id: '106', userEmail: 'lucia.t@huecko.com', userName: 'Lucía T.', userColor: colorByIndex(3), day: 'Jue', startTime: '10:00', endTime: '14:00', title: 'Inglés VI' },
+  { id: '107', userEmail: 'maria.c@huecko.com', userName: 'María C.', userColor: colorByIndex(1), day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Arquitectura' },
+  { id: '108', userEmail: 'sam.p@huecko.com', userName: 'Sam P.', userColor: colorByIndex(2), day: 'Vie', startTime: '11:00', endTime: '15:00', title: 'Trabajo' },
+  { id: '109', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Lun', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
+  { id: '110', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Mié', startTime: '08:00', endTime: '10:00', title: 'Universidad' },
+  { id: '111', userEmail: 'alex.rodriguez@huecko.com', userName: 'Alex R.', userColor: colorByIndex(0), day: 'Vie', startTime: '08:00', endTime: '11:00', title: 'Universidad' },
 ];
 
 const INITIAL_PROPOSALS: PlanProposal[] = [
@@ -195,7 +196,7 @@ export const useGroupsStore = create<GroupsState>()(
             creadoPor: userEmail,
             umbralDisponibilidad,
             miembros: [
-              { email: userEmail, nombre: userName, isEssential: true, color: '#8b5cf6', status: 'confirmado' },
+              { email: userEmail, nombre: userName, isEssential: true, color: colorByIndex(0), status: 'confirmado' },
             ],
           };
           set((state) => ({
@@ -235,7 +236,7 @@ export const useGroupsStore = create<GroupsState>()(
 
           const updatedMembers: GroupMember[] = [
             ...targetGroup.miembros,
-            { email: userEmail, nombre: userName, isEssential: false, color: '#10b981', status: 'confirmado' },
+            { email: userEmail, nombre: userName, isEssential: false, color: colorByIndex(3), status: 'confirmado' },
           ];
 
           set((s) => ({

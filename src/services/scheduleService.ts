@@ -1,116 +1,177 @@
 import { apiClient, isApiEnabled } from '../lib/apiClient';
-import {
-  type TimeSlot,
-  type BloqueHorarioRequest,
-  type BloqueHorarioResponse,
-  toBloqueHorarioRequest,
-  toTimeSlot,
+import { endpoints } from '../lib/endpoints';
+import { useAuthStore } from '../store/authStore';
+import { colorByIndex } from '../theme/palette';
+import type {
+  BloqueHorarioRequest,
+  BloqueHorarioResponse,
+  DayOfWeek,
+  TimeSlot,
 } from '../types/schedule.types';
 
 /**
- * Servicio de comunicación con el backend para la gestión de bloques horarios (MongoDB/Spring Boot)
+ * Puente entre la rejilla del frontend (`TimeSlot`) y el módulo de horario del
+ * backend (`BloqueHorario`). Todo el trabajo sucio de traducción vive aquí:
+ * el store no sabe nada de `diaSemana` ni de mayúsculas en los enums.
  */
-export const scheduleService = {
-  /**
-   * Obtiene la lista de bloques de horario confirmados de un usuario.
-   */
-  async getConfirmedBlocks(userId: string): Promise<TimeSlot[]> {
-    if (!isApiEnabled) {
-      return [];
-    }
 
-    try {
-      // Intenta primero la ruta directa de usuarios, y si no, la ruta de contrato /schedule/blocks
-      const url = userId ? `/usuarios/${userId}/bloques-horario` : '/schedule/blocks';
-      const { data } = await apiClient.get<BloqueHorarioResponse[]>(url);
-      return data.map(toTimeSlot);
-    } catch (error) {
-      console.warn('[scheduleService] Error al obtener bloques confirmados del servidor:', error);
-      throw error;
-    }
-  },
+/** El backend numera 1 = lunes … 7 = domingo. */
+const DAY_ORDER: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-  /**
-   * Obtiene la bandeja de borradores pendientes de revisión OCR.
-   */
-  async getDraftBlocks(userId: string): Promise<TimeSlot[]> {
-    if (!isApiEnabled) {
-      return [];
-    }
+function dayToNumber(day: DayOfWeek): number {
+  const index = DAY_ORDER.indexOf(day);
+  return index >= 0 ? index + 1 : 1;
+}
 
-    try {
-      const url = userId ? `/usuarios/${userId}/bloques-horario/borradores` : '/schedule/ocr/drafts';
-      const { data } = await apiClient.get<BloqueHorarioResponse[]>(url);
-      return data.map(toTimeSlot);
-    } catch (error) {
-      console.warn('[scheduleService] Error al obtener borradores OCR del servidor:', error);
-      throw error;
-    }
-  },
+function numberToDay(diaSemana: number | null | undefined): DayOfWeek {
+  if (!diaSemana || diaSemana < 1 || diaSemana > 7) return 'Lun';
+  return DAY_ORDER[diaSemana - 1];
+}
 
-  /**
-   * Crea un nuevo bloque de horario manual (recurrente o puntual) en MongoDB.
-   */
-  async createBlock(userId: string, slot: Omit<TimeSlot, 'id'>): Promise<TimeSlot> {
-    const payload: BloqueHorarioRequest = toBloqueHorarioRequest(slot);
+/** El backend serializa `LocalTime` como "HH:mm" o "HH:mm:ss"; la rejilla usa "HH:mm". */
+function normalizeTime(value: string | null | undefined): string {
+  if (!value) return '00:00';
+  return value.slice(0, 5);
+}
 
-    if (!isApiEnabled) {
-      // Mock ID
-      return {
-        ...slot,
-        id: `slot-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      };
-    }
+/** Día de la semana (1-7) de una fecha ISO, para poder ubicar un bloque puntual. */
+function dayFromIsoDate(fecha: string): DayOfWeek {
+  const [year, month, day] = fecha.split('-').map(Number);
+  const jsDay = new Date(year, (month ?? 1) - 1, day ?? 1).getDay(); // 0 = domingo
+  return DAY_ORDER[(jsDay + 6) % 7];
+}
 
-    const url = userId ? `/usuarios/${userId}/bloques-horario` : '/schedule/blocks';
-    const { data } = await apiClient.post<BloqueHorarioResponse>(url, payload);
-    return toTimeSlot(data);
-  },
+/** Color estable a partir del título, para bloques que llegan del servidor sin metadatos locales. */
+function colorForTitle(title: string): string {
+  let hash = 0;
+  for (let i = 0; i < title.length; i += 1) hash = (hash * 31 + title.charCodeAt(i)) >>> 0;
+  return colorByIndex(hash);
+}
 
-  /**
-   * Actualiza un bloque de horario existente o confirma un borrador.
-   */
-  async updateBlock(userId: string, blockId: string, slot: Partial<TimeSlot>): Promise<TimeSlot> {
-    const payload: BloqueHorarioRequest = toBloqueHorarioRequest(slot);
+function currentUserId(): string | null {
+  return useAuthStore.getState().user?.id ?? null;
+}
 
-    if (!isApiEnabled) {
-      return {
-        ...(slot as TimeSlot),
-        id: blockId,
-      };
-    }
+/* ------------------------------------------------------------------ *
+ * Traducción
+ * ------------------------------------------------------------------ */
 
-    const url = userId ? `/usuarios/${userId}/bloques-horario/${blockId}` : `/schedule/blocks/${blockId}`;
-    const { data } = await apiClient.put<BloqueHorarioResponse>(url, payload);
-    return toTimeSlot(data);
-  },
+/**
+ * `previous` es el bloque que ya estaba en el store con ese id. Se usa para
+ * conservar color, etiqueta y rango de fechas: el backend todavía no guarda
+ * esos campos (ver `docs/INTEGRACION_BACKEND.md`), así que se perderían en
+ * cada recarga si no se preservaran aquí.
+ */
+export function toTimeSlot(bloque: BloqueHorarioResponse, previous?: TimeSlot): TimeSlot {
+  const title = bloque.etiqueta?.trim() || previous?.title || 'Bloque sin título';
+  const isPuntual = bloque.tipo === 'PUNTUAL';
 
-  /**
-   * Elimina un bloque de horario por ID.
-   */
-  async deleteBlock(userId: string, blockId: string): Promise<void> {
-    if (!isApiEnabled) {
-      return;
-    }
+  return {
+    id: bloque.id,
+    title,
+    day: isPuntual && bloque.fecha ? dayFromIsoDate(bloque.fecha) : numberToDay(bloque.diaSemana),
+    startTime: normalizeTime(bloque.horaInicio),
+    endTime: normalizeTime(bloque.horaFin),
+    customColor: previous?.customColor ?? colorForTitle(title),
+    type: isPuntual ? 'puntual' : 'recurrente',
+    tag: previous?.tag,
+    frequency: isPuntual ? 'unica' : 'semanal',
+    specificDate: bloque.fecha ?? previous?.specificDate,
+    specificEndDate: previous?.specificEndDate,
+    isOcrImported: bloque.fuente === 'OCR' || previous?.isOcrImported,
+  };
+}
 
-    const url = userId ? `/usuarios/${userId}/bloques-horario/${blockId}` : `/schedule/blocks/${blockId}`;
-    await apiClient.delete(url);
-  },
+export function toBloqueRequest(slot: TimeSlot): BloqueHorarioRequest {
+  const isPuntual = slot.type === 'puntual' || slot.frequency === 'unica';
 
-  /**
-   * Confirma múltiples borradores generados por OCR.
-   */
-  async confirmMultipleDrafts(userId: string, slots: Partial<TimeSlot>[]): Promise<TimeSlot[]> {
-    const results: TimeSlot[] = [];
-    for (const slot of slots) {
-      if (slot.id) {
-        const confirmed = await this.updateBlock(userId, slot.id, slot);
-        results.push(confirmed);
-      } else {
-        const created = await this.createBlock(userId, slot as Omit<TimeSlot, 'id'>);
-        results.push(created);
-      }
-    }
-    return results;
+  return {
+    tipo: isPuntual ? 'PUNTUAL' : 'RECURRENTE',
+    diaSemana: isPuntual ? null : dayToNumber(slot.day),
+    fecha: isPuntual ? (slot.specificDate ?? null) : null,
+    horaInicio: normalizeTime(slot.startTime),
+    horaFin: normalizeTime(slot.endTime),
+    etiqueta: slot.title,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Operaciones
+ * ------------------------------------------------------------------ */
+
+/**
+ * Trae los bloques confirmados y los borradores de OCR del usuario.
+ * `existing` son los bloques que ya tiene el store, para conservar metadatos.
+ */
+export async function fetchSlots(existing: TimeSlot[] = []): Promise<TimeSlot[]> {
+  const usuarioId = currentUserId();
+  if (!isApiEnabled || !usuarioId) return existing;
+
+  const [confirmados, borradores] = await Promise.all([
+    apiClient.get<BloqueHorarioResponse[]>(endpoints.schedule.blocks(usuarioId)),
+    apiClient.get<BloqueHorarioResponse[]>(endpoints.schedule.drafts(usuarioId)),
+  ]);
+
+  const previousById = new Map(existing.map((slot) => [slot.id, slot]));
+
+  return [...confirmados.data, ...borradores.data].map((bloque) =>
+    toTimeSlot(bloque, previousById.get(bloque.id))
+  );
+}
+
+async function createBlock(usuarioId: string, slot: TimeSlot): Promise<string> {
+  const { data } = await apiClient.post<BloqueHorarioResponse>(
+    endpoints.schedule.blocks(usuarioId),
+    toBloqueRequest(slot)
+  );
+  return data.id;
+}
+
+async function updateBlock(usuarioId: string, slot: TimeSlot): Promise<void> {
+  await apiClient.put(endpoints.schedule.block(usuarioId, slot.id), toBloqueRequest(slot));
+}
+
+async function deleteBlock(usuarioId: string, bloqueId: string): Promise<void> {
+  await apiClient.delete(endpoints.schedule.block(usuarioId, bloqueId));
+}
+
+/** Dos bloques son iguales para el backend si su request serializa igual. */
+function hasServerRelevantChange(before: TimeSlot, after: TimeSlot): boolean {
+  return JSON.stringify(toBloqueRequest(before)) !== JSON.stringify(toBloqueRequest(after));
+}
+
+/**
+ * Sincroniza contra el backend la diferencia entre dos versiones de la rejilla.
+ *
+ * Se calcula el diff en vez de exponer un create/update/delete por separado
+ * porque las páginas ya mutan el horario con `setSlots(prev => …)`; así el
+ * store sincroniza cualquier cambio sin tocar los componentes.
+ *
+ * Devuelve el mapa `idLocal → idDelServidor` de los bloques recién creados.
+ */
+export async function syncSlots(
+  previous: TimeSlot[],
+  next: TimeSlot[]
+): Promise<Record<string, string>> {
+  const usuarioId = currentUserId();
+  const idMap: Record<string, string> = {};
+  if (!isApiEnabled || !usuarioId) return idMap;
+
+  const previousById = new Map(previous.map((slot) => [slot.id, slot]));
+  const nextIds = new Set(next.map((slot) => slot.id));
+
+  for (const slot of previous) {
+    if (!nextIds.has(slot.id)) await deleteBlock(usuarioId, slot.id);
   }
-};
+
+  for (const slot of next) {
+    const before = previousById.get(slot.id);
+    if (!before) {
+      idMap[slot.id] = await createBlock(usuarioId, slot);
+    } else if (hasServerRelevantChange(before, slot)) {
+      await updateBlock(usuarioId, slot);
+    }
+  }
+
+  return idMap;
+}
