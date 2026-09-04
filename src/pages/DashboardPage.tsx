@@ -278,11 +278,11 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
               <button
                 type="button"
                 onClick={() => handleExpressVoteSubmit('reprogramar')}
-                className={`flex-1 md:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
+                className={`flex-1 md:flex-initial min-w-24 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
                   expressVoteChoice === 'reprogramar'
                     ? 'bg-primary text-on-primary shadow-xs'
                     : 'bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container'
@@ -294,7 +294,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => handleExpressVoteSubmit('cancelar')}
-                className={`flex-1 md:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
+                className={`flex-1 md:flex-initial min-w-24 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
                   expressVoteChoice === 'cancelar'
                     ? 'bg-error text-on-error shadow-xs'
                     : 'bg-surface-container-lowest border border-outline-variant text-error hover:bg-error-container'
@@ -306,7 +306,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => handleExpressVoteSubmit('mantener')}
-                className={`flex-1 md:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
+                className={`flex-1 md:flex-initial min-w-24 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
                   expressVoteChoice === 'mantener'
                     ? 'bg-primary text-on-primary shadow-xs'
                     : 'bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container'
