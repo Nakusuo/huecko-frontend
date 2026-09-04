@@ -4,35 +4,30 @@ import type {
   DashboardPendingVote,
 } from '../types/dashboard.types';
 
-// Mock initial data designed following Stitch mockups & Huecko architecture
+// Mock initial data aligned with GroupsStore & Huecko architecture
 const MOCK_METRICS: DashboardMetrics = {
-  activeGroupsCount: 4,
+  activeGroupsCount: 2,
   pendingVotesCount: 2,
-  freeMatchHoursThisWeek: 14,
-  connectedMembersCount: 18,
+  freeMatchHoursThisWeek: 8,
+  connectedMembersCount: 5,
 };
 
 const MOCK_UPCOMING_EVENT: UpcomingEventDetail = {
-  id: 'ev-1',
+  id: 'prop-1',
   groupId: '1',
   groupName: 'Grupo Universitario - Ing. Software',
-  title: 'Cena de Graduación & Fin de Ciclo',
-  description: 'Celebración de fin de curso con el grupo de la universidad para cerrar proyectos.',
+  title: 'Reunión de Trabajo de Grado & Cierre',
+  description: 'Coordinación presencial y virtual para cerrar el informe final y entregables.',
   coverImage: 'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?auto=format&fit=crop&w=1200&q=80',
-  dayLabel: 'Sábado, 15 de Julio',
-  timeRange: '21:00 - 01:00',
-  locationName: 'Restaurante El Mirador',
-  locationAddress: 'Calle Vista Alegre 12, Centro',
+  dayLabel: 'Miércoles',
+  timeRange: '11:00 - 13:00',
+  locationName: 'Biblioteca Central / Google Meet',
+  locationAddress: 'Campus Universitario, Sala 4',
   status: 'confirmado',
   attendees: [
     { email: 'alex.rodriguez@huecko.com', name: 'Tú', status: 'puntual' },
-    { email: 'carlos.m@huecko.com', name: 'Carlos M.', status: 'puntual' },
-    { email: 'laura.c@huecko.com', name: 'Laura C.', status: 'retrasado', delayMinutes: 15 },
-    { email: 'david.m@huecko.com', name: 'David M.', status: 'no_asiste' },
-    { email: 'maria.c@huecko.com', name: 'María C.', status: 'puntual', isEssential: true },
+    { email: 'maria.c@huecko.com', name: 'María C.', status: 'no_asiste', isEssential: true },
     { email: 'sam.p@huecko.com', name: 'Sam P.', status: 'puntual' },
-    { email: 'lucia.g@huecko.com', name: 'Lucía G.', status: 'puntual' },
-    { email: 'andres.f@huecko.com', name: 'Andrés F.', status: 'puntual' },
   ],
 };
 

@@ -31,7 +31,7 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
   },
   {
     id: 'n2',
-    title: 'Falta reportada (RF-13)',
+    title: 'Falta reportada',
     description: 'María C. reportó un cruce de examen para la reunión de hoy.',
     timestamp: 'Hace 5 min',
     read: false,

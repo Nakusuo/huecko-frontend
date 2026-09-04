@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import {
@@ -10,6 +10,8 @@ import {
   type DayOfWeek,
 } from '../store/groupsStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { colorByIndex, DEFAULT_CATEGORY_COLOR } from '../theme/palette';
+import { useModalDismiss } from '../hooks/useModalDismiss';
 
 
 
@@ -43,6 +45,7 @@ export default function GroupsPage() {
     closeVotingManually,
     reportIncident,
     voteReplanification,
+    withdrawIncident,
   } = useGroupsStore();
 
   const { addNotification } = useNotificationStore();
@@ -79,12 +82,28 @@ export default function GroupsPage() {
   // Join Group Modal State
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
+
+  useModalDismiss(isProposeModalOpen, () => setIsProposeModalOpen(false));
+  useModalDismiss(isCreateModalOpen, () => setIsCreateModalOpen(false));
+  useModalDismiss(isEditGroupModalOpen, () => setIsEditGroupModalOpen(false));
+  /* Se guarda la referencia (grupo + correo) y no el objeto: así la ficha
+     refleja los cambios del store en vez de quedarse con una copia vieja. */
+  const [memberRef, setMemberRef] = useState<{ groupId: string; email: string } | null>(null);
+  const memberGroup = memberRef ? groups.find((g) => g.id === memberRef.groupId) ?? null : null;
+  const memberDetail = memberGroup?.miembros.find((m) => m.email === memberRef?.email) ?? null;
+
+  useModalDismiss(isJoinModalOpen, () => setIsJoinModalOpen(false));
+  useModalDismiss(Boolean(memberDetail), () => setMemberRef(null));
   const [joinError, setJoinError] = useState('');
 
-  const handleJoinSubmit = (e: React.FormEvent) => {
+  /* Mismo criterio que en «Mi horario»: en el móvil se elige un día y se ve ese
+     día, en vez de arrastrar siete columnas a lo ancho. */
+  const [sharedDay, setSharedDay] = useState<DayOfWeek>(() => days[(new Date().getDay() + 6) % 7]);
+
+  const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!joinCodeInput.trim()) return;
-    const success = joinGroupByCode(joinCodeInput, 'alex.rodriguez@huecko.com', 'Alex R.');
+    const success = await joinGroupByCode(joinCodeInput, 'alex.rodriguez@huecko.com', 'Alex R.');
     if (success) {
       setIsJoinModalOpen(false);
       setJoinCodeInput('');
@@ -105,7 +124,7 @@ export default function GroupsPage() {
     setDescripcion('');
     setUmbral(100);
     setMembersList([
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: '#8b5cf6', status: 'confirmado' },
+      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: DEFAULT_CATEGORY_COLOR, status: 'confirmado' },
     ]);
     setNewMemberEmail('');
     setNewMemberName('');
@@ -135,8 +154,7 @@ export default function GroupsPage() {
     if (!newMemberEmail || !newMemberEmail.includes('@')) return;
     if (membersList.some((m) => m.email.toLowerCase() === newMemberEmail.toLowerCase())) return;
 
-    const colors = ['#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
-    const assignedColor = colors[membersList.length % colors.length];
+    const assignedColor = colorByIndex(membersList.length);
 
     const newM: GroupMember = {
       email: newMemberEmail,
@@ -184,7 +202,7 @@ export default function GroupsPage() {
     setIsEditGroupModalOpen(false);
   };
 
-  // --- HELPER PARA CALCULAR LA DISPONIBILIDAD REAL DINÁMICA DE UNA VENTANA DE TIEMPO (RF-05, RF-06) ---
+  // Calcula la disponibilidad real de una ventana de tiempo.
   const calculateWindowAvailability = (group: Group, day: DayOfWeek, startTimeStr: string, endTimeStr: string) => {
     const startH = parseInt(startTimeStr.split(':')[0], 10);
     const endH = parseInt(endTimeStr.split(':')[0], 10);
@@ -211,27 +229,57 @@ export default function GroupsPage() {
     return Math.round((freeCount / totalMembers) * 100);
   };
 
-  // --- HANDLERS PARA VOTACIÓN Y PROPUESTA DE PLANES (Módulo 3: RF-08, RF-09, RF-10) ---
+  // Acciones de propuestas y votaciones.
   const openProposePlanModal = (group: Group) => {
     setSelectedGroupId(group.id);
     setProposalTitle('');
     setProposalLugar('');
     setProposalPlazo('24 horas');
 
-    const avail1 = calculateWindowAvailability(group, 'Mié', '11:00', '13:00');
-    const avail2 = calculateWindowAvailability(group, 'Jue', '16:00', '18:00');
+    const avail1 = calculateWindowAvailability(
+      group,
+      'Mié',
+      '11:00',
+      '13:00'
+    );
+    const avail2 = calculateWindowAvailability(
+      group,
+      'Jue',
+      '16:00',
+      '18:00'
+    );
 
     setSuggestedWindows([
-      { id: Date.now().toString() + '-1', dia: 'Mié', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: avail1, votosUsuarios: [] },
-      { id: Date.now().toString() + '-2', dia: 'Jue', horaInicio: '16:00', horaFin: '18:00', disponibilidadPorcentaje: avail2, votosUsuarios: [] },
+      {
+        id: 'ventana-mie-1100',
+        dia: 'Mié',
+        horaInicio: '11:00',
+        horaFin: '13:00',
+        disponibilidadPorcentaje: avail1,
+        votosUsuarios: [],
+      },
+      {
+        id: 'ventana-jue-1600',
+        dia: 'Jue',
+        horaInicio: '16:00',
+        horaFin: '18:00',
+        disponibilidadPorcentaje: avail2,
+        votosUsuarios: [],
+      },
     ]);
     setIsProposeModalOpen(true);
   };
 
   const handleAddWindowToProposal = () => {
     if (!selectedGroup) return;
+    if (suggestedWindows.length >= 5) return;
 
-    const realAvail = calculateWindowAvailability(selectedGroup, tempDay, tempStart, tempEnd);
+    const realAvail = calculateWindowAvailability(
+      selectedGroup,
+      tempDay,
+      tempStart,
+      tempEnd
+    );
 
     const newW: TimeWindowProposal = {
       id: Date.now().toString(),
@@ -245,13 +293,22 @@ export default function GroupsPage() {
   };
 
   const handleRemoveWindowFromProposal = (id: string) => {
-    if (suggestedWindows.length <= 1) return;
-    setSuggestedWindows(suggestedWindows.filter((w) => w.id !== id));
+    if (suggestedWindows.length <= 2) return;
+    setSuggestedWindows(
+      suggestedWindows.filter((w) => w.id !== id)
+    );
   };
 
   const handleCreateProposalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedGroup || !proposalTitle || suggestedWindows.length === 0) return;
+    if (
+      !selectedGroup ||
+      !proposalTitle ||
+      suggestedWindows.length < 2 ||
+      suggestedWindows.length > 5
+    ) {
+      return;
+    }
 
     addProposal({
       groupId: selectedGroup.id,
@@ -265,7 +322,7 @@ export default function GroupsPage() {
 
     addNotification({
       title: 'Nuevo plan propuesto',
-      description: `Se creó el plan "${proposalTitle}" en ${selectedGroup.nombre}`,
+      description: `Se creó "${proposalTitle}" en ${selectedGroup.nombre}`,
       type: 'proposal',
       groupId: selectedGroup.id,
     });
@@ -273,15 +330,22 @@ export default function GroupsPage() {
     setIsProposeModalOpen(false);
   };
 
-  const handleVote = (proposalId: string, windowId: string) => {
-    voteProposalWindow(proposalId, windowId, 'alex.rodriguez@huecko.com');
+  const handleVote = (
+    proposalId: string,
+    windowId: string
+  ) => {
+    voteProposalWindow(
+      proposalId,
+      windowId,
+      'alex.rodriguez@huecko.com'
+    );
   };
 
   const handleCloseVotingManually = (proposalId: string) => {
     closeVotingManually(proposalId);
     addNotification({
       title: 'Plan confirmado',
-      description: 'El plan ha sido confirmado y cerrado manualmente.',
+      description: 'El plan ha sido confirmado y cerrado.',
       type: 'confirmation',
     });
   };
@@ -311,7 +375,7 @@ export default function GroupsPage() {
     });
 
     addNotification({
-      title: 'Imprevisto reportado (RF-13)',
+      title: 'Imprevisto reportado',
       description: `Alex R. reportó ${incidentType} en "${targetProposalForIncident.titulo}". El plan pasó a re-coordinación.`,
       type: 'incident',
       groupId: targetProposalForIncident.groupId,
@@ -324,13 +388,18 @@ export default function GroupsPage() {
     voteReplanification(proposalId, action, 'alex.rodriguez@huecko.com');
   };
 
-  // --- CÁLCULO DE CRUCE Y ESPACIOS VACÍOS / LIBRES (RF-05, RF-06) ---
-  const getCellAvailability = (group: Group, day: DayOfWeek, hour: number) => {
-    // Check occupied members in this specific 1-hour slot
+  // Cálculo de coincidencias y espacios libres.
+  const getCellAvailability = (
+    group: Group,
+    day: DayOfWeek,
+    hour: number
+  ) => {
+    // Miembros ocupados en esta franja de 1 hora
     const occupiedInCell = occupiedSlots.filter((s) => {
       if (s.day !== day) return false;
-      // Check if group contains user
-      if (!group.miembros.some((m) => m.email === s.userEmail)) return false;
+      if (!group.miembros.some((m) => m.email === s.userEmail)) {
+        return false;
+      }
 
       const startH = parseInt(s.startTime.split(':')[0], 10);
       const endH = parseInt(s.endTime.split(':')[0], 10);
@@ -340,9 +409,12 @@ export default function GroupsPage() {
     const totalMembers = group.miembros.length;
     const occupiedCount = occupiedInCell.length;
     const freeCount = totalMembers - occupiedCount;
-    const freePercentage = Math.round((freeCount / totalMembers) * 100);
+    const freePercentage = Math.round(
+      (freeCount / totalMembers) * 100
+    );
 
-    const meetsThreshold = freePercentage >= group.umbralDisponibilidad;
+    const meetsThreshold =
+      freePercentage >= group.umbralDisponibilidad;
 
     return {
       freeCount,
@@ -353,38 +425,446 @@ export default function GroupsPage() {
     };
   };
 
+  /** Agrupa horas consecutivas con quórum en franjas legibles */
+  const getRecommendedWindows = (
+    group: Group,
+    day: DayOfWeek
+  ) => {
+    type FreeWindow = {
+      start: number;
+      end: number;
+      minimumAvailability: number;
+      freeCount: number;
+    };
+
+    const windows: FreeWindow[] = [];
+
+    timeSlotsHours.forEach((hour) => {
+      const cell = getCellAvailability(group, day, hour);
+      const current = windows[windows.length - 1];
+
+      if (cell.meetsThreshold && current?.end === hour) {
+        current.end = hour + 1;
+        current.minimumAvailability = Math.min(
+          current.minimumAvailability,
+          cell.freePercentage
+        );
+        current.freeCount = Math.min(
+          current.freeCount,
+          cell.freeCount
+        );
+      } else if (cell.meetsThreshold) {
+        windows.push({
+          start: hour,
+          end: hour + 1,
+          minimumAvailability: cell.freePercentage,
+          freeCount: cell.freeCount,
+        });
+      }
+    });
+
+    return windows;
+  };
+
+  /**
+   * Planes y horario común de un grupo.
+   *
+   * Se renderiza pegado a la tarjeta del grupo seleccionado y no al final de
+   * la página: en el móvil, pulsar «Ver horario en común» dejaba el panel a
+   * dos pantallas de distancia del grupo que lo abría.
+   */
+  const renderGroupPanel = (grp: Group) => (
+    <div className="space-y-6">
+          <section className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 md:p-8 shadow-sm">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-outline-variant/60 pb-4">
+              <div>
+                <h2 className="text-2xl font-bold text-on-surface flex items-center gap-2 font-headline">
+                  <span aria-hidden="true" className="material-symbols-outlined text-primary">how_to_vote</span>
+                  Planes propuestos y votación: {grp.nombre}
+                </h2>
+              </div>
+
+              <button
+                onClick={() => openProposePlanModal(grp)}
+                className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
+                Proponer plan
+              </button>
+            </div>
+
+            {/* Listado de Propuestas del Grupo */}
+            {groupProposals.filter((p) => p.groupId === grp.id).length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {groupProposals
+                  .filter((p) => p.groupId === grp.id)
+                  .map((proposal) => {
+                    const isClosed = proposal.estado === 'confirmado';
+                    const isInReplan = proposal.estado === 'en_recoordinacion';
+                    const userEmail = 'alex.rodriguez@huecko.com';
+                    const userReplanVote = proposal.votosReplanificacion?.cancel.includes(userEmail)
+                      ? 'cancel'
+                      : proposal.votosReplanificacion?.reschedule.includes(userEmail)
+                      ? 'reschedule'
+                      : proposal.votosReplanificacion?.keep.includes(userEmail)
+                      ? 'keep'
+                      : null;
+                    const avisosAbiertos = (proposal.incidencias || []).filter((i) => !i.resuelta);
+                    const miAvisoAbierto = avisosAbiertos.find((i) => i.userEmail === userEmail);
+                    const planCancelado = proposal.estado === 'cancelado';
+                    const miembrosDelGrupo = grp.miembros.length;
+                    const votosEmitidos = proposal.votosReplanificacion
+                      ? proposal.votosReplanificacion.cancel.length +
+                        proposal.votosReplanificacion.reschedule.length +
+                        proposal.votosReplanificacion.keep.length
+                      : 0;
+                    const votosParaCerrar = Math.min(
+                      Math.floor(miembrosDelGrupo / 2) + 1,
+                      miembrosDelGrupo
+                    );
+
+                    return (
+                      <div
+                        key={proposal.id}
+                        className={`p-5 rounded-2xl border flex flex-col justify-between transition-all ${
+                          isInReplan
+                            ? 'bg-warning-container/60 border-warning/40'
+                            : isClosed
+                            ? 'bg-inverse-primary/30 border-secondary/50'
+                            : 'bg-surface-container-lowest border-outline-variant/60'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex justify-between items-center mb-3">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-bold text-on-surface">{proposal.titulo}</h3>
+                              {proposal.lugar && (
+                                <span className="text-2xs text-on-surface-variant font-normal">
+                                  • {proposal.lugar}
+                                </span>
+                              )}
+                            </div>
+                            <span
+                              className={`px-2.5 py-0.5 rounded-lg text-2xs font-bold ${
+                                isInReplan
+                                  ? 'bg-warning-container text-on-warning-container border border-warning/50'
+                                  : isClosed
+                                  ? 'bg-inverse-primary/50 text-on-tertiary-container border border-secondary'
+                                  : 'bg-secondary-container text-on-secondary-container border border-secondary/40'
+                              }`}
+                            >
+                              {isInReplan
+                                ? 'Imprevisto'
+                                : isClosed
+                                ? 'Confirmado'
+                                : 'Votación abierta'}
+                            </span>
+                          </div>
+
+                          {/* ALERTA COMPACTA DE INCIDENCIAS */}
+                          {avisosAbiertos.length > 0 && (
+                            <div className="mb-3 p-3 rounded-xl bg-warning-container border border-warning/30 space-y-2">
+                              {avisosAbiertos.map((inc) => (
+                                <div key={inc.id} className="text-xs flex justify-between items-center text-on-warning-container">
+                                  <span>
+                                    <span aria-hidden="true" className="material-symbols-outlined text-[14px] align-[-2px] mr-1">
+                                      warning
+                                    </span>
+                                    <strong>{inc.userName}</strong>: {inc.motivo}
+                                  </span>
+                                  <span className="text-2xs text-on-warning-container font-bold uppercase">
+                                    {inc.tipo}
+                                  </span>
+                                </div>
+                              ))}
+
+                              {/* Votación exprés: solo mientras el plan está en re-coordinación. */}
+                              {isInReplan && (
+                              <div className="pt-2 border-t border-warning/30 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                <span className="text-2xs text-on-warning-container font-semibold shrink-0">
+                                  ¿Qué hacemos?
+                                  <span className="block font-normal opacity-80">
+                                    {votosEmitidos}/{votosParaCerrar} votos para decidir
+                                  </span>
+                                </span>
+                                <div className="flex flex-wrap gap-1.5 w-full justify-end">
+                                  <button
+                                    onClick={() => handleReplanVote(proposal.id, 'reschedule')}
+                                    className={`px-2.5 py-1 rounded-md text-2xs font-medium border transition-colors cursor-pointer ${
+                                      userReplanVote === 'reschedule'
+                                        ? 'bg-secondary text-on-secondary border-primary'
+                                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container'
+                                    }`}
+                                  >
+                                    Re-agendar ({proposal.votosReplanificacion?.reschedule.length || 0})
+                                  </button>
+                                  <button
+                                    onClick={() => handleReplanVote(proposal.id, 'keep')}
+                                    className={`px-2.5 py-1 rounded-md text-2xs font-medium border transition-colors cursor-pointer ${
+                                      userReplanVote === 'keep'
+                                        ? 'bg-primary text-on-primary border-primary-hover'
+                                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container'
+                                    }`}
+                                  >
+                                    Mantener ({proposal.votosReplanificacion?.keep.length || 0})
+                                  </button>
+                                  <button
+                                    onClick={() => handleReplanVote(proposal.id, 'cancel')}
+                                    className={`px-2.5 py-1 rounded-md text-2xs font-medium border transition-colors cursor-pointer ${
+                                      userReplanVote === 'cancel'
+                                        ? 'bg-error text-on-error border-error'
+                                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container'
+                                    }`}
+                                  >
+                                    Cancelar ({proposal.votosReplanificacion?.cancel.length || 0})
+                                  </button>
+                                </div>
+                              </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Ventanas de tiempo sugeridas */}
+                          <div className="space-y-1.5 mb-3">
+                            {proposal.ventanasSugeridas.map((ventana) => {
+                              const hasVoted = ventana.votosUsuarios.includes('alex.rodriguez@huecko.com');
+
+                              return (
+                                <button type="button"
+                                  key={ventana.id}
+                                  onClick={() => !isClosed && handleVote(proposal.id, ventana.id)}
+                                  aria-pressed={hasVoted}
+                                  disabled={isClosed}
+                                  className={`w-full text-left px-3 py-2 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
+                                    hasVoted
+                                      ? 'bg-inverse-primary/30 border-secondary'
+                                      : 'bg-surface-container-lowest border-outline-variant/60 hover:border-secondary'
+                                  } ${isClosed ? 'cursor-default opacity-85' : ''}`}
+                                >
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <span
+                                      className={`w-4 h-4 rounded-full border flex items-center justify-center text-2xs ${
+                                        hasVoted
+                                          ? 'bg-secondary border-primary text-on-secondary font-bold'
+                                          : 'border-outline-variant text-transparent'
+                                      }`}
+                                    >
+                                      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
+                                    </span>
+                                    <span className="font-semibold text-on-surface">
+                                      {ventana.dia} {ventana.horaInicio}-{ventana.horaFin}
+                                    </span>
+                                    <span className="text-2xs text-primary font-bold">
+                                      ({ventana.disponibilidadPorcentaje}% libre)
+                                    </span>
+                                  </div>
+
+                                  <span className="text-xs font-bold text-on-surface-variant">
+                                    {ventana.votosUsuarios.length} {ventana.votosUsuarios.length === 1 ? 'voto' : 'votos'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Pie de tarjeta ultra-limpio */}
+                        <div className="pt-2.5 border-t border-outline-variant/60 flex justify-between items-center text-xs text-on-surface-variant">
+                          <span className="text-2xs font-mono">Plazo: {proposal.plazoVotacion}</span>
+
+                          <div className="flex gap-2">
+                            {/* Un plan cancelado no admite avisos, y quien ya
+                                avisó retira el suyo en vez de mandar otro. */}
+                            {!planCancelado &&
+                              (miAvisoAbierto ? (
+                                <button
+                                  onClick={() => withdrawIncident(proposal.id, userEmail)}
+                                  className="text-2xs text-on-surface-variant hover:text-on-surface font-semibold cursor-pointer underline"
+                                >
+                                  Retirar mi imprevisto
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => openReportIncidentModal(proposal)}
+                                  className="text-2xs text-on-warning-container hover:text-on-warning-container font-semibold cursor-pointer"
+                                >
+                                  Reportar imprevisto
+                                </button>
+                              ))}
+
+                            {!isClosed && (
+                              <button
+                                onClick={() => handleCloseVotingManually(proposal.id)}
+                                className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer"
+                              >
+                                Confirmar plan
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="p-6 rounded-xl bg-surface-container-lowest border border-dashed border-outline-variant text-center">
+                <p className="text-on-surface-variant text-xs mb-3">No hay propuestas de planes activas en este grupo.</p>
+                <button
+                  onClick={() => openProposePlanModal(grp)}
+                  className="px-4 py-2 rounded-xl bg-inverse-primary/30 text-primary-hover border border-secondary/40 text-xs font-semibold hover:bg-inverse-primary/50 cursor-pointer"
+                >
+                  + Proponer el primer Plan
+                </button>
+              </div>
+            )}
+          </section>
+          <section className="bg-surface-container-low border border-outline-variant rounded-2xl p-6 md:p-8 shadow-sm animate-fade-in">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-outline-variant/60 pb-4">
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <h2 className="text-2xl font-bold text-on-surface font-headline">Horario en común: {grp.nombre}</h2>
+                  <span className="px-3 py-1 rounded-lg bg-primary-container border border-inverse-primary text-primary text-xs font-bold">
+                    Actualizado
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-surface-bright px-4 py-2 rounded-xl border border-outline-variant text-xs text-on-surface-variant">
+                {grp.miembros.length} integrantes · {grp.umbralDisponibilidad}% mínimo
+              </div>
+            </div>
+
+            {/* Agenda de coincidencias: una lectura rápida, sin 84 casillas. */}
+            <div>
+              <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-7 gap-3">
+                {days.map((day) => {
+                  const windows = getRecommendedWindows(grp, day);
+                  return (
+                    <article key={day} className="rounded-xl border border-outline-variant bg-surface-bright overflow-hidden">
+                      <header className="px-3 py-2.5 border-b border-surface-container-highest text-xs font-bold uppercase tracking-wider text-primary">
+                        {day}
+                      </header>
+                      <div className="p-2 space-y-2 min-h-28">
+                        {windows.length ? windows.map((window) => (
+                          <div key={`${day}-${window.start}`} className="rounded-lg bg-primary-container border-l-4 border-secondary px-2.5 py-2">
+                            <p className="text-xs font-bold text-on-primary-container">
+                              {window.start.toString().padStart(2, '0')}:00 - {window.end.toString().padStart(2, '0')}:00
+                            </p>
+                            <p className="mt-0.5 text-2xs text-on-surface-variant">
+                              {window.minimumAvailability}% libre · {window.freeCount}/{grp.miembros.length}
+                            </p>
+                          </div>
+                        )) : (
+                          <p className="px-1 py-3 text-2xs leading-relaxed text-outline">No hay una franja que cumpla el umbral.</p>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              {/* Vista móvil: un día a la vez */}
+              <div className="md:hidden space-y-4">
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                  {days.map((day) => {
+                    const libres = getRecommendedWindows(grp, day).length;
+                    const activo = day === sharedDay;
+
+                    return (
+                      <button
+                        type="button"
+                        key={day}
+                        onClick={() => setSharedDay(day)}
+                        aria-pressed={activo}
+                        className={`shrink-0 min-w-14 px-3 py-2 rounded-lg border text-center transition-colors ${
+                          activo
+                            ? 'bg-primary border-primary text-on-primary'
+                            : 'bg-surface-container border-outline-variant text-on-surface-variant'
+                        }`}
+                      >
+                        <span className="block text-xs font-bold">{day}</span>
+                        <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-outline'}`}>
+                          {libres === 0 ? 'sin hueco' : `${libres} ${libres === 1 ? 'franja' : 'franjas'}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {(() => {
+                  const windows = getRecommendedWindows(grp, sharedDay);
+
+                  if (windows.length === 0) {
+                    return (
+                      <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container/60 p-8 text-center">
+                        <span aria-hidden="true" className="material-symbols-outlined text-[40px] text-on-surface-variant">
+                          event_busy
+                        </span>
+                        <p className="mt-1 text-sm font-semibold text-on-surface">Sin huecos el {sharedDay}</p>
+                        <p className="mt-1 text-xs text-on-surface-variant">
+                          Ninguna franja llega al {grp.umbralDisponibilidad}% del grupo.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <ul className="space-y-2.5">
+                      {windows.map((window) => (
+                        <li
+                          key={`${sharedDay}-${window.start}`}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-bright px-4 py-3"
+                        >
+                          <span className="text-sm font-bold text-on-surface font-mono">
+                            {window.start.toString().padStart(2, '0')}:00 - {window.end.toString().padStart(2, '0')}:00
+                          </span>
+                          <span className="text-2xs text-on-surface-variant text-right shrink-0">
+                            {window.minimumAvailability}% libre
+                            <span className="block">{window.freeCount}/{grp.miembros.length} personas</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+              </div>
+            </div>
+          </section>
+    </div>
+  );
+
   return (
-    <div className="bg-[#f4fbf1] text-[#161d15] min-h-screen flex flex-col pt-[88px] md:pt-[104px]">
+    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
       <Navbar currentTab="groups" />
 
       {/* Main Content Canvas */}
-      <main className="flex-grow w-full max-w-[1200px] mx-auto px-6 md:px-10 pb-24 md:pb-12">
+      <main id="contenido" tabIndex={-1} className="flex-grow w-full max-w-[1200px] mx-auto px-6 md:px-10 pt-8 pb-24 md:pb-12">
         {/* Header Section */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-[#161d15] mb-2 font-headline">Mis Grupos y Horario Común</h1>
-            <p className="text-[#40493e] text-sm md:text-base">
-              Administra tus grupos, edita integrantes y visualiza los <strong className="text-[#416840] font-semibold">espacios libres resaltados</strong> de todos los miembros.
+            <h1 className="text-3xl md:text-4xl font-bold text-on-surface mb-2 font-headline">Mis grupos y horario común</h1>
+            <p className="text-on-surface-variant text-sm md:text-base">
+              Administra tus grupos, edita integrantes y visualiza los <strong className="text-primary font-semibold">espacios libres resaltados</strong> de todos los miembros.
             </p>
           </div>
-          <div className="flex gap-3 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             <button
               onClick={() => {
                 setJoinCodeInput('');
                 setJoinError('');
                 setIsJoinModalOpen(true);
               }}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[#7fae7a] text-[#416840] hover:bg-[#e9f0e4] transition-all text-sm font-semibold cursor-pointer w-full md:w-auto"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-secondary text-primary hover:bg-surface-container transition-all text-sm font-semibold cursor-pointer w-full md:w-auto"
             >
-              <span className="material-symbols-outlined text-[20px]">key</span>
-              Unirse con Código
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">key</span>
+              Unirse con código
             </button>
             <button
               onClick={openCreateModal}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#7fae7a] hover:bg-[#6f9e6a] text-white transition-all text-sm font-semibold shadow-md shadow-[#7fae7a]/20 cursor-pointer w-full md:w-auto"
+              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary transition-all text-sm font-semibold shadow-md shadow-secondary/20 cursor-pointer w-full md:w-auto"
             >
-              <span className="material-symbols-outlined text-[20px]">group_add</span>
-              Crear Nuevo Grupo
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">group_add</span>
+              Crear grupo
             </button>
           </div>
         </header>
@@ -406,34 +886,36 @@ export default function GroupsPage() {
             const isSelected = selectedGroup?.id === group.id;
 
             return (
+              <Fragment key={group.id}>
               <div
-                key={group.id}
-                className={`bg-[#e9f0e4]/80 border rounded-2xl p-6 shadow-sm backdrop-blur-md flex flex-col justify-between transition-all ${
-                  isSelected ? 'border-[#7fae7a] ring-2 ring-[#7fae7a]/30' : 'border-[#d5e3cf] hover:border-[#c0c9bb]'
+                className={`bg-surface-container-lowest border rounded-2xl p-6 shadow-sm flex flex-col justify-between transition-all ${
+                  isSelected
+                    ? 'md:col-span-2 border-secondary ring-2 ring-secondary/30'
+                    : 'border-outline-variant hover:border-outline-variant'
                 }`}
               >
                 <div>
                   <div className="flex justify-between items-start mb-3">
-                    <h3 className="text-xl font-bold text-[#161d15]">{group.nombre}</h3>
-                    <span className="px-2.5 py-1 rounded-full bg-[#a8c9a0]/30 border border-[#7fae7a]/40 text-[#2a4f2b] text-xs font-semibold">
+                    <h3 className="text-xl font-bold text-on-surface">{group.nombre}</h3>
+                    <span className="px-2.5 py-1 rounded-lg bg-inverse-primary/30 border border-secondary/40 text-primary-hover text-xs font-semibold">
                       Umbral {group.umbralDisponibilidad}%
                     </span>
                   </div>
-                  <p className="text-[#40493e] text-sm mb-4 leading-relaxed">{group.descripcion || 'Sin descripción.'}</p>
+                  <p className="text-on-surface-variant text-sm mb-4 leading-relaxed">{group.descripcion || 'Sin descripción.'}</p>
 
-                  {/* Código de Invitación Rápida */}
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-[#c0c9bb]/60 mb-4">
-                    <div className="flex items-center gap-2 text-xs text-[#70796d]">
-                      <span className="material-symbols-outlined text-[#416840] text-[18px]">key</span>
+                  {/* Código de invitación Rápida */}
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/60 mb-4">
+                    <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+                      <span aria-hidden="true" className="material-symbols-outlined text-primary text-[18px]">key</span>
                       <span>Código de grupo:</span>
-                      <span className="font-mono text-[#161d15] font-bold text-sm tracking-wider">{group.codigoInvitacion}</span>
+                      <span className="font-mono text-on-surface font-bold text-sm tracking-wider">{group.codigoInvitacion}</span>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleCopyCode(group.codigoInvitacion)}
-                      className="text-xs text-[#416840] hover:text-[#2a4f2b] font-semibold cursor-pointer flex items-center gap-1"
+                      className="text-xs text-primary hover:text-primary-hover font-semibold cursor-pointer flex items-center gap-1"
                     >
-                      <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                      <span aria-hidden="true" className="material-symbols-outlined text-[14px]">content_copy</span>
                       {copiedCode === group.codigoInvitacion ? '¡Copiado!' : 'Copiar'}
                     </button>
                   </div>
@@ -441,425 +923,113 @@ export default function GroupsPage() {
                   {/* Lista de Miembros */}
                   <div>
                     <div className="flex justify-between items-center mb-2">
-                      <h4 className="text-xs font-semibold text-[#70796d] uppercase tracking-wider">
+                      <h4 className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
                         Miembros ({group.miembros.length})
                       </h4>
                       <button
                         onClick={() => openEditModal(group)}
-                        className="text-xs text-[#416840] hover:text-[#2a4f2b] font-semibold flex items-center gap-1 cursor-pointer"
+                        className="text-xs text-primary hover:text-primary-hover font-semibold flex items-center gap-1 cursor-pointer"
                       >
-                        <span className="material-symbols-outlined text-[14px]">edit</span>
-                        Editar Miembros / Grupo
+                        <span aria-hidden="true" className="material-symbols-outlined text-[14px]">edit</span>
+                        Editar miembros
                       </button>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {group.miembros.map((m, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => toggleMemberEssential(group.id, m.email)}
-                          className={`px-3 py-1.5 rounded-xl border text-xs flex items-center gap-1.5 cursor-pointer hover:scale-105 transition-all ${
-                            m.isEssential
-                              ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-xs'
-                              : 'bg-white border-[#c0c9bb]/60 text-[#161d15]'
-                          }`}
-                          title={m.isEssential ? 'Miembro imprescindible para planes (RF-16). Clic para alternar' : 'Miembro regular. Clic para marcar como imprescindible (RF-16)'}
-                        >
-                          <span
-                            className="w-2.5 h-2.5 rounded-full inline-block"
-                            style={{ backgroundColor: m.color }}
-                          />
-                          <span className="font-medium">{m.nombre}</span>
-                          {m.isEssential && (
-                            <span className="material-symbols-outlined text-[14px] text-amber-600" title="Imprescindible">
-                              star
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                      {group.miembros.map((m) => {
+                        /* Dos integrantes pueden llamarse igual; el nombre solo
+                           no basta para saber a quién estás mirando. */
+                        const nombreRepetido =
+                          group.miembros.filter((otro) => otro.nombre === m.nombre).length > 1;
+
+                        return (
+                          <button
+                            type="button"
+                            key={m.email}
+                            onClick={() => setMemberRef({ groupId: group.id, email: m.email })}
+                            className={`px-3 py-1.5 rounded-xl border text-xs flex items-center gap-1.5 cursor-pointer hover:scale-105 transition-all ${
+                              m.isEssential
+                                ? 'bg-warning-container border-warning/40 text-on-warning-container shadow-xs'
+                                : 'bg-surface-container-lowest border-outline-variant/60 text-on-surface'
+                            }`}
+                            title={`Ver la ficha de ${m.nombre}`}
+                          >
+                            <span
+                              className="w-2.5 h-2.5 rounded-full inline-block"
+                              style={{ backgroundColor: m.color }}
+                            />
+                            <span className="font-medium">{m.nombre}</span>
+                            {nombreRepetido && (
+                              <span className="text-2xs text-on-surface-variant">
+                                {m.email.split('@')[0]}
+                              </span>
+                            )}
+                            {m.isEssential && (
+                              <span
+                                aria-hidden="true"
+                                className="material-symbols-outlined text-[14px] text-warning"
+                                title="Imprescindible"
+                              >
+                                star
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
                 {/* Acciones */}
-                <div className="mt-6 pt-4 border-t border-[#c0c9bb]/60 flex flex-wrap gap-2 justify-between items-center">
+                <div className="mt-6 pt-4 border-t border-outline-variant/60 flex flex-wrap gap-2 justify-between items-center">
                   <button
                     onClick={() => openEditModal(group)}
-                    className="text-xs text-[#70796d] hover:text-[#161d15] transition-colors cursor-pointer"
+                    className="text-xs text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
                   >
-                    Ajustar Umbral / Grupo
+                    Ajustar umbral
                   </button>
 
                   <div className="flex gap-2">
                     <button
                       onClick={() => openProposePlanModal(group)}
-                      className="px-3.5 py-2 rounded-xl bg-[#a8c9a0]/30 hover:bg-[#a8c9a0]/50 text-[#2a4f2b] border border-[#7fae7a]/40 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-2 rounded-xl bg-inverse-primary/30 hover:bg-inverse-primary/50 text-primary-hover border border-secondary/40 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                     >
-                      <span className="material-symbols-outlined text-[16px]">campaign</span>
-                      Proponer Plan
+                      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">campaign</span>
+                      Proponer plan
                     </button>
 
                     <button
                       onClick={() => setSelectedGroupId(group.id)}
                       className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                         isSelected
-                          ? 'bg-[#416840] text-white shadow-md shadow-[#416840]/20'
-                          : 'bg-[#7fae7a] hover:bg-[#6f9e6a] text-white shadow-xs'
+                          ? 'bg-primary text-on-primary shadow-md shadow-primary/20'
+                          : 'bg-secondary hover:bg-secondary-hover text-on-primary shadow-xs'
                       }`}
                     >
-                      <span className="material-symbols-outlined text-[16px]">grid_view</span>
-                      {isSelected ? 'Viendo Horario Común' : 'Ver Horario en Común'}
+                      <span aria-hidden="true" className="material-symbols-outlined text-[16px]">grid_view</span>
+                      {isSelected ? 'Viendo horario en común' : 'Ver horario en común'}
                     </button>
                   </div>
                 </div>
               </div>
+
+              {isSelected && (
+                <div className="md:col-span-2 animate-fade-in">
+                  {renderGroupPanel(group)}
+                </div>
+              )}
+              </Fragment>
             );
           })}
         </div>
         )}
 
-        {/* SECCIÓN DE PLANES PROPUESTOS Y VOTACIONES ACTIVAS */}
-        {selectedGroup && (
-          <section className="mb-12 bg-[#e9f0e4]/80 border border-[#d5e3cf] rounded-2xl p-6 md:p-8 shadow-sm backdrop-blur-md">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-[#c0c9bb]/60 pb-4">
-              <div>
-                <h2 className="text-2xl font-bold text-[#161d15] flex items-center gap-2 font-headline">
-                  <span className="material-symbols-outlined text-[#416840]">how_to_vote</span>
-                  Planes Propuestos y Votación: {selectedGroup.nombre}
-                </h2>
-                <p className="text-[#40493e] text-sm">
-                  Propuestas de planes creadas para este grupo. Los miembros pueden emitir su voto antes de vencer el plazo.
-                </p>
-              </div>
-
-              <button
-                onClick={() => openProposePlanModal(selectedGroup)}
-                className="px-4 py-2 rounded-xl bg-[#7fae7a] hover:bg-[#6f9e6a] text-white text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <span className="material-symbols-outlined text-[18px]">add</span>
-                Proponer Nuevo Plan
-              </button>
-            </div>
-
-            {/* Listado de Propuestas del Grupo */}
-            {groupProposals.filter((p) => p.groupId === selectedGroup.id).length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {groupProposals
-                  .filter((p) => p.groupId === selectedGroup.id)
-                  .map((proposal) => {
-                    const isClosed = proposal.estado === 'confirmado';
-                    const isInReplan = proposal.estado === 'en_recoordinacion';
-                    const userEmail = 'alex.rodriguez@huecko.com';
-                    const userReplanVote = proposal.votosReplanificacion?.cancel.includes(userEmail)
-                      ? 'cancel'
-                      : proposal.votosReplanificacion?.reschedule.includes(userEmail)
-                      ? 'reschedule'
-                      : proposal.votosReplanificacion?.keep.includes(userEmail)
-                      ? 'keep'
-                      : null;
-
-                    return (
-                      <div
-                        key={proposal.id}
-                        className={`p-5 rounded-2xl border flex flex-col justify-between backdrop-blur-md transition-all ${
-                          isInReplan
-                            ? 'bg-amber-100/60 border-amber-300'
-                            : isClosed
-                            ? 'bg-[#a8c9a0]/30 border-[#7fae7a]/50'
-                            : 'bg-white border-[#c0c9bb]/60'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex justify-between items-center mb-3">
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-base font-bold text-[#161d15]">{proposal.titulo}</h3>
-                              {proposal.lugar && (
-                                <span className="text-[11px] text-[#70796d] font-normal">
-                                  • {proposal.lugar}
-                                </span>
-                              )}
-                            </div>
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                isInReplan
-                                  ? 'bg-amber-200 text-amber-900 border border-amber-400'
-                                  : isClosed
-                                  ? 'bg-[#a8c9a0]/50 text-[#1e4d50] border border-[#7fae7a]'
-                                  : 'bg-[#cfe7c8] text-[#111f0e] border border-[#7fae7a]/40'
-                              }`}
-                            >
-                              {isInReplan
-                                ? 'Imprevisto'
-                                : isClosed
-                                ? 'Confirmado'
-                                : 'Votación Abierta'}
-                            </span>
-                          </div>
-
-                          {/* ALERTA COMPACTA DE INCIDENCIAS */}
-                          {proposal.incidencias && proposal.incidencias.length > 0 && (
-                            <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
-                              {proposal.incidencias.map((inc) => (
-                                <div key={inc.id} className="text-xs flex justify-between items-center text-amber-900">
-                                  <span>
-                                    ⚠️ <strong>{inc.userName}</strong>: {inc.motivo}
-                                  </span>
-                                  <span className="text-[10px] text-amber-800 font-bold uppercase">
-                                    {inc.tipo}
-                                  </span>
-                                </div>
-                              ))}
-
-                              {/* Votación Grupal Simplificada */}
-                              <div className="pt-2 border-t border-amber-200 flex items-center justify-between gap-2 text-xs">
-                                <span className="text-[11px] text-amber-900 font-semibold shrink-0">¿Qué hacemos?</span>
-                                <div className="flex gap-1.5 w-full justify-end">
-                                  <button
-                                    onClick={() => handleReplanVote(proposal.id, 'reschedule')}
-                                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors cursor-pointer ${
-                                      userReplanVote === 'reschedule'
-                                        ? 'bg-[#7fae7a] text-white border-[#416840]'
-                                        : 'bg-white text-[#40493e] border-[#c0c9bb] hover:bg-[#e9f0e6]'
-                                    }`}
-                                  >
-                                    Re-agendar ({proposal.votosReplanificacion?.reschedule.length || 0})
-                                  </button>
-                                  <button
-                                    onClick={() => handleReplanVote(proposal.id, 'keep')}
-                                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors cursor-pointer ${
-                                      userReplanVote === 'keep'
-                                        ? 'bg-[#416840] text-white border-[#2a4f2b]'
-                                        : 'bg-white text-[#40493e] border-[#c0c9bb] hover:bg-[#e9f0e6]'
-                                    }`}
-                                  >
-                                    Mantener ({proposal.votosReplanificacion?.keep.length || 0})
-                                  </button>
-                                  <button
-                                    onClick={() => handleReplanVote(proposal.id, 'cancel')}
-                                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors cursor-pointer ${
-                                      userReplanVote === 'cancel'
-                                        ? 'bg-red-700 text-white border-red-800'
-                                        : 'bg-white text-[#40493e] border-[#c0c9bb] hover:bg-[#e9f0e6]'
-                                    }`}
-                                  >
-                                    Cancelar ({proposal.votosReplanificacion?.cancel.length || 0})
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Ventanas de tiempo sugeridas */}
-                          <div className="space-y-1.5 mb-3">
-                            {proposal.ventanasSugeridas.map((ventana) => {
-                              const hasVoted = ventana.votosUsuarios.includes('alex.rodriguez@huecko.com');
-
-                              return (
-                                <div
-                                  key={ventana.id}
-                                  onClick={() => !isClosed && handleVote(proposal.id, ventana.id)}
-                                  className={`px-3 py-2 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
-                                    hasVoted
-                                      ? 'bg-[#a8c9a0]/30 border-[#7fae7a]'
-                                      : 'bg-white/70 border-[#c0c9bb]/60 hover:border-[#7fae7a]'
-                                  } ${isClosed ? 'cursor-default opacity-85' : ''}`}
-                                >
-                                  <div className="flex items-center gap-2 text-xs">
-                                    <span
-                                      className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] ${
-                                        hasVoted
-                                          ? 'bg-[#7fae7a] border-[#416840] text-white font-bold'
-                                          : 'border-[#c0c9bb] text-transparent'
-                                      }`}
-                                    >
-                                      ✓
-                                    </span>
-                                    <span className="font-semibold text-[#161d15]">
-                                      {ventana.dia} {ventana.horaInicio}-{ventana.horaFin}
-                                    </span>
-                                    <span className="text-[10px] text-[#416840] font-bold">
-                                      ({ventana.disponibilidadPorcentaje}% libre)
-                                    </span>
-                                  </div>
-
-                                  <span className="text-xs font-bold text-[#70796d]">
-                                    {ventana.votosUsuarios.length} {ventana.votosUsuarios.length === 1 ? 'voto' : 'votos'}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Pie de tarjeta ultra-limpio */}
-                        <div className="pt-2.5 border-t border-[#c0c9bb]/60 flex justify-between items-center text-xs text-[#70796d]">
-                          <span className="text-[11px] font-mono">Plazo: {proposal.plazoVotacion}</span>
-
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => openReportIncidentModal(proposal)}
-                              className="text-[11px] text-amber-800 hover:text-amber-900 font-semibold cursor-pointer"
-                            >
-                              Reportar Imprevisto
-                            </button>
-
-                            {!isClosed && (
-                              <button
-                                onClick={() => handleCloseVotingManually(proposal.id)}
-                                className="text-[11px] text-[#416840] hover:text-[#2a4f2b] font-bold cursor-pointer"
-                              >
-                                Confirmar Plan
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            ) : (
-              <div className="p-6 rounded-xl bg-white/50 border border-dashed border-[#c0c9bb] text-center">
-                <p className="text-[#70796d] text-xs mb-3">No hay propuestas de planes activas en este grupo.</p>
-                <button
-                  onClick={() => openProposePlanModal(selectedGroup)}
-                  className="px-4 py-2 rounded-xl bg-[#a8c9a0]/30 text-[#2a4f2b] border border-[#7fae7a]/40 text-xs font-semibold hover:bg-[#a8c9a0]/50 cursor-pointer"
-                >
-                  + Proponer el primer Plan
-                </button>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* VISTA DEL HORARIO EN COMÚN DE TODOS */}
-        {selectedGroup ? (
-          <section className="bg-[#e9f0e4]/80 border border-[#d5e3cf] rounded-2xl p-6 md:p-8 shadow-sm backdrop-blur-md animate-fadeIn">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-[#c0c9bb]/60 pb-4">
-              <div>
-                <div className="flex items-center gap-3 mb-1">
-                  <h2 className="text-2xl font-bold text-[#161d15] font-headline">Horario en Común: {selectedGroup.nombre}</h2>
-                  <span className="px-3 py-1 rounded-full bg-[#a8c9a0]/40 border border-[#7fae7a] text-[#1e4d50] text-xs font-bold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#7fae7a] animate-pulse" />
-                    Cruce Activo
-                  </span>
-                </div>
-                <p className="text-[#40493e] text-sm">
-                  Los casilleros en <strong className="text-[#416840]">Verde</strong> representan <strong>huecos/espacios libres</strong> que superan el umbral del <strong>{selectedGroup.umbralDisponibilidad}% de coincidencia</strong>.
-                </p>
-              </div>
-
-              {/* Leyenda de colores */}
-              <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-xl border border-[#c0c9bb]/60 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded bg-[#a8c9a0] border border-[#7fae7a]" />
-                  <span className="text-[#161d15] font-semibold">Espacio Libre (Cumple {selectedGroup.umbralDisponibilidad}%)</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded bg-[#e9f0e6] border border-[#c0c9bb]" />
-                  <span className="text-[#70796d]">Parcial / Ocupado</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Heatmap Grid Tabla Rediseñada */}
-            <div className="overflow-x-auto">
-              <div className="min-w-[850px]">
-                {/* Días Header */}
-                <div className="grid grid-cols-8 gap-3 mb-4">
-                  <div className="w-16"></div>
-                  {days.map((day) => (
-                    <div key={day} className="text-center text-xs font-bold text-[#40493e] uppercase tracking-wider pb-2 border-b border-[#c0c9bb]/60">
-                      {day}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Horas Filas */}
-                <div className="space-y-2.5">
-                  {timeSlotsHours.map((hour) => (
-                    <div key={hour} className="grid grid-cols-8 gap-3 items-center">
-                      {/* Label hora */}
-                      <div className="text-xs text-[#70796d] font-mono font-medium text-right pr-2">
-                        {hour.toString().padStart(2, '0')}:00
-                      </div>
-
-                      {/* Días celdas */}
-                      {days.map((day) => {
-                        const cell = getCellAvailability(selectedGroup, day, hour);
-
-                        return (
-                          <div
-                            key={`${day}-${hour}`}
-                            className={`p-2.5 rounded-xl border transition-all flex flex-col justify-between min-h-[64px] relative group ${
-                              cell.meetsThreshold
-                                ? 'bg-[#a8c9a0]/50 border-[#7fae7a] hover:bg-[#a8c9a0]/70'
-                                : cell.freeCount > 0
-                                ? 'bg-white/80 border-[#c0c9bb]/60 hover:border-[#7fae7a]'
-                                : 'bg-[#e9f0e6]/40 border-[#d5e3cf] opacity-60'
-                            }`}
-                          >
-                            {/* Indicador superior de % */}
-                            <div className="flex justify-between items-center w-full">
-                              <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                                  cell.meetsThreshold
-                                    ? 'bg-[#7fae7a] text-white'
-                                    : 'bg-[#e3eae0] text-[#40493e]'
-                                }`}
-                              >
-                                {cell.freePercentage}% libre
-                              </span>
-                              <span className="text-[10px] text-[#70796d] font-medium">
-                                {cell.freeCount}/{cell.totalMembers}
-                              </span>
-                            </div>
-
-                            {/* Ocupados resumen o Badge de Disponible */}
-                            <div className="mt-1 flex items-center justify-between">
-                              {cell.occupiedMembers.length > 0 ? (
-                                <div className="flex -space-x-1.5 overflow-hidden">
-                                  {cell.occupiedMembers.map((oc, i) => (
-                                    <span
-                                      key={i}
-                                      className="w-4 h-4 rounded-full border border-white text-[9px] font-bold text-white flex items-center justify-center shrink-0 shadow-xs"
-                                      style={{ backgroundColor: oc.userColor }}
-                                      title={`${oc.userName}: ${oc.title}`}
-                                    >
-                                      {oc.userName.charAt(0)}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-[10px] text-[#416840] font-bold flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#416840] inline-block" />
-                                  Libre
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-        ) : (
-          <div className="p-8 rounded-2xl bg-[#e9f0e4]/50 border border-dashed border-[#c0c9bb] text-center">
-            <span className="material-symbols-outlined text-[48px] text-[#70796d] mb-2">grid_view</span>
-            <h3 className="text-lg font-bold text-[#161d15]">Selecciona un grupo para ver el Horario en Común</h3>
-            <p className="text-[#70796d] text-sm max-w-md mx-auto mt-1">
-              Haz clic en el botón <strong>"Ver Horario en Común"</strong> de cualquier tarjeta arriba para desplegar el heatmap de espacios libres.
-            </p>
-          </div>
-        )}
       </main>
 
-      {/* Modal: Crear Grupo */}
+      {/* Modal: Crear grupo */}
       {isCreateModalOpen && (
         <GroupFormModal
-          title="Crear Nuevo Grupo"
+          title="Crear grupo"
           nombre={nombre}
           setNombre={setNombre}
           descripcion={descripcion}
@@ -905,57 +1075,57 @@ export default function GroupsPage() {
           onClose={() => setIsEditGroupModalOpen(false)}
           onSubmit={handleUpdateGroup}
           onDelete={() => handleDeleteGroup(selectedGroup.id)}
-          submitLabel="Guardar Cambios"
+          submitLabel="Guardar cambios"
         />
       )}
 
-      {/* Modal: Proponer Nuevo Plan Grupal (RF-08) */}
+      {/* Modal para proponer un nuevo plan */}
       {isProposeModalOpen && selectedGroup && (
-        <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b border-[#c0c9bb]/60">
-              <h2 className="text-xl font-bold text-[#161d15] flex items-center gap-2 font-headline">
-                <span className="material-symbols-outlined text-[#416840]">campaign</span>
-                Proponer Plan: {selectedGroup.nombre}
+        <div role="dialog" aria-modal="true" aria-label="Proponer plan" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
+              <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
+                <span aria-hidden="true" className="material-symbols-outlined text-primary">campaign</span>
+                Proponer plan: {selectedGroup.nombre}
               </h2>
-              <button
+              <button aria-label="Cerrar"
                 onClick={() => setIsProposeModalOpen(false)}
-                className="text-[#70796d] hover:text-[#161d15] transition-colors cursor-pointer"
+                className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
               >
-                <span className="material-symbols-outlined">close</span>
+                <span aria-hidden="true" className="material-symbols-outlined">close</span>
               </button>
             </div>
 
             <form onSubmit={handleCreateProposalSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-[#40493e] mb-1.5">Título del Plan *</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Título del Plan *</label>
                 <input
                   type="text"
                   required
                   placeholder="Ej. Almuerzo de integración, Estudio de Cálculo..."
                   value={proposalTitle}
                   onChange={(e) => setProposalTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] placeholder-slate-400 text-sm focus:outline-none focus:border-[#7fae7a]"
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-[#40493e] mb-1.5">Lugar u Opciones de Encuentro (Opcional)</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Lugar u Opciones de Encuentro (Opcional)</label>
                 <input
                   type="text"
                   placeholder="Ej. Biblioteca Central / Discord / Parque..."
                   value={proposalLugar}
                   onChange={(e) => setProposalLugar(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] placeholder-slate-400 text-sm focus:outline-none focus:border-[#7fae7a]"
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-[#40493e] mb-1.5">Plazo de Votación</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Plazo de votación</label>
                 <select
                   value={proposalPlazo}
                   onChange={(e) => setProposalPlazo(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] text-sm focus:outline-none focus:border-[#7fae7a]"
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
                 >
                   <option value="12 horas">12 horas (Cierre rápido)</option>
                   <option value="24 horas">24 horas (Recomendado)</option>
@@ -964,21 +1134,21 @@ export default function GroupsPage() {
                 </select>
               </div>
 
-              {/* Ventanas de tiempo sugeridas para el plan (RF-08) */}
+              {/* Ventanas de tiempo sugeridas para el plan */}
               <div>
-                <label className="block text-xs font-medium text-[#40493e] mb-2">
+                <label className="block text-xs font-medium text-on-surface-variant mb-2">
                   Ventanas de Tiempo Sugeridas (De 2 a 5 opciones)
                 </label>
 
                 {/* Formulario para agregar una opción de horario */}
-                <div className="p-3 rounded-xl bg-white border border-[#c0c9bb]/60 mb-3 space-y-2">
+                <div className="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/60 mb-3 space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <span className="text-[10px] text-[#70796d] block mb-1">Día</span>
+                      <span className="text-2xs text-on-surface-variant block mb-1">Día</span>
                       <select
                         value={tempDay}
                         onChange={(e) => setTempDay(e.target.value as DayOfWeek)}
-                        className="w-full px-2 py-1.5 border border-[#c0c9bb] rounded-lg bg-[#f4fbf1] text-[#161d15] text-xs"
+                        className="w-full px-2 py-1.5 border border-outline-variant rounded-lg bg-surface text-on-surface text-xs"
                       >
                         {days.map((d) => (
                           <option key={d} value={d}>
@@ -988,21 +1158,21 @@ export default function GroupsPage() {
                       </select>
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#70796d] block mb-1">Inicio</span>
+                      <span className="text-2xs text-on-surface-variant block mb-1">Inicio</span>
                       <input
                         type="time"
                         value={tempStart}
                         onChange={(e) => setTempStart(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-[#c0c9bb] rounded-lg bg-[#f4fbf1] text-[#161d15] text-xs"
+                        className="w-full px-2 py-1.5 border border-outline-variant rounded-lg bg-surface text-on-surface text-xs"
                       />
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#70796d] block mb-1">Fin</span>
+                      <span className="text-2xs text-on-surface-variant block mb-1">Fin</span>
                       <input
                         type="time"
                         value={tempEnd}
                         onChange={(e) => setTempEnd(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-[#c0c9bb] rounded-lg bg-[#f4fbf1] text-[#161d15] text-xs"
+                        className="w-full px-2 py-1.5 border border-outline-variant rounded-lg bg-surface text-on-surface text-xs"
                       />
                     </div>
                   </div>
@@ -1010,9 +1180,10 @@ export default function GroupsPage() {
                   <button
                     type="button"
                     onClick={handleAddWindowToProposal}
-                    className="w-full py-1.5 bg-[#e9f0e4] hover:bg-[#dbe5d6] text-[#40493e] text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-[#c0c9bb]/60"
+                    disabled={suggestedWindows.length >= 5 || tempEnd <= tempStart}
+                    className="w-full py-1.5 bg-surface-container hover:bg-surface-variant text-on-surface-variant text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-outline-variant/60 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    + Agregar Opción de Horario
+                    {suggestedWindows.length >= 5 ? 'Máximo de 5 opciones' : '+ Agregar Opción de Horario'}
                   </button>
                 </div>
 
@@ -1021,25 +1192,25 @@ export default function GroupsPage() {
                   {suggestedWindows.map((w, idx) => (
                     <div
                       key={w.id}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-[#c0c9bb]/60 text-xs"
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/60 text-xs"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-[#416840]">Opción {idx + 1}:</span>
-                        <span className="text-[#161d15] font-medium">
-                          {w.dia} — {w.horaInicio} a {w.horaFin}
+                        <span className="font-bold text-primary">Opción {idx + 1}:</span>
+                        <span className="text-on-surface font-medium">
+                          {w.dia}, {w.horaInicio} a {w.horaFin}
                         </span>
-                        <span className="text-[10px] text-[#416840] font-bold">
+                        <span className="text-2xs text-primary font-bold">
                           ({w.disponibilidadPorcentaje}% libre)
                         </span>
                       </div>
 
-                      {suggestedWindows.length > 1 && (
-                        <button
+                      {suggestedWindows.length > 2 && (
+                        <button aria-label="Cerrar"
                           type="button"
                           onClick={() => handleRemoveWindowFromProposal(w.id)}
-                          className="text-red-600 hover:text-red-700 p-1 cursor-pointer"
+                          className="text-error hover:text-error p-1 cursor-pointer"
                         >
-                          ✕
+                          <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
                         </button>
                       )}
                     </div>
@@ -1047,17 +1218,17 @@ export default function GroupsPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-[#c0c9bb]/60">
+              <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/60">
                 <button
                   type="button"
                   onClick={() => setIsProposeModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-[#c0c9bb] text-[#40493e] hover:bg-[#e9f0e4] text-xs font-medium cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#7fae7a] hover:bg-[#6f9e6a] text-white text-xs font-semibold shadow-xs cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
                 >
                   Enviar Propuesta a Todos
                 </button>
@@ -1067,34 +1238,34 @@ export default function GroupsPage() {
         </div>
       )}
 
-      {/* Modal: Reportar Imprevisto / Falta (RF-13, RF-14) */}
+      {/* Modal para reportar un imprevisto */}
       {isIncidentModalOpen && targetProposalForIncident && (
-        <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b border-[#c0c9bb]/60">
-              <h2 className="text-xl font-bold text-[#161d15] flex items-center gap-2 font-headline">
-                <span className="material-symbols-outlined text-amber-700">warning</span>
+        <div role="dialog" aria-modal="true" aria-label="Avisar imprevisto o falta" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
+              <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
+                <span aria-hidden="true" className="material-symbols-outlined text-warning">warning</span>
                 Avisar Imprevisto o Falta
               </h2>
-              <button
+              <button aria-label="Cerrar"
                 onClick={() => setIsIncidentModalOpen(false)}
-                className="text-[#70796d] hover:text-[#161d15] transition-colors cursor-pointer"
+                className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
               >
-                <span className="material-symbols-outlined">close</span>
+                <span aria-hidden="true" className="material-symbols-outlined">close</span>
               </button>
             </div>
 
             <form onSubmit={handleReportIncidentSubmit} className="space-y-4">
               <div>
-                <p className="text-xs text-[#40493e] mb-3">
-                  Reporta un cambio de último minuto para el plan: <strong className="text-[#161d15]">{targetProposalForIncident.titulo}</strong>
+                <p className="text-xs text-on-surface-variant mb-3">
+                  Reporta un cambio de último minuto para el plan: <strong className="text-on-surface">{targetProposalForIncident.titulo}</strong>
                 </p>
 
-                <label className="block text-xs font-medium text-[#40493e] mb-1.5">Tipo de Imprevisto</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Tipo de imprevisto</label>
                 <select
                   value={incidentType}
                   onChange={(e) => setIncidentType(e.target.value as 'falta' | 'tardanza' | 'imprevisto')}
-                  className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] text-sm focus:outline-none focus:border-amber-600"
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-warning"
                 >
                   <option value="falta">No podré asistir (Falta)</option>
                   <option value="tardanza">Llegaré tarde (Tardanza)</option>
@@ -1103,35 +1274,35 @@ export default function GroupsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-[#40493e] mb-1.5">Motivo o Detalle *</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Motivo o Detalle *</label>
                 <textarea
                   rows={3}
                   required
                   placeholder="Ej. Me surgió un examen de laboratorio, llegaré 30 mins tarde por tráfico..."
                   value={incidentMotivo}
                   onChange={(e) => setIncidentMotivo(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] placeholder-slate-400 text-sm focus:outline-none focus:border-amber-600"
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-warning"
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
-                <span className="material-symbols-outlined text-[18px] text-amber-700 shrink-0">lightbulb</span>
+              <div className="p-3 rounded-xl bg-warning-container border border-warning/30 text-on-warning-container text-xs flex items-start gap-2">
+                <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-warning shrink-0">lightbulb</span>
                 <p>
                   El grupo recibirá una notificación inmediata y podrá votar si re-agendar, cancelar o mantener el evento.
                 </p>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-[#c0c9bb]/60">
+              <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/60">
                 <button
                   type="button"
                   onClick={() => setIsIncidentModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-[#c0c9bb] text-[#40493e] hover:bg-[#e9f0e4] text-xs font-medium cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-warning hover:bg-warning text-on-warning text-xs font-semibold shadow-xs cursor-pointer"
                 >
                   Notificar al Grupo
                 </button>
@@ -1143,53 +1314,131 @@ export default function GroupsPage() {
 
       {/* Modal: Unirse a Grupo por Código */}
       {isJoinModalOpen && (
-        <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b border-[#c0c9bb]/60">
-              <h2 className="text-xl font-bold text-[#161d15] flex items-center gap-2 font-headline">
-                <span className="material-symbols-outlined text-[#416840]">key</span>
+        <div role="dialog" aria-modal="true" aria-label="Unirse a un grupo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
+              <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
+                <span aria-hidden="true" className="material-symbols-outlined text-primary">key</span>
                 Unirse a un Grupo
               </h2>
-              <button
+              <button aria-label="Cerrar"
                 onClick={() => setIsJoinModalOpen(false)}
-                className="text-[#70796d] hover:text-[#161d15] transition-colors cursor-pointer"
+                className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
               >
-                <span className="material-symbols-outlined">close</span>
+                <span aria-hidden="true" className="material-symbols-outlined">close</span>
               </button>
             </div>
 
             <form onSubmit={handleJoinSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-[#40493e] mb-1.5">Código de Invitación</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Código de invitación</label>
                 <input
                   type="text"
                   required
                   placeholder="Ej. HUECKO-78A9"
                   value={joinCodeInput}
                   onChange={(e) => setJoinCodeInput(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] placeholder-slate-400 text-sm focus:outline-none focus:border-[#7fae7a] uppercase font-mono tracking-wider"
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary uppercase font-mono tracking-wider"
                 />
                 {joinError && (
-                  <p className="text-xs text-red-600 mt-1.5 font-medium">{joinError}</p>
+                  <p className="text-xs text-error mt-1.5 font-medium">{joinError}</p>
                 )}
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-[#c0c9bb]/60">
+              <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/60">
                 <button
                   type="button"
                   onClick={() => setIsJoinModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-[#c0c9bb] text-[#40493e] hover:bg-[#e9f0e4] text-xs font-medium cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#7fae7a] hover:bg-[#6f9e6a] text-white text-xs font-semibold shadow-xs cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
                 >
-                  Unirse al Grupo
+                  Unirse al grupo
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Ficha de un integrante del grupo.
+          No es un perfil social: solo lo justo para distinguir a dos personas
+          que se llaman igual y saber qué papel tienen en los planes. */}
+      {memberDetail && memberGroup && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Ficha de ${memberDetail.nombre}`}
+          className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4"
+        >
+          <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex justify-between items-start gap-3 mb-4 pb-4 border-b border-outline-variant/60">
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  aria-hidden="true"
+                  className="w-12 h-12 shrink-0 rounded-full flex items-center justify-center text-on-primary text-lg font-black"
+                  style={{ backgroundColor: memberDetail.color }}
+                >
+                  {memberDetail.nombre.charAt(0)}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold text-on-surface truncate">{memberDetail.nombre}</h2>
+                  <p className="text-xs text-on-surface-variant break-all">{memberDetail.email}</p>
+                </div>
+              </div>
+              <button
+                aria-label="Cerrar"
+                onClick={() => setMemberRef(null)}
+                className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer shrink-0"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <dl className="space-y-3 text-xs">
+              <div className="flex justify-between gap-4">
+                <dt className="text-on-surface-variant">Grupo</dt>
+                <dd className="font-medium text-on-surface text-right">{memberGroup.nombre}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-on-surface-variant">Estado</dt>
+                <dd className="font-medium text-right capitalize">
+                  {memberDetail.status === 'confirmado' ? (
+                    <span className="text-success">Confirmado</span>
+                  ) : (
+                    <span className="text-warning">Invitación pendiente</span>
+                  )}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-on-surface-variant">Rol en los planes</dt>
+                <dd className="font-medium text-on-surface text-right">
+                  {memberDetail.isEssential ? 'Imprescindible' : 'Regular'}
+                </dd>
+              </div>
+            </dl>
+
+            <p className="mt-4 text-2xs text-on-surface-variant leading-relaxed">
+              Huecko nunca muestra el detalle de los bloques de otra persona: del resto del
+              grupo solo se sabe si está ocupada o libre en cada franja.
+            </p>
+
+            <div className="mt-4 pt-4 border-t border-outline-variant/60 flex justify-end">
+              <button
+                type="button"
+                onClick={() => toggleMemberEssential(memberGroup.id, memberDetail.email)}
+                className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface hover:bg-surface-container text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-warning">
+                  {memberDetail.isEssential ? 'star_border' : 'star'}
+                </span>
+                {memberDetail.isEssential ? 'Quitar imprescindible' : 'Marcar imprescindible'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1246,50 +1495,50 @@ function GroupFormModal({
   submitLabel,
 }: GroupFormModalProps) {
   return (
-    <div className="fixed inset-0 z-50 bg-[#161d15]/50 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#f4fbf1] border border-[#d5e3cf] rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
-        <div className="flex justify-between items-center mb-4 pb-2 border-b border-[#c0c9bb]/60">
-          <h2 className="text-xl font-bold text-[#161d15] flex items-center gap-2 font-headline">
-            <span className="material-symbols-outlined text-[#416840]">group</span>
+    <div role="dialog" aria-modal="true" aria-label="Formulario de grupo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
+      <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
+        <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
+          <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
+            <span aria-hidden="true" className="material-symbols-outlined text-primary">group</span>
             {title}
           </h2>
-          <button onClick={onClose} className="text-[#70796d] hover:text-[#161d15] transition-colors cursor-pointer">
-            <span className="material-symbols-outlined">close</span>
+          <button aria-label="Cerrar" onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">
+            <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#40493e] mb-1.5">Nombre del Grupo *</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre del grupo *</label>
             <input
               type="text"
               required
               placeholder="Ej. Grupo Universidad, Viaje de Verano..."
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] placeholder-slate-400 text-sm focus:outline-none focus:border-[#7fae7a]"
+              className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-[#40493e] mb-1.5">Descripción</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Descripción</label>
             <textarea
               rows={2}
               placeholder="Descripción del grupo..."
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
-              className="w-full px-3.5 py-2.5 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] placeholder-slate-400 text-sm focus:outline-none focus:border-[#7fae7a]"
+              className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
             />
           </div>
 
-          {/* Umbral de Coincidencia (RF-06) */}
-          <div className="p-4 rounded-xl bg-white border border-[#c0c9bb]/60 space-y-2">
+          {/* Umbral de coincidencia */}
+          <div className="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60 space-y-2">
             <div className="flex justify-between items-center">
-              <label className="text-xs font-semibold text-[#161d15] flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[#416840] text-[18px]">tune</span>
-                Umbral Mínimo de Coincidencia (RF-06)
+              <label className="text-xs font-semibold text-on-surface flex items-center gap-1.5">
+                <span aria-hidden="true" className="material-symbols-outlined text-primary text-[18px]">tune</span>
+                Umbral mínimo de coincidencia
               </label>
-              <span className="text-xs font-bold text-[#416840] bg-[#a8c9a0]/30 px-2 py-0.5 rounded-lg border border-[#7fae7a]/40">
+              <span className="text-xs font-bold text-primary bg-inverse-primary/30 px-2 py-0.5 rounded-lg border border-secondary/40">
                 {umbral}% del grupo libre
               </span>
             </div>
@@ -1300,46 +1549,46 @@ function GroupFormModal({
               step="5"
               value={umbral}
               onChange={(e) => setUmbral(Number(e.target.value))}
-              className="w-full accent-[#7fae7a] cursor-pointer mt-1"
+              className="w-full accent-secondary cursor-pointer mt-1"
             />
           </div>
 
           {/* Gestión de Integrantes */}
           <div>
-            <label className="block text-xs font-medium text-[#40493e] mb-1.5">Agregar Integrante</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Agregar integrante</label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
               <input
                 type="text"
                 placeholder="Nombre (ej. María C.)"
                 value={newMemberName}
                 onChange={(e) => setNewMemberName(e.target.value)}
-                className="px-3.5 py-2 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] text-sm focus:outline-none focus:border-[#7fae7a]"
+                className="px-3.5 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
               />
               <input
                 type="email"
                 placeholder="Correo (amigo@correo.com)"
                 value={newMemberEmail}
                 onChange={(e) => setNewMemberEmail(e.target.value)}
-                className="px-3.5 py-2 border border-[#c0c9bb] rounded-xl bg-white text-[#161d15] text-sm focus:outline-none focus:border-[#7fae7a]"
+                className="px-3.5 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
               />
             </div>
 
             <div className="flex justify-between items-center mb-3">
-              <label className="text-xs text-amber-800 font-semibold cursor-pointer flex items-center gap-1">
+              <label className="text-xs text-on-warning-container font-semibold cursor-pointer flex items-center gap-1">
                 <input
                   type="checkbox"
                   checked={isEssentialNewMember}
                   onChange={(e) => setIsEssentialNewMember(e.target.checked)}
-                  className="rounded border-[#c0c9bb] bg-white text-[#7fae7a] focus:ring-[#7fae7a] cursor-pointer"
+                  className="rounded border-outline-variant bg-surface-container-lowest text-secondary focus:ring-secondary cursor-pointer"
                 />
-                <span className="material-symbols-outlined text-[15px] text-amber-600">star</span>
-                Marcar Imprescindible (RF-16)
+                <span aria-hidden="true" className="material-symbols-outlined text-[15px] text-warning">star</span>
+                Marcar como imprescindible
               </label>
 
               <button
                 type="button"
                 onClick={onAddMember}
-                className="px-4 py-1.5 rounded-xl bg-[#e9f0e4] hover:bg-[#dbe5d6] text-[#40493e] text-xs font-semibold cursor-pointer border border-[#c0c9bb]/60"
+                className="px-4 py-1.5 rounded-xl bg-surface-container hover:bg-surface-variant text-on-surface-variant text-xs font-semibold cursor-pointer border border-outline-variant/60"
               >
                 + Añadir Integrante
               </button>
@@ -1350,25 +1599,25 @@ function GroupFormModal({
               {membersList.map((m) => (
                 <div
                   key={m.email}
-                  className="flex justify-between items-center p-2.5 rounded-xl bg-white border border-[#c0c9bb]/60 text-xs"
+                  className="flex justify-between items-center p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/60 text-xs"
                 >
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.color }} />
-                    <span className="text-[#161d15] font-medium">{m.nombre}</span>
-                    <span className="text-[#70796d]">({m.email})</span>
+                    <span className="text-on-surface font-medium">{m.nombre}</span>
+                    <span className="text-on-surface-variant">({m.email})</span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => onToggleEssential(m.email)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-semibold border flex items-center gap-1 cursor-pointer ${
+                      className={`px-2 py-0.5 rounded text-2xs font-semibold border flex items-center gap-1 cursor-pointer ${
                         m.isEssential
-                          ? 'bg-amber-100 border-amber-300 text-amber-900'
-                          : 'bg-[#f4fbf1] border-[#c0c9bb] text-[#70796d] hover:text-[#161d15]'
+                          ? 'bg-warning-container border-warning/40 text-on-warning-container'
+                          : 'bg-surface border-outline-variant text-on-surface-variant hover:text-on-surface'
                       }`}
                     >
-                      <span className="material-symbols-outlined text-[12px]">star</span>
+                      <span aria-hidden="true" className="material-symbols-outlined text-xs">star</span>
                       {m.isEssential ? 'Imprescindible' : 'Regular'}
                     </button>
 
@@ -1376,10 +1625,10 @@ function GroupFormModal({
                       <button
                         type="button"
                         onClick={() => onRemoveMember(m.email)}
-                        className="text-red-600 hover:text-red-700 p-1 cursor-pointer"
+                        className="text-error hover:text-error p-1 cursor-pointer"
                         title="Quitar integrante"
                       >
-                        ✕
+                        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
                       </button>
                     )}
                   </div>
@@ -1388,12 +1637,12 @@ function GroupFormModal({
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-4 border-t border-[#c0c9bb]/60">
+          <div className="flex justify-between items-center pt-4 border-t border-outline-variant/60">
             {onDelete ? (
               <button
                 type="button"
                 onClick={onDelete}
-                className="px-3 py-2 rounded-xl bg-red-100 border border-red-300 text-red-800 hover:bg-red-200 text-xs font-semibold cursor-pointer"
+                className="px-3 py-2 rounded-xl bg-error-container border border-error/40 text-on-error-container hover:bg-error-container text-xs font-semibold cursor-pointer"
               >
                 Eliminar Grupo
               </button>
@@ -1403,13 +1652,13 @@ function GroupFormModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-[#c0c9bb] text-[#40493e] hover:bg-[#e9f0e4] text-xs font-medium cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-[#7fae7a] hover:bg-[#6f9e6a] text-white text-xs font-semibold shadow-xs cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
               >
                 {submitLabel}
               </button>

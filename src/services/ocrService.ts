@@ -1,85 +1,155 @@
 import { createWorker } from 'tesseract.js';
-import type { DayOfWeek, OcrExtractedSlot } from '../pages/SchedulePage';
+import * as pdfjsLib from 'pdfjs-dist';
+import type { DayOfWeek } from '../store/scheduleStore';
+import { SUBJECT_COLORS, colorByIndex } from '../theme/palette';
 
-const PRESET_COLORS: Record<string, string> = {
-  español: '#f59e0b', // Amber
-  matemáticas: '#3b82f6', // Blue
-  matematicas: '#3b82f6',
-  'ciencias naturales': '#10b981', // Emerald
-  ciencias: '#10b981',
-  historia: '#8b5cf6', // Violet
-  geografía: '#06b6d4', // Cyan
-  geografia: '#06b6d4',
-  'formación cívica y ética': '#ec4899', // Pink
-  'formación cívica': '#ec4899',
-  civica: '#ec4899',
-  'educación física': '#ef4444', // Red
-  'educacion fisica': '#ef4444',
-  educación: '#ef4444',
-  inglés: '#6366f1', // Indigo
-  ingles: '#6366f1',
-  artística: '#d946ef', // Fuchsia
-  artistica: '#d946ef',
-  biblioteca: '#eab308', // Yellow
-  algoritmos: '#8b5cf6',
-  cálculo: '#3b82f6',
-  redes: '#10b981',
-  software: '#f59e0b',
-};
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '5.4.530'}/build/pdf.worker.min.mjs`;
+}
 
-const COLOR_PALETTE = [
-  '#8b5cf6',
-  '#3b82f6',
-  '#10b981',
-  '#f59e0b',
-  '#ec4899',
-  '#06b6d4',
-  '#d946ef',
-  '#6366f1',
-];
+export interface OcrExtractedSlot {
+  id: string;
+  title: string;
+  day: DayOfWeek;
+  startTime: string;
+  endTime: string;
+  customColor: string;
+  selected: boolean;
+  tag?: string;
+}
+
+
+
+
 
 const DAY_KEYWORDS: { key: DayOfWeek; patterns: RegExp[] }[] = [
-  { key: 'Lun', patterns: [/\blunes\b/i, /\blun\b/i, /\bmon\b/i, /\bmonday\b/i] },
-  { key: 'Mar', patterns: [/\bmartes\b/i, /\bmar\b/i, /\btue\b/i, /\btuesday\b/i] },
-  { key: 'Mié', patterns: [/\bmi[eé]rcoles\b/i, /\bmi[eé]\b/i, /\bwed\b/i, /\bwednesday\b/i] },
-  { key: 'Jue', patterns: [/\bjueves\b/i, /\bjue\b/i, /\bthu\b/i, /\bthursday\b/i] },
-  { key: 'Vie', patterns: [/\bviernes\b/i, /\bvie\b/i, /\bfri\b/i, /\bfriday\b/i] },
-  { key: 'Sáb', patterns: [/\bs[aá]bado\b/i, /\bs[aá]b\b/i, /\bsat\b/i, /\bsaturday\b/i] },
-  { key: 'Dom', patterns: [/\bdomingo\b/i, /\bdom\b/i, /\bsun\b/i, /\bsunday\b/i] },
+  { key: 'Lun', patterns: [/\blunes\b/i, /\blun\b/i, /\bmon\b/i, /\bmonday\b/i, /^l$/i] },
+  { key: 'Mar', patterns: [/\bmartes\b/i, /\bmar\b/i, /\btue\b/i, /\btuesday\b/i, /^m$/i, /^ma$/i] },
+  { key: 'Mié', patterns: [/\bmi[eé]rcoles\b/i, /\bmi[eé]\b/i, /\bwed\b/i, /\bwednesday\b/i, /^x$/i, /^mi$/i] },
+  { key: 'Jue', patterns: [/\bjueves\b/i, /\bjue\b/i, /\bthu\b/i, /\bthursday\b/i, /^j$/i, /^ju$/i] },
+  { key: 'Vie', patterns: [/\bviernes\b/i, /\bvie\b/i, /\bfri\b/i, /\bfriday\b/i, /^v$/i, /^vi$/i] },
+  { key: 'Sáb', patterns: [/\bs[aá]bado\b/i, /\bs[aá]b\b/i, /\bsat\b/i, /\bsaturday\b/i, /^s$/i, /^sa$/i] },
+  { key: 'Dom', patterns: [/\bdomingo\b/i, /\bdom\b/i, /\bsun\b/i, /\bsunday\b/i, /^d$/i, /^do$/i] },
 ];
+
+const TIME_LABEL_REGEX = /^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i;
 
 const IGNORE_WORDS = [
   'recreo',
   'hora',
+  'horas',
   'día inhábil',
   'dia inhabil',
   'inhábil',
   'inhabil',
   'escuela',
   'primaria',
+  'secundaria',
   'profesor',
   'profesora',
+  'docente',
   'practicante',
   'grado',
   'sección',
   'seccion',
-  'mayo',
-  'junio',
-  'julio',
-  'agosto',
+  'semestre',
   'ciclo',
+  'carrera',
+  'universidad',
+  'facultad',
+  'matricula',
+  'matrícula',
+  'horario',
+  'turnos',
+  'aula',
+  'laboratorio',
+  'grupo',
+  'créditos',
+  'creditos',
 ];
 
-const formatHour = (h: string, m?: string): string => {
-  const hourNum = parseInt(h, 10);
+// Convierte una hora al formato 24 h.
+export const formatHour = (h: string, m?: string, isPm?: boolean): string => {
+  let hourNum = parseInt(h, 10);
+  if (isNaN(hourNum)) hourNum = 8;
+
+  // If PM indicator or typical afternoon class hour without AM (e.g. 1, 2, 3, 4, 5, 6)
+  if (isPm && hourNum < 12) {
+    hourNum += 12;
+  } else if (!isPm && hourNum >= 1 && hourNum <= 6) {
+    // Usually 1..6 in college timetable without explicit AM means 13..18
+    hourNum += 12;
+  }
+
+  if (hourNum > 23) hourNum = 23;
   const minStr = m ? m.padStart(2, '0') : '00';
   return `${hourNum.toString().padStart(2, '0')}:${minStr}`;
 };
 
-/**
- * Preprocesses an image using HTML Canvas for better OCR contrast and binarization
- */
-async function preprocessImage(imageSource: File | string): Promise<string> {
+// Detecta rangos de hora frecuentes.
+export const TIME_RANGE_REGEX = /(?:(?:de\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\s*(?:-|–|—|a|hasta|to|\/)\s*(?:a\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?|(\d{2})(\d{2})\s*(?:-|–|—|a|to)\s*(\d{2})(\d{2}))/i;
+
+// Prepara una imagen o PDF para OCR.
+async function prepareImageSource(
+  fileOrUrl: File | string,
+  onProgress?: (percent: number, status: string) => void
+): Promise<{ dataUrl: string; nativePdfWords?: Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number } }> }> {
+  // Check if file is a PDF
+  const isPdf =
+    (typeof fileOrUrl !== 'string' && fileOrUrl.type === 'application/pdf') ||
+    (typeof fileOrUrl === 'string' && fileOrUrl.toLowerCase().endsWith('.pdf')) ||
+    (typeof fileOrUrl !== 'string' && fileOrUrl.name.toLowerCase().endsWith('.pdf'));
+
+  if (isPdf && typeof fileOrUrl !== 'string') {
+    onProgress?.(15, 'Procesando archivo PDF y renderizando páginas...');
+    try {
+      const arrayBuffer = await fileOrUrl.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 2.0 });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+
+      if (ctx) {
+        await page.render({ canvasContext: ctx, canvas, viewport } as any).promise;
+
+        // Try extracting native text items from PDF
+        const textContent = await page.getTextContent();
+        const nativePdfWords: Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number } }> = [];
+
+        for (const item of textContent.items as any[]) {
+          if (item.str && item.str.trim().length > 0) {
+            const tx = item.transform[4];
+            const ty = viewport.height - item.transform[5]; // Flip Y
+            const width = item.width || item.str.length * 8;
+            const height = item.height || 14;
+
+            nativePdfWords.push({
+              text: item.str.trim(),
+              bbox: {
+                x0: tx,
+                y0: ty - height,
+                x1: tx + width,
+                y1: ty,
+              },
+            });
+          }
+        }
+
+        return {
+          dataUrl: canvas.toDataURL('image/png'),
+          nativePdfWords: nativePdfWords.length > 5 ? nativePdfWords : undefined,
+        };
+      }
+    } catch (pdfErr) {
+      console.warn('No se pudo renderizar PDF nativo, intentando como imagen:', pdfErr);
+    }
+  }
+
+  // Otherwise standard image preprocessing
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -88,11 +158,13 @@ async function preprocessImage(imageSource: File | string): Promise<string> {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        resolve(typeof imageSource === 'string' ? imageSource : URL.createObjectURL(imageSource));
+        resolve({
+          dataUrl: typeof fileOrUrl === 'string' ? fileOrUrl : URL.createObjectURL(fileOrUrl),
+        });
         return;
       }
 
-      // Upscale if small for better text recognition
+      // Upscale if small for maximum OCR accuracy
       const scale = Math.max(1, 1400 / img.width);
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
@@ -101,15 +173,15 @@ async function preprocessImage(imageSource: File | string): Promise<string> {
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imgData.data;
 
-      // Grayscale + Contrast stretch
+      // Grayscale + Dynamic Contrast Curve
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         let gray = 0.299 * r + 0.587 * g + 0.114 * b;
 
-        // High contrast curve
-        gray = gray < 130 ? gray * 0.7 : Math.min(255, gray * 1.25);
+        // High contrast filter
+        gray = gray < 135 ? gray * 0.65 : Math.min(255, gray * 1.25);
 
         data[i] = gray;
         data[i + 1] = gray;
@@ -117,33 +189,36 @@ async function preprocessImage(imageSource: File | string): Promise<string> {
       }
 
       ctx.putImageData(imgData, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
+      resolve({ dataUrl: canvas.toDataURL('image/png') });
     };
 
     img.onerror = () => {
-      resolve(typeof imageSource === 'string' ? imageSource : URL.createObjectURL(imageSource));
+      resolve({
+        dataUrl: typeof fileOrUrl === 'string' ? fileOrUrl : URL.createObjectURL(fileOrUrl),
+      });
     };
 
-    if (typeof imageSource === 'string') {
-      img.src = imageSource;
+    if (typeof fileOrUrl === 'string') {
+      img.src = fileOrUrl;
     } else {
-      img.src = URL.createObjectURL(imageSource);
+      img.src = URL.createObjectURL(fileOrUrl);
     }
   });
 }
 
+// Ejecuta el OCR del horario.
 export async function processScheduleOcr(
   imageSource: File | string,
   onProgress?: (percent: number, status: string) => void
 ): Promise<{ slots: OcrExtractedSlot[]; rawText: string }> {
-  onProgress?.(10, 'Optimizando contraste y resolución de la imagen...');
-  const processedImage = await preprocessImage(imageSource);
+  onProgress?.(10, 'Optimizando contraste y resolución de la imagen/PDF...');
+  const { dataUrl, nativePdfWords } = await prepareImageSource(imageSource, onProgress);
 
-  onProgress?.(20, 'Iniciando motor neuronal OCR en español...');
+  onProgress?.(25, 'Iniciando motor neuronal OCR en español e inglés...');
   const worker = await createWorker('spa+eng', 1, {
     logger: (m) => {
       if (m.status === 'recognizing text') {
-        const pct = Math.round(25 + m.progress * 65);
+        const pct = Math.round(30 + m.progress * 60);
         onProgress?.(pct, `Reconociendo celdas y texto... (${Math.round(m.progress * 100)}%)`);
       } else if (m.status === 'loading tesseract core') {
         onProgress?.(15, 'Cargando núcleos de IA...');
@@ -153,32 +228,31 @@ export async function processScheduleOcr(
     },
   });
 
-  onProgress?.(45, 'Escaneando cuadrícula y palabras clave...');
-  const ret = await worker.recognize(processedImage);
+  onProgress?.(45, 'Escaneando cuadrícula tabular y palabras clave...');
+  const ret = await worker.recognize(dataUrl);
   await worker.terminate();
 
   const rawText = ret.data.text || '';
   const rawData = ret.data as any;
-  const words =
+  const ocrWords =
     rawData.words ||
     rawData.blocks?.flatMap((b: any) => b.paragraphs?.flatMap((p: any) => p.lines?.flatMap((l: any) => l.words))) ||
     [];
-  const lines =
-    rawData.lines ||
-    rawData.blocks?.flatMap((b: any) => b.paragraphs?.flatMap((p: any) => p.lines)) ||
-    [];
+
+  // Merge native PDF words if available
+  const wordsToUse = nativePdfWords && nativePdfWords.length > ocrWords.length ? nativePdfWords : ocrWords;
 
   onProgress?.(92, 'Reconstruyendo tabla 2D y mapeando horarios...');
 
   // 1. Try 2D spatial table reconstruction first
-  let extracted = parseSpatialTable(words, lines);
+  let extracted = parseSpatialTable(wordsToUse);
 
   // 2. If spatial parser found few items, fallback to enhanced regex sequence parser
   if (extracted.length < 3) {
     extracted = parseScheduleText(rawText);
   }
 
-  onProgress?.(100, '¡Horario extraído con éxito!');
+  onProgress?.(100, extracted.length ? 'Horario extraído. Revisa los bloques antes de confirmarlos.' : 'No se detectaron bloques editables.');
   return { slots: extracted, rawText };
 }
 
@@ -197,15 +271,41 @@ interface RowDef {
   centerY: number;
 }
 
-/**
- * 2D Spatial Table Grid Reconstruction
- * Maps recognized words to Day Columns (X axis) and Time Rows (Y axis)
- */
-function parseSpatialTable(
-  words: Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number } }>,
-  _lines: Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number } }>
-): OcrExtractedSlot[] {
-  if (words.length === 0) return [];
+type OcrWord = { text: string; bbox: { x0: number; y0: number; x1: number; y1: number } };
+
+// Une palabras de una misma línea.
+function getVisualLines(words: OcrWord[]): Array<{ text: string; bbox: OcrWord['bbox']; centerX: number; centerY: number }> {
+  const lines: OcrWord[][] = [];
+
+  [...words]
+    .sort((a, b) => ((a.bbox.y0 + a.bbox.y1) / 2) - ((b.bbox.y0 + b.bbox.y1) / 2))
+    .forEach((word) => {
+      const centerY = (word.bbox.y0 + word.bbox.y1) / 2;
+      const matchingLine = lines.find((line) => {
+        const lineY = line.reduce((total, current) => total + (current.bbox.y0 + current.bbox.y1) / 2, 0) / line.length;
+        return Math.abs(lineY - centerY) <= 18;
+      });
+      (matchingLine || lines[lines.push([]) - 1]).push(word);
+    });
+
+  return lines.map((line) => {
+    const sorted = line.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+    const x0 = Math.min(...sorted.map((word) => word.bbox.x0));
+    const x1 = Math.max(...sorted.map((word) => word.bbox.x1));
+    const y0 = Math.min(...sorted.map((word) => word.bbox.y0));
+    const y1 = Math.max(...sorted.map((word) => word.bbox.y1));
+    return {
+      text: sorted.map((word) => word.text).join(' ').replace(/\s+/g, ' ').trim(),
+      bbox: { x0, y0, x1, y1 },
+      centerX: (x0 + x1) / 2,
+      centerY: (y0 + y1) / 2,
+    };
+  });
+}
+
+// Reconstruye la tabla usando posiciones de texto.
+function parseSpatialTable(words: OcrWord[]): OcrExtractedSlot[] {
+  if (!words || words.length === 0) return [];
 
   // Step 1: Detect Day Columns in header
   const detectedColumns: ColumnDef[] = [];
@@ -213,59 +313,127 @@ function parseSpatialTable(
     const textClean = word.text.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     for (const d of DAY_KEYWORDS) {
       if (d.patterns.some((p) => p.test(textClean))) {
-        // Check if not already added in similar X
-        const existing = detectedColumns.find((col) => Math.abs(col.centerX - (word.bbox.x0 + word.bbox.x1) / 2) < 40);
+        const centerX = (word.bbox.x0 + word.bbox.x1) / 2;
+        const existing = detectedColumns.find((col) => Math.abs(col.centerX - centerX) < 45);
         if (!existing) {
           detectedColumns.push({
             day: d.key,
             minX: word.bbox.x0,
             maxX: word.bbox.x1,
-            centerX: (word.bbox.x0 + word.bbox.x1) / 2,
+            centerX,
           });
         }
       }
     }
   }
 
-  // Sort columns left-to-right (Lun -> Mar -> Mié -> Jue -> Vie)
+  // Sort columns left-to-right (Lun -> Mar -> Mié -> Jue -> Vie -> Sáb -> Dom)
   detectedColumns.sort((a, b) => a.centerX - b.centerX);
 
-  // If columns detected, calculate column X ranges
+  // If at least 2 columns detected, calculate column X boundary ranges
   if (detectedColumns.length >= 2) {
     for (let i = 0; i < detectedColumns.length; i++) {
-      const prevX = i > 0 ? (detectedColumns[i - 1].centerX + detectedColumns[i].centerX) / 2 : detectedColumns[i].minX - 30;
-      const nextX = i < detectedColumns.length - 1 ? (detectedColumns[i].centerX + detectedColumns[i + 1].centerX) / 2 : detectedColumns[i].maxX + 100;
+      const prevX = i > 0 ? (detectedColumns[i - 1].centerX + detectedColumns[i].centerX) / 2 : detectedColumns[i].minX - 40;
+      const nextX = i < detectedColumns.length - 1 ? (detectedColumns[i].centerX + detectedColumns[i + 1].centerX) / 2 : detectedColumns[i].maxX + 120;
       detectedColumns[i].minX = prevX;
       detectedColumns[i].maxX = nextX;
     }
   }
 
-  // Step 2: Detect Time Rows in left column
+  // Detecta filas de hora.
   const detectedRows: RowDef[] = [];
-  const timeRangeRegex = /(\d{1,2})[:.]?(\d{2})?\s*(?:-|a|to|–|—|hasta)\s*(\d{1,2})[:.]?(\d{2})?/i;
+
+  const addDetectedRow = (startTime: string, endTime: string, bbox: OcrWord['bbox']) => {
+    const centerY = (bbox.y0 + bbox.y1) / 2;
+    if (!detectedRows.some((row) => Math.abs(row.centerY - centerY) < 20)) {
+      detectedRows.push({
+        startTime,
+        endTime,
+        minY: bbox.y0 - 15,
+        maxY: bbox.y1 + 15,
+        centerY,
+      });
+    }
+  };
+
+  getVisualLines(words).forEach((line) => {
+    const match = line.text.match(TIME_RANGE_REGEX);
+    if (!match) return;
+
+    if (match[7] && match[8] && match[9] && match[10]) {
+      addDetectedRow(`${match[7]}:${match[8]}`, `${match[9]}:${match[10]}`, line.bbox);
+    } else if (match[1] && match[4]) {
+      const isPm1 = match[3]?.toLowerCase() === 'pm';
+      const isPm2 = match[6]?.toLowerCase() === 'pm';
+      addDetectedRow(
+        formatHour(match[1], match[2], isPm1),
+        formatHour(match[4], match[5], isPm2 || isPm1),
+        line.bbox
+      );
+    }
+  });
 
   for (const word of words) {
-    const timeMatch = word.text.match(timeRangeRegex);
-    if (timeMatch) {
-      const startTime = formatHour(timeMatch[1], timeMatch[2]);
-      const endTime = formatHour(timeMatch[3], timeMatch[4]);
-      const centerY = (word.bbox.y0 + word.bbox.y1) / 2;
+    const match = word.text.match(TIME_RANGE_REGEX);
+    if (match) {
+      let startTime = '08:00';
+      let endTime = '10:00';
 
-      const existing = detectedRows.find((r) => Math.abs(r.centerY - centerY) < 30);
-      if (!existing) {
-        detectedRows.push({
-          startTime,
-          endTime,
-          minY: word.bbox.y0 - 15,
-          maxY: word.bbox.y1 + 15,
-          centerY,
-        });
+      if (match[7] && match[8] && match[9] && match[10]) {
+        // Military time 0800 - 1000
+        startTime = `${match[7]}:${match[8]}`;
+        endTime = `${match[9]}:${match[10]}`;
+      } else if (match[1] && match[4]) {
+        const isPm1 = Boolean(match[3] && match[3].toLowerCase() === 'pm');
+        const isPm2 = Boolean(match[6] && match[6].toLowerCase() === 'pm');
+        startTime = formatHour(match[1], match[2], isPm1);
+        endTime = formatHour(match[4], match[5], isPm2 || isPm1);
       }
+
+      addDetectedRow(startTime, endTime, word.bbox);
     }
   }
 
   // Sort rows top-to-bottom
   detectedRows.sort((a, b) => a.centerY - b.centerY);
+
+  // Usa horas individuales si no hay rangos.
+  if (detectedRows.length < 2) {
+    const labelCandidates = words
+      .map((word) => {
+        const match = word.text.trim().match(TIME_LABEL_REGEX);
+        if (!match) return null;
+        const isPm = match[3]?.toLowerCase() === 'pm';
+        return {
+          word,
+          startTime: formatHour(match[1], match[2], isPm),
+          centerX: (word.bbox.x0 + word.bbox.x1) / 2,
+          centerY: (word.bbox.y0 + word.bbox.y1) / 2,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    const leftMostX = Math.min(...labelCandidates.map((item) => item.centerX));
+    const rowLabels = labelCandidates
+      .filter((item) => item.centerX <= leftMostX + 90)
+      .sort((a, b) => a.centerY - b.centerY);
+
+    rowLabels.forEach((label, index) => {
+      const next = rowLabels[index + 1];
+      const startMinutes = timeToMinutes(label.startTime);
+      const endTime = next?.startTime || minutesToTime(startMinutes + 60);
+      if (!detectedRows.some((row) => Math.abs(row.centerY - label.centerY) < 20)) {
+        detectedRows.push({
+          startTime: label.startTime,
+          endTime,
+          minY: label.word.bbox.y0 - 12,
+          maxY: label.word.bbox.y1 + 12,
+          centerY: label.centerY,
+        });
+      }
+    });
+    detectedRows.sort((a, b) => a.centerY - b.centerY);
+  }
 
   // If both columns and rows were detected spatially
   if (detectedColumns.length >= 2 && detectedRows.length >= 2) {
@@ -277,12 +445,12 @@ function parseSpatialTable(
       detectedRows[i].maxY = nextY;
     }
 
-    // Grid matrix cell storage: cellMap[rowIdx][colIdx] = array of words
+    // Grid matrix cell storage: cellMap[rowIdx][colIdx] = string
     const cellMap: string[][] = detectedRows.map(() => detectedColumns.map(() => ''));
 
     for (const word of words) {
       const text = word.text.trim();
-      if (text.length < 2 || text.match(timeRangeRegex) || isIgnoredWord(text)) continue;
+      if (text.length < 2 || text.match(TIME_RANGE_REGEX) || isIgnoredWord(text)) continue;
 
       const wx = (word.bbox.x0 + word.bbox.x1) / 2;
       const wy = (word.bbox.y0 + word.bbox.y1) / 2;
@@ -315,6 +483,7 @@ function parseSpatialTable(
             endTime: row.endTime,
             customColor,
             selected: true,
+            tag: 'Clase',
           });
         }
       }
@@ -328,9 +497,7 @@ function parseSpatialTable(
   return [];
 }
 
-/**
- * Enhanced linear/row-wise text parser
- */
+// Alternativa para texto sin tabla.
 export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
   const lines = rawText
     .split('\n')
@@ -338,9 +505,7 @@ export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
     .filter((l) => l.length > 2);
 
   const results: OcrExtractedSlot[] = [];
-  const timeRangeRegex = /(\d{1,2})[:.]?(\d{2})?\s*(?:-|a|to|–|—|hasta)\s*(\d{1,2})[:.]?(\d{2})?/i;
   const dayRegex = /\b(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|lun|mar|mi[eé]|jue|vie|s[aá]b|dom)\b/gi;
-
   const standardDays: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
   let colorCount = 0;
 
@@ -348,22 +513,31 @@ export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
     const line = lines[i];
     if (isIgnoredWord(line)) continue;
 
-    const timeMatch = line.match(timeRangeRegex);
+    const timeMatch = line.match(TIME_RANGE_REGEX);
     const dayMatches = line.match(dayRegex);
 
     if (timeMatch) {
-      const startTime = formatHour(timeMatch[1], timeMatch[2]);
-      const endTime = formatHour(timeMatch[3], timeMatch[4]);
+      let startTime = '08:00';
+      let endTime = '10:00';
+
+      if (timeMatch[7] && timeMatch[8] && timeMatch[9] && timeMatch[10]) {
+        startTime = `${timeMatch[7]}:${timeMatch[8]}`;
+        endTime = `${timeMatch[9]}:${timeMatch[10]}`;
+      } else if (timeMatch[1] && timeMatch[4]) {
+        const isPm1 = Boolean(timeMatch[3] && timeMatch[3].toLowerCase() === 'pm');
+        const isPm2 = Boolean(timeMatch[6] && timeMatch[6].toLowerCase() === 'pm');
+        startTime = formatHour(timeMatch[1], timeMatch[2], isPm1);
+        endTime = formatHour(timeMatch[4], timeMatch[5], isPm2 || isPm1);
+      }
 
       // Remove time and days from line to extract subject words
       const remaining = line
-        .replace(timeRangeRegex, '')
+        .replace(TIME_RANGE_REGEX, '')
         .replace(dayRegex, '')
         .replace(/[|•\-_/:;()[\]{}#]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
-      // If line contains multiple subjects across days (e.g. "Español Matemáticas Español Educación Física")
       const candidateTokens = extractSubjectTokens(remaining);
 
       if (candidateTokens.length > 1) {
@@ -377,6 +551,7 @@ export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
               endTime,
               customColor: getColorForSubject(subject, colorCount++),
               selected: true,
+              tag: 'Clase',
             });
           }
         });
@@ -390,10 +565,11 @@ export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
           endTime,
           customColor: getColorForSubject(candidateTokens[0], colorCount++),
           selected: true,
+          tag: 'Clase',
         });
       }
     } else {
-      // Line without time: look for common subjects
+      // Line without time: look for known subjects
       const subjectTokens = extractSubjectTokens(line);
       subjectTokens.forEach((subject, idx) => {
         if (!isIgnoredWord(subject) && subject.length >= 3 && !subject.match(/^\d+$/)) {
@@ -406,6 +582,7 @@ export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
             endTime: formatHour((startH + 2).toString()),
             customColor: getColorForSubject(subject, colorCount++),
             selected: true,
+            tag: 'Clase',
           });
         }
       });
@@ -425,17 +602,7 @@ export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
     return uniqueSlots.slice(0, 16);
   }
 
-  // Fallback default
-  return [
-    { id: 'ocr-1', title: 'Español', day: 'Lun', startTime: '07:30', endTime: '08:20', customColor: '#f59e0b', selected: true },
-    { id: 'ocr-2', title: 'Matemáticas', day: 'Lun', startTime: '08:20', endTime: '09:10', customColor: '#3b82f6', selected: true },
-    { id: 'ocr-3', title: 'Formación Cívica y Ética', day: 'Lun', startTime: '09:10', endTime: '10:00', customColor: '#ec4899', selected: true },
-    { id: 'ocr-4', title: 'Ciencias Naturales', day: 'Lun', startTime: '11:10', endTime: '12:30', customColor: '#10b981', selected: true },
-    { id: 'ocr-5', title: 'Educación Física', day: 'Mar', startTime: '08:20', endTime: '09:10', customColor: '#ef4444', selected: true },
-    { id: 'ocr-6', title: 'Geografía', day: 'Mar', startTime: '10:20', endTime: '11:10', customColor: '#06b6d4', selected: true },
-    { id: 'ocr-7', title: 'Historia', day: 'Mié', startTime: '09:10', endTime: '10:00', customColor: '#8b5cf6', selected: true },
-    { id: 'ocr-8', title: 'Inglés', day: 'Jue', startTime: '10:20', endTime: '11:10', customColor: '#6366f1', selected: true },
-  ];
+  return [];
 }
 
 const KNOWN_SUBJECTS = [
@@ -463,6 +630,16 @@ const KNOWN_SUBJECTS = [
   'calculo',
   'programación',
   'programacion',
+  'base de datos',
+  'bases de datos',
+  'redes y telecomunicaciones',
+  'redes',
+  'ingeniería de software',
+  'sistemas operativos',
+  'inteligencia artificial',
+  'física',
+  'química',
+  'estadística',
 ];
 
 function extractSubjectTokens(text: string): string[] {
@@ -480,7 +657,7 @@ function extractSubjectTokens(text: string): string[] {
     return Array.from(new Set(found));
   }
 
-  // Otherwise split by spaces/punctuation
+  // Otherwise split by punctuation
   const words = text
     .split(/[|,;/\n]+/)
     .map((w) => w.trim())
@@ -492,7 +669,7 @@ function extractSubjectTokens(text: string): string[] {
 function cleanCourseTitle(title: string): string {
   return title
     .replace(/[|•\-_/:;()[\]{}#]/g, ' ')
-    .replace(/\b(am|pm|hrs|horas|de|del|al)\b/gi, ' ')
+    .replace(/\b(am|pm|hrs|horas|de|del|al|aula|lab|teoria|practica)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -514,12 +691,12 @@ function normalizeDayString(dayStr: string): DayOfWeek {
 
 function getColorForSubject(subject: string, index: number): string {
   const lower = subject.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  for (const [key, color] of Object.entries(PRESET_COLORS)) {
+  for (const [key, color] of Object.entries(SUBJECT_COLORS)) {
     if (lower.includes(key.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) {
       return color;
     }
   }
-  return COLOR_PALETTE[index % COLOR_PALETTE.length];
+  return colorByIndex(index);
 }
 
 function capitalize(str: string): string {
@@ -528,4 +705,14 @@ function capitalize(str: string): string {
     .split(' ')
     .map((word) => (word.length > 2 ? word.charAt(0).toUpperCase() + word.slice(1) : word))
     .join(' ');
+}
+
+function timeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function minutesToTime(value: number): string {
+  const normalized = ((value % 1440) + 1440) % 1440;
+  return `${Math.floor(normalized / 60).toString().padStart(2, '0')}:${(normalized % 60).toString().padStart(2, '0')}`;
 }

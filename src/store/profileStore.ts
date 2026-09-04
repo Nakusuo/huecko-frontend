@@ -1,19 +1,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { profileService } from '../services/profileService';
+import type { UserProfileData } from '../types/profile.types';
 
-export interface UserProfileData {
-  nombre: string;
-  email: string;
-  avatarUrl?: string;
-  timezone: string;
-  compartirDetallesHorario: boolean;
-  notificacionesEmail: boolean;
-  notificacionesWebSockets: boolean;
-}
+export type { UserProfileData };
 
 interface ProfileState {
   profile: UserProfileData;
-  updateProfile: (updated: Partial<UserProfileData>) => void;
+  isLoading: boolean;
+  syncError: string | null;
+  fetchProfile: () => Promise<void>;
+  updateProfile: (updated: Partial<UserProfileData>) => Promise<void>;
 }
 
 const INITIAL_PROFILE: UserProfileData = {
@@ -29,10 +26,44 @@ export const useProfileStore = create<ProfileState>()(
   persist(
     (set) => ({
       profile: INITIAL_PROFILE,
-      updateProfile: (updated) =>
+      isLoading: false,
+      syncError: null,
+
+      fetchProfile: async () => {
+        set({ isLoading: true, syncError: null });
+        try {
+          const remote = await profileService.getProfile();
+          if (remote) {
+            set((state) => ({
+              profile: { ...state.profile, ...remote },
+              isLoading: false,
+            }));
+          } else {
+            set({ isLoading: false });
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : 'Error al cargar perfil';
+          set({ syncError: msg, isLoading: false });
+        }
+      },
+
+      updateProfile: async (updated) => {
         set((state) => ({
           profile: { ...state.profile, ...updated },
-        })),
+        }));
+
+        try {
+          await profileService.updateProfile({
+            nombre: updated.nombre,
+            timezone: updated.timezone,
+            compartir_detalles_horario: updated.compartirDetallesHorario,
+            notificaciones_email: updated.notificacionesEmail,
+            notificaciones_websockets: updated.notificacionesWebSockets,
+          });
+        } catch {
+          // Mantener cambios locales offline
+        }
+      },
     }),
     {
       name: 'huecko-profile',
