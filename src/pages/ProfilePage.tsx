@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuthStore } from '../store/authStore';
@@ -9,8 +9,14 @@ import { useGroupsStore } from '../store/groupsStore';
 export default function ProfilePage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
-  const { profile, updateProfile } = useProfileStore();
+  const { profile, updateProfile, fetchProfile } = useProfileStore();
   const activeGroupsCount = useGroupsStore((s) => s.groups.length);
+
+  /* Trae el perfil del backend al abrir la página. En modo demo `fetchProfile`
+     no hace nada, así que el efecto es inofensivo sin servidor. */
+  useEffect(() => {
+    void fetchProfile();
+  }, [fetchProfile]);
 
   const handleLogout = () => {
     logout();
@@ -26,9 +32,9 @@ export default function ProfilePage() {
     setIsEditing(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfile(tempProfile);
+    await updateProfile(tempProfile);
     setIsEditing(false);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
