@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { isApiEnabled } from '../lib/apiClient';
 
 export type NavTab = 'dashboard' | 'schedule' | 'groups' | 'profile';
 
@@ -34,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
 export default function Navbar({ currentTab }: NavbarProps) {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
+  const user = useAuthStore((s) => s.user);
   const { notifications, markAsRead, markAllAsRead } = useNotificationStore();
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -108,6 +110,28 @@ export default function Navbar({ currentTab }: NavbarProps) {
           </span>
           <span className="text-xl font-bold text-on-surface tracking-tight">Huecko</span>
         </Link>
+
+        {/* Distingue de un vistazo si la app habla con el backend o corre en
+            modo demostración; sin esto, un fallo de conexión se confunde con
+            datos reales que simplemente están vacíos. */}
+        <span
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-medium border ${
+            isApiEnabled
+              ? 'bg-success-container text-on-success-container border-success/30'
+              : 'bg-warning-container text-on-warning-container border-warning/30'
+          }`}
+          title={
+            isApiEnabled
+              ? 'Conectado al backend de Huecko'
+              : 'Operando con datos simulados en local'
+          }
+        >
+          <span
+            aria-hidden="true"
+            className={`w-2 h-2 rounded-full ${isApiEnabled ? 'bg-success' : 'bg-warning'}`}
+          />
+          {isApiEnabled ? 'API conectada' : 'Modo demo'}
+        </span>
 
         <div className="flex gap-7 items-center">
           {NAV_ITEMS.map((item) => (
@@ -221,7 +245,7 @@ export default function Navbar({ currentTab }: NavbarProps) {
                 : 'bg-primary-container text-on-primary-container hover:bg-secondary-container'
             }`}
           >
-            Mi Perfil
+            {user?.nombre?.split(' ')[0] || 'Mi Perfil'}
           </Link>
 
           <button

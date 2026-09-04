@@ -24,10 +24,13 @@ const registerSchema = z
       .string()
       .min(1, 'Confirma tu contraseña'),
   })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Las contraseñas no coinciden',
-    path: ['confirmPassword'],
-  });
+  .refine(
+    (data) => data.password === data.confirmPassword,
+    {
+      message: 'Las contraseñas no coinciden',
+      path: ['confirmPassword'],
+    }
+  );
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
@@ -63,10 +66,12 @@ export default function RegisterPage() {
       });
       login(response.user, response.token);
       navigate('/onboarding', { replace: true });
-    } catch (error) {
-      setServerError(
-        error instanceof Error ? error.message : 'Error inesperado. Intenta de nuevo.'
-      );
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Error inesperado. Intenta de nuevo.';
+      setServerError(msg);
     }
   };
 
