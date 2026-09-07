@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { ApiError, isApiEnabled } from '../lib/apiClient';
 import { groupsService } from '../services/groupsService';
 import { eventsService } from '../services/eventsService';
+import { plansService, type CrearPlanPayload } from '../services/plansService';
 import type {
   Group,
   GroupAvailability,
@@ -43,12 +44,19 @@ interface GroupsState {
   setSelectedGroupId: (id: string) => void;
   fetchGroupsFromServer: () => Promise<void>;
   fetchAvailability: (groupId: string, threshold?: number) => Promise<void>;
+  fetchProposals: (groupId: string) => Promise<void>;
   createGroup: (nombre: string, descripcion: string, umbralDisponibilidad: number, userEmail: string, userName: string) => Promise<Group>;
   joinGroupByCode: (codigo: string, userEmail: string, userName: string) => Promise<boolean>;
   updateGroupThreshold: (groupId: string, threshold: number) => Promise<void>;
   toggleMemberEssential: (groupId: string, memberEmail: string) => Promise<void>;
 
-  addProposal: (proposal: Omit<PlanProposal, 'id'>) => Promise<void>;
+  /**
+   * `backendPayload` lleva la propuesta ya en el formato del Módulo 3 (fechas
+   * concretas e instante de cierre). Va aparte del objeto de demo porque son
+   * dos formas distintas del mismo plan: la de la UI razona en días de la
+   * semana, y la del backend necesita fechas.
+   */
+  addProposal: (proposal: Omit<PlanProposal, 'id'>, backendPayload?: CrearPlanPayload) => Promise<void>;
   voteProposalWindow: (proposalId: string, windowId: string, userEmail: string) => Promise<void>;
   closeVotingManually: (proposalId: string) => Promise<void>;
   reportIncident: (proposalId: string, incidence: Omit<PlanIncidence, 'id' | 'fechaReporte'>) => Promise<void>;
@@ -407,36 +415,77 @@ export const useGroupsStore = create<GroupsState>()(
         }));
       },
 
-      addProposal: async (proposalData) => {
+      /**
+       * RF-08 a RF-10. Los planes de un grupo sustituyen a los que hubiera de
+       * ese mismo grupo; los de los demas se dejan intactos, porque cada grupo
+       * se consulta por separado.
+       */
+      fetchProposals: async (groupId) => {
+        if (!isApiEnabled) return;
+
+        const miembros = get().groups.find((g) => g.id === groupId)?.miembros ?? [];
         try {
-          const created = await eventsService.createProposal(proposalData.groupId, {
-            titulo: proposalData.titulo,
-            lugar: proposalData.lugar,
-            fecha_cierre: proposalData.plazoVotacion,
-            ventanas: proposalData.ventanasSugeridas.map((v) => ({
-              dia: v.dia,
-              hora_inicio: v.horaInicio,
-              hora_fin: v.horaFin,
-            })),
-          });
-          set((state) => ({
-            groupProposals: [created, ...state.groupProposals],
-          }));
-        } catch {
+          const planes = await plansService.getPlans(groupId, miembros);
           set((state) => ({
             groupProposals: [
-              { ...proposalData, id: `prop-${Date.now()}` },
-              ...state.groupProposals,
+              ...planes,
+              ...state.groupProposals.filter((p) => p.groupId !== groupId),
             ],
           }));
+        } catch (error) {
+          set({
+            syncError: error instanceof Error ? error.message : 'No se pudieron cargar los planes',
+          });
         }
       },
 
+      addProposal: async (proposalData, backendPayload) => {
+        if (isApiEnabled && backendPayload) {
+          const miembros = get().groups.find((g) => g.id === proposalData.groupId)?.miembros ?? [];
+          // Sin capturar el error: el backend rechaza las ventanas que no
+          // cumplen el umbral (RF-08) y ese mensaje tiene que llegar a quien
+          // propone, no perderse en un fallback silencioso.
+          const creado = await plansService.createPlan(proposalData.groupId, backendPayload, miembros);
+          set((state) => ({ groupProposals: [creado, ...state.groupProposals] }));
+          return;
+        }
+
+        set((state) => ({
+          groupProposals: [
+            { ...proposalData, id: `prop-${Date.now()}` },
+            ...state.groupProposals,
+          ],
+        }));
+      },
+
+      /**
+       * RF-09. Pulsar una ventana alterna el voto: si ya estaba marcada, se
+       * retira. El backend responde con el plan entero ya recontado, asi que
+       * no hace falta recalcular el recuento en el cliente.
+       */
       voteProposalWindow: async (proposalId, windowId, userEmail) => {
-        try {
-          await eventsService.voteWindow(proposalId, windowId);
-        } catch {
-          // Fallback
+        const plan = get().groupProposals.find((p) => p.id === proposalId);
+        const yaVotada = plan?.ventanasSugeridas
+          .find((w) => w.id === windowId)
+          ?.votosUsuarios.includes(userEmail) ?? false;
+
+        if (isApiEnabled) {
+          const miembros = get().groups.find((g) => g.id === plan?.groupId)?.miembros ?? [];
+          try {
+            const actualizado = yaVotada
+              ? await plansService.removeVote(proposalId, windowId, miembros)
+              : await plansService.vote(proposalId, windowId, miembros);
+            set((state) => ({
+              groupProposals: state.groupProposals.map((p) =>
+                p.id === proposalId ? { ...p, ...actualizado } : p
+              ),
+            }));
+          } catch (error) {
+            set({
+              syncError: error instanceof Error ? error.message : 'No se pudo registrar tu voto',
+            });
+          }
+          return;
         }
 
         set((state) => ({
@@ -444,8 +493,7 @@ export const useGroupsStore = create<GroupsState>()(
             if (p.id !== proposalId || p.estado === 'confirmado') return p;
             const updatedWindows = p.ventanasSugeridas.map((w) => {
               if (w.id === windowId) {
-                const hasVoted = w.votosUsuarios.includes(userEmail);
-                const newVotes = hasVoted
+                const newVotes = yaVotada
                   ? w.votosUsuarios.filter((e) => e !== userEmail)
                   : [...w.votosUsuarios, userEmail];
                 return { ...w, votosUsuarios: newVotes };
@@ -458,10 +506,24 @@ export const useGroupsStore = create<GroupsState>()(
       },
 
       closeVotingManually: async (proposalId) => {
-        try {
-          await eventsService.closeVoting(proposalId);
-        } catch {
-          // Fallback
+        if (isApiEnabled) {
+          const plan = get().groupProposals.find((p) => p.id === proposalId);
+          const miembros = get().groups.find((g) => g.id === plan?.groupId)?.miembros ?? [];
+          try {
+            const cerrado = await plansService.closeVoting(proposalId, miembros);
+            // El estado lo decide el servidor: si nadie voto, el plan queda
+            // CANCELADO y no confirmado (RF-10).
+            set((state) => ({
+              groupProposals: state.groupProposals.map((p) =>
+                p.id === proposalId ? { ...p, ...cerrado } : p
+              ),
+            }));
+          } catch (error) {
+            set({
+              syncError: error instanceof Error ? error.message : 'No se pudo cerrar la votacion',
+            });
+          }
+          return;
         }
 
         set((state) => ({

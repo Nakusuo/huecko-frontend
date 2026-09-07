@@ -42,8 +42,23 @@ export const endpoints = {
     availability: (grupoId: string) => `/grupos/${grupoId}/disponibilidad`,
   },
 
-  /** ⏳ Módulos 3–5: planes, votaciones, retrasos e imprevistos. */
-  events: {
-    byGroup: (grupoId: string) => `/grupos/${grupoId}/eventos`,
+  /**
+   * ✅ PlanController (Módulo 3).
+   *
+   * Listar y crear cuelgan del grupo, porque un plan no existe fuera de uno.
+   * Las de un plan concreto no lo repiten: el plan ya sabe a qué grupo
+   * pertenece, y arrastrar el `grupoId` abriría la puerta a que los dos
+   * identificadores no coincidieran.
+   */
+  plans: {
+    byGroup: (grupoId: string) => `/grupos/${grupoId}/planes`,
+    detail: (planId: string) => `/planes/${planId}`,
+    vote: (planId: string, ventanaId: string) => `/planes/${planId}/ventanas/${ventanaId}/voto`,
+    close: (planId: string) => `/planes/${planId}/cerrar`,
+  },
+
+  /** ⏳ Módulos 4 y 5: retrasos, imprevistos y votación exprés. */
+  incidents: {
+    byPlan: (planId: string) => `/planes/${planId}/incidencias`,
   },
 } as const;
