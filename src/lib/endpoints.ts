@@ -37,7 +37,8 @@ export const endpoints = {
   groups: {
     list: '/grupos',
     detail: (grupoId: string) => `/grupos/${grupoId}`,
-    join: '/grupos/unirse',
+    /** Alta de integrante por correo. Sustituye a `/grupos/unirse`. */
+    miembros: (grupoId: string) => `/grupos/${grupoId}/miembros`,
     member: (grupoId: string, usuarioId: string) => `/grupos/${grupoId}/miembros/${usuarioId}`,
     availability: (grupoId: string) => `/grupos/${grupoId}/disponibilidad`,
   },
