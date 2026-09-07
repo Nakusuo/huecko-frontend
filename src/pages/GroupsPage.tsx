@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import {
@@ -10,6 +10,7 @@ import {
   type DayOfWeek,
 } from '../store/groupsStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { availabilityKey } from '../services/groupsService';
 import { colorByIndex, DEFAULT_CATEGORY_COLOR } from '../theme/palette';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 
@@ -36,6 +37,8 @@ export default function GroupsPage() {
     setSelectedGroupId,
     occupiedSlots,
     groupProposals,
+    availability,
+    fetchAvailability,
     createGroup,
     joinGroupByCode,
     updateGroupThreshold,
@@ -51,6 +54,16 @@ export default function GroupsPage() {
   const { addNotification } = useNotificationStore();
 
   const selectedGroup = groups.find((g) => g.id === selectedGroupId) || groups[0] || null;
+
+  /**
+   * RF-05 / RF-07: el cruce lo calcula el backend y se vuelve a pedir al
+   * cambiar de grupo. En modo demo `fetchAvailability` no hace nada y el
+   * cálculo local de `getCellAvailability` sigue mandando.
+   */
+  const activeGroupId = selectedGroup?.id;
+  useEffect(() => {
+    if (activeGroupId) fetchAvailability(activeGroupId);
+  }, [activeGroupId, fetchAvailability]);
 
   // Proposal Modal State
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
@@ -388,12 +401,34 @@ export default function GroupsPage() {
     voteReplanification(proposalId, action, 'alex.rodriguez@huecko.com');
   };
 
-  // Cálculo de coincidencias y espacios libres.
+  /**
+   * Coincidencias y espacios libres de una franja de una hora.
+   *
+   * Con el backend conectado manda su cruce (RF-05): es la única versión que
+   * ve los horarios reales de todo el grupo, y además mide el solape en
+   * minutos, así que un bloque que acaba a las 10:30 deja ocupada la franja de
+   * las 10. El cálculo local de abajo solo entra en modo demo, donde
+   * `occupiedSlots` son datos de ejemplo del propio cliente.
+   *
+   * `occupiedMembers` se queda vacío en modo conectado a propósito: el backend
+   * devuelve recuentos, nunca quién está ocupado ni con qué (RNF-02).
+   */
   const getCellAvailability = (
     group: Group,
     day: DayOfWeek,
     hour: number
   ) => {
+    const serverCell = availability[group.id]?.cells[availabilityKey(day, hour)];
+    if (serverCell) {
+      return {
+        freeCount: serverCell.freeCount,
+        totalMembers: availability[group.id].membersCount,
+        freePercentage: serverCell.freePercentage,
+        meetsThreshold: serverCell.meetsThreshold,
+        occupiedMembers: [] as typeof occupiedSlots,
+      };
+    }
+
     // Miembros ocupados en esta franja de 1 hora
     const occupiedInCell = occupiedSlots.filter((s) => {
       if (s.day !== day) return false;

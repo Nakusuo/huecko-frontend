@@ -1,8 +1,13 @@
 # Conectar el frontend con `huecko-backend`
 
-Estado a 4 de septiembre de 2026. Este documento describe **cómo se enciende la
-conexión**, **qué quedó cableado** y **qué falta del lado del backend**.
-El contrato objetivo completo sigue en [`API_CONTRACT.md`](API_CONTRACT.md).
+Estado a 6 de septiembre de 2026, contra la rama `develop` del backend. Este
+documento describe **cómo se enciende la conexión**, **qué quedó cableado** y
+**qué falta**. El contrato objetivo completo sigue en
+[`API_CONTRACT.md`](API_CONTRACT.md).
+
+> La versión anterior de este documento describía la rama `main` del backend,
+> que se quedó atrás. Lo que decía sobre "el proyecto no es ejecutable" y "no
+> hay autenticación" ya no es cierto.
 
 ---
 
@@ -31,17 +36,30 @@ npm run dev
 `.env.local` está ignorado por git (`*.local` en `.gitignore`), así que cada
 persona apunta a donde necesite sin pisar a los demás.
 
-### Probar sin Spring Boot
+### Levantar el backend
 
-Mientras el backend no arranca, hay un servidor de mentira que imita sus rutas:
+En `huecko-backend`, sobre `develop`:
+
+```bash
+docker compose up -d     # Postgres + Mongo
+./mvnw spring-boot:run   # la API en :8080
+```
+
+Al arrancar, el `DemoDataSeeder` deja listos dos usuarios
+(`alex.rodriguez@huecko.com` y `diana.torres@huecko.com`, ambos con
+`demo1234`) y un grupo con código de invitación **`HUECKO26`**. Detalle
+completo en `docs/PUESTA_EN_MARCHA.md` de ese repositorio.
+
+### Probar sin Docker ni Spring Boot
+
+Mientras no haya bases de datos a mano, hay un servidor de mentira que imita
+las rutas de horario y autenticación:
 
 ```bash
 npm run dev:stub
 ```
 
-Levanta `http://localhost:8080` con `/api/auth/login`, `/api/auth/register` y el
-CRUD de `bloques-horario` en memoria. Con `VITE_API_URL=/api` la app funciona
-contra él de punta a punta.
+No cubre el módulo de grupos: para eso hace falta el backend real.
 
 ---
 
@@ -52,11 +70,14 @@ contra él de punta a punta.
 | Cliente HTTP, JWT, errores, 401 | `src/lib/apiClient.ts` | ✅ |
 | Mapa de rutas | `src/lib/endpoints.ts` | ✅ |
 | Proxy de desarrollo | `vite.config.ts` | ✅ |
-| Autenticación | `src/services/authService.ts` | ✅ (ya existía) |
-| **Horario: CRUD + OCR en borrador** | `src/services/scheduleService.ts` | ✅ verificado contra el stub |
+| Autenticación | `src/services/authService.ts` | ✅ |
+| Perfil y preferencias | `src/services/profileService.ts` | ✅ contra `/api/me` |
+| Horario: CRUD + OCR en borrador | `src/services/scheduleService.ts` | ✅ |
 | Sincronización de la rejilla | `src/store/scheduleStore.ts` | ✅ |
+| **Grupos, membresía y cruce de disponibilidad** | `src/services/groupsService.ts` | ✅ |
+| **Heatmap del panel de grupo** | `src/pages/GroupsPage.tsx` | ✅ usa el cruce del servidor |
 | Carga inicial al entrar a la zona privada | `src/routes/ProtectedRoute.tsx` | ✅ |
-| Dashboard, grupos, planes, votos, perfil | `dashboardService`, `groupsStore`, `profileStore` | ⏳ siguen simulados |
+| Planes, votaciones, retrasos e imprevistos | `eventsService`, `groupsStore` | ⏳ siguen simulados |
 
 ### Cómo sincroniza el horario
 
@@ -66,95 +87,86 @@ que obligaría a tocar todos los componentes, `syncSlots(previo, nuevo)` calcula
 el diff entre las dos versiones de la rejilla y emite las peticiones que toquen.
 Los ids provisionales del cliente se reemplazan por los que devuelve el servidor.
 
-Comprobado extremo a extremo contra el stub: `GET` (confirmados + borradores),
-`POST`, `PUT` y `DELETE`, con el reemplazo de id incluido.
+### Cómo funciona el cruce de disponibilidad
+
+El cálculo **no se hace en el navegador**: lo hace `CalculadoraDisponibilidad`
+en el backend, que es el único lado que ve los horarios de todo el grupo. El
+frontend pide `GET /api/grupos/{id}/disponibilidad` y recibe una rejilla de
+recuentos más las ventanas que cumplen el umbral.
+
+Dos consecuencias que conviene tener presentes:
+
+- **RNF-02 se cumple por diseño.** La respuesta trae *cuántos* están libres,
+  nunca *quiénes* ni con qué bloque. Por eso, en modo conectado,
+  `getCellAvailability` devuelve `occupiedMembers` vacío: esa información
+  sencillamente no llega, y no debe llegar.
+- **El resultado nunca queda viejo (RF-07).** El backend recalcula en cada
+  petición sobre los bloques vigentes; no hay nada cacheado. El frontend
+  vuelve a pedirlo al cambiar de grupo y al mover el umbral.
+
+El cálculo local sobre `occupiedSlots` sigue en `GroupsPage` y solo entra en
+**modo demo**. Ojo: ese cálculo trunca a la hora, así que un bloque de 08:00 a
+10:30 lo da libre a las 10:00; el backend lo mide en minutos y lo da ocupado,
+que es lo correcto. Los dos modos no coinciden al detalle a propósito.
 
 ### Traducción de formatos
 
-El frontend y el backend no hablan igual; `scheduleService` traduce:
+El frontend y el backend no hablan igual. `scheduleService` y `groupsService`
+son las dos capas donde vive esa traducción; ni los stores ni las páginas
+saben nada de los nombres del backend.
 
-| Frontend (`TimeSlot`) | Backend (`BloqueHorario`) |
+| Frontend | Backend |
 | --- | --- |
 | `day: 'Lun' … 'Dom'` | `diaSemana: 1 … 7` |
 | `type: 'recurrente' \| 'puntual'` | `tipo: 'RECURRENTE' \| 'PUNTUAL'` |
 | `startTime: "08:00"` | `horaInicio: "08:00:00"` (`LocalTime`) |
 | `title` | `etiqueta` |
 | `isOcrImported` | `fuente: 'OCR'` + `estado: 'BORRADOR'` |
+| `GroupMember.isEssential` | `MiembroResponse.esImprescindible` |
+| `GroupMember.color` | *no existe*: se deriva de la posición en la lista |
+| `GroupMember.status` | *no existe*: el backend no tiene invitaciones pendientes |
+
+El color de cada integrante es una decisión de presentación, no un dato del
+dominio, así que el backend no lo guarda. Se deriva de la posición en la lista,
+que llega ordenada de forma estable (organizadores primero, luego por nombre),
+de modo que a la misma persona le toca siempre el mismo color.
 
 ---
 
-## 3. Lo que falta en el backend
+## 3. Lo que falta
 
-Ordenado por lo que bloquea antes.
+### 3.1 Módulos 3, 4 y 5
 
-### 3.1 El proyecto todavía no es ejecutable
+Planes, ventanas, votos, retrasos, imprevistos y votación exprés siguen
+**simulados en `groupsStore`**. El backend todavía no expone nada de eso:
+faltan las entidades, el cierre automático de la votación al vencer el plazo
+(RF-10) y la evaluación de criticidad (RF-16).
 
-`huecko-backend` contiene solo los `.java`, sueltos en la raíz del repo. Para
-arrancar hace falta:
+### 3.2 OCR en servidor
 
-- `pom.xml` (o `build.gradle`) con Spring Boot, Web, Validation, Data MongoDB,
-  Data JPA, PostgreSQL driver y Lombok.
-- Mover las clases a `src/main/java/com/huecko/backend/…` — el `package` que
-  declaran ya asume esa ruta.
-- `src/main/resources/application.yml` con las dos conexiones (Mongo y Postgres)
-  y `server.port: 8080`.
+Hoy el OCR se hace **en el navegador** con `tesseract.js` y solo se envía el
+resultado como bloques con `fuente: 'OCR'`, que el backend guarda en estado
+`BORRADOR` hasta que el usuario los confirma (RF-03, RNF-06).
 
-### 3.2 No hay autenticación
+### 3.3 Tiempo real
 
-El frontend ya llama a `POST /api/auth/login` y `POST /api/auth/register`
-esperando `{token, user:{id,nombre,email,creado_en}}`, y manda
-`Authorization: Bearer <jwt>` en todo lo demás. Falta Spring Security + JWT.
+Falta WebSocket/STOMP en `/topic/groups/{groupId}` para RNF-05 (retrasos,
+votaciones y confirmaciones propagados en menos de 3 s). Mientras tanto, todo
+se refresca al navegar.
 
-Mientras tanto: cualquier backend que devuelva ese JSON en esas dos rutas
-desbloquea al frontend (es justo lo que hace el stub).
+### 3.4 `usuarioId` en la URL del módulo de horario
 
-### 3.3 Decidir un solo prefijo
+`BloqueHorarioController` sigue recibiendo el `usuarioId` como `@PathVariable`,
+y su propio comentario dice que es temporal. El módulo de grupos ya hace lo
+correcto: toma la identidad del token con `@AuthenticationPrincipal`. Cuando el
+de horario se alinee, las rutas pasarán a `/api/bloques-horario` y se ajusta en
+`endpoints.ts` y en `scheduleService`, en un único sitio cada uno.
 
-Hay tres versiones circulando:
+### 3.5 CORS (solo si no se usa el proxy)
 
-- `BloqueHorarioController` → `/api/usuarios/{usuarioId}/bloques-horario`
-- `API_CONTRACT.md` → `/api/v1/schedule/blocks`
-- `endpoints.ts` → sigue **al controlador**, porque es el código que existe.
-
-Hay que elegir uno. Si el backend adopta `/api/v1`, basta con cambiar
-`src/lib/endpoints.ts` y la variable `VITE_API_URL`; el resto del frontend no se
-entera.
-
-### 3.4 `usuarioId` viaja por la URL
-
-El controlador lo recibe como `@PathVariable` — y su propio comentario dice que
-es temporal. Hoy el frontend manda el `id` del usuario logueado. Cuando exista
-JWT, el backend debe tomarlo del token (`@AuthenticationPrincipal`) y las rutas
-pasarán a `/api/bloques-horario`; se ajusta en `endpoints.ts` y en
-`scheduleService`, en un único sitio cada uno.
-
-### 3.5 Campos que el frontend usa y el backend no guarda
-
-`BloqueHorario` no tiene dónde persistir:
-
-- **color** del bloque (`customColor`),
-- **categoría/etiqueta** (`tag`: Clase, Trabajo, Personal…) separada del título,
-- **rango de fechas** de un evento puntual (`specificEndDate`).
-
-Como parche, `scheduleService` conserva esos valores desde el estado local en
-cada recarga y deriva un color estable del título cuando no hay nada guardado.
-Es un apaño: si el usuario entra desde otro dispositivo, los pierde. Lo correcto
-es añadir `color`, `categoria` y `fechaFin` al documento.
-
-### 3.6 Endpoints que el frontend ya sabe consumir y aún no existen
-
-- `GET /me`, `PATCH /me` — perfil y preferencias.
-- Módulo de grupos: `/grupos`, `/grupos/{id}/disponibilidad`, invitaciones.
-- Planes, ventanas, votos, retrasos, imprevistos y votación exprés.
-- OCR en servidor: hoy se hace **en el navegador** con `tesseract.js` y solo se
-  envía el resultado como bloques normales.
-- WebSocket/STOMP en `/topic/groups/{groupId}` para tiempo real.
-
-### 3.7 CORS (solo si no se usa el proxy)
-
-En despliegue, o si alguien apunta `VITE_API_URL` directo a `http://localhost:8080`,
-el backend necesita permitir el origen del frontend, `Authorization` entre las
-cabeceras y los métodos `GET, POST, PUT, DELETE, PATCH`.
+En despliegue, o si alguien apunta `VITE_API_URL` directo a
+`http://localhost:8080`, el backend necesita permitir el origen del frontend.
+`SecurityConfig` ya lo lee de `huecko.cors.allowed-origins`.
 
 ---
 
@@ -164,3 +176,14 @@ cabeceras y los métodos `GET, POST, PUT, DELETE, PATCH`.
 `mensaje`, luego `message`, luego `error`, así que también entiende los errores
 de Spring Security y de validación. Si no hay respuesta del servidor, muestra
 qué URL intentó y sugiere revisar que el backend esté encendido.
+
+Códigos que el módulo de grupos usa y que la UI distingue:
+
+| Código | Cuándo | Qué hace el frontend |
+| --- | --- | --- |
+| `401` | Token ausente o caducado | Cierra sesión y manda al login |
+| `403` | Acción solo para el organizador | Deshace el cambio local y muestra el mensaje |
+| `404` | Grupo inexistente, **o al que no perteneces** | «No encontrado» |
+
+El 404 para un grupo ajeno es deliberado del backend: un 403 confirmaría que
+ese identificador existe a quien solo está probando identificadores.
