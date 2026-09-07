@@ -26,7 +26,10 @@ export interface Retraso {
 
 export type OpcionExpres = 'CANCELAR' | 'REAGENDAR' | 'MANTENER';
 
-export type Criticidad = 'CRITICA' | 'NO_CRITICA';
+export type Criticidad = "CRITICA" | "NO_CRITICA";
+
+/** De dónde salió el veredicto de criticidad. Ver EvaluadorCriticidad.Origen. */
+export type OrigenCriticidad = "REGLAS" | "IA" | "REGLAS_POR_FALLO";
 
 export type EstadoVotacion = 'ABIERTA' | 'CERRADA';
 
@@ -36,8 +39,14 @@ export interface VotacionExpres {
   nombreReporta: string;
   motivo: string | null;
   criticidad: Criticidad;
-  /** Por qué las reglas la clasificaron así (RF-16). Se muestra al grupo. */
+  /** Por qué se clasificó así (RF-16). Se muestra al grupo. */
   razonCriticidad: string;
+  /**
+   * Quién lo decidió. Se muestra en la interfaz a propósito: un grupo tiene
+   * derecho a saber si la decisión que le abrió una votación la tomó una regla
+   * o un modelo.
+   */
+  origenCriticidad: OrigenCriticidad;
   estado: EstadoVotacion;
   opciones: OpcionExpres[];
   /** Recuento por opción. No dice quién votó qué. */
