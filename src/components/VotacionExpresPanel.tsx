@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { OrigenCriticidad } from '../types/incidents.types';
 import {
   ORDEN_OPCIONES,
   OPCION_TEXTO,
@@ -88,7 +89,8 @@ export function VotacionExpresPanel({
               {votacion.nombreReporta} no podrá asistir
             </h3>
             <p className="mt-0.5 text-xs text-on-surface-variant">
-              Se abrió esta votación porque {votacion.razonCriticidad}.
+              Se abrió esta votación porque {votacion.razonCriticidad}.{' '}
+              <SelloDeOrigen origen={votacion.origenCriticidad} />
             </p>
             {votacion.motivo && (
               <p className="mt-1.5 text-xs text-on-surface-variant">
@@ -280,4 +282,26 @@ function useCuentaAtras(expiraEnISO: string): CuentaAtras {
     totalSegundos,
     etiqueta: `${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`,
   };
+}
+
+/**
+ * Quién decidió que esta ausencia era crítica.
+ *
+ * Se muestra siempre, también cuando lo decidieron las reglas. Enseñarlo solo
+ * cuando responde un modelo convertiría el sello en una alarma; enseñarlo
+ * siempre lo convierte en información.
+ *
+ * `REGLAS_POR_FALLO` se dice tal cual: si el modelo no contestó y respondieron
+ * las reglas, el grupo debería poder saberlo antes de discutir el resultado.
+ */
+function SelloDeOrigen({ origen }: { origen: OrigenCriticidad }) {
+  const texto: Record<OrigenCriticidad, string> = {
+    REGLAS: 'Según las reglas del grupo.',
+    IA: 'Evaluado automáticamente.',
+    REGLAS_POR_FALLO: 'Evaluado con las reglas del grupo: la evaluación automática no respondió.',
+  };
+
+  return (
+    <span className="text-on-surface-variant/75">{texto[origen] ?? texto.REGLAS}</span>
+  );
 }
