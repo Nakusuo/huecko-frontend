@@ -57,10 +57,10 @@ function currentUserId(): string | null {
  * ------------------------------------------------------------------ */
 
 /**
- * `previous` es el bloque que ya estaba en el store con ese id. Se usa para
- * conservar color, etiqueta y rango de fechas: el backend todavía no guarda
- * esos campos (ver `docs/INTEGRACION_BACKEND.md`), así que se perderían en
- * cada recarga si no se preservaran aquí.
+ * El backend ya persiste `color`, `categoria` y `fechaFin`, así que son la
+ * fuente de verdad. `previous` (el bloque que ya estaba en el store con ese id)
+ * queda solo como red: cubre los bloques creados antes de que existieran esos
+ * campos, que llegan con ellos a null.
  */
 export function toTimeSlot(bloque: BloqueHorarioResponse, previous?: TimeSlot): TimeSlot {
   const title = bloque.etiqueta?.trim() || previous?.title || 'Bloque sin título';
@@ -72,12 +72,12 @@ export function toTimeSlot(bloque: BloqueHorarioResponse, previous?: TimeSlot): 
     day: isPuntual && bloque.fecha ? dayFromIsoDate(bloque.fecha) : numberToDay(bloque.diaSemana),
     startTime: normalizeTime(bloque.horaInicio),
     endTime: normalizeTime(bloque.horaFin),
-    customColor: previous?.customColor ?? colorForTitle(title),
+    customColor: bloque.color ?? previous?.customColor ?? colorForTitle(title),
     type: isPuntual ? 'puntual' : 'recurrente',
-    tag: previous?.tag,
+    tag: bloque.categoria ?? previous?.tag,
     frequency: isPuntual ? 'unica' : 'semanal',
     specificDate: bloque.fecha ?? previous?.specificDate,
-    specificEndDate: previous?.specificEndDate,
+    specificEndDate: bloque.fechaFin ?? previous?.specificEndDate,
     isOcrImported: bloque.fuente === 'OCR' || previous?.isOcrImported,
   };
 }
@@ -89,9 +89,14 @@ export function toBloqueRequest(slot: TimeSlot): BloqueHorarioRequest {
     tipo: isPuntual ? 'PUNTUAL' : 'RECURRENTE',
     diaSemana: isPuntual ? null : dayToNumber(slot.day),
     fecha: isPuntual ? (slot.specificDate ?? null) : null,
+    // El backend rechaza una fechaFin sin fecha, así que solo viaja en puntuales.
+    fechaFin: isPuntual ? (slot.specificEndDate ?? null) : null,
     horaInicio: normalizeTime(slot.startTime),
     horaFin: normalizeTime(slot.endTime),
     etiqueta: slot.title,
+    categoria: slot.tag ?? null,
+    color: slot.customColor ?? null,
+    fuente: slot.isOcrImported ? 'OCR' : 'MANUAL',
   };
 }
 
