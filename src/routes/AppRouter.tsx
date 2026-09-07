@@ -6,7 +6,8 @@ import DashboardPage from '../pages/DashboardPage';
 import OnboardingPage from '../pages/OnboardingPage';
 import SchedulePage from '../pages/SchedulePage';
 import ProfilePage from '../pages/ProfilePage';
-import GroupsPage from '../pages/GroupsPage';
+import GroupsListPage from '../pages/GroupsListPage';
+import GroupDetailPage from '../pages/GroupDetailPage';
 import { useAuthStore } from '../store/authStore';
 
 export default function AppRouter() {
@@ -42,7 +43,9 @@ export default function AppRouter() {
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/groups" element={<GroupsPage />} />
+        <Route path="/groups" element={<GroupsListPage />} />
+        {/* Un grupo por dirección: para ver otro hay que volver a la lista. */}
+        <Route path="/groups/:groupId" element={<GroupDetailPage />} />
       </Route>
 
       {/* Ruta por defecto */}
