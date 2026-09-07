@@ -1,3 +1,4 @@
+import { BrandingPanel, MobileLogo } from '../../components/BrandingPanel';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,13 +34,6 @@ const registerSchema = z
   );
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
-
-const FEATURE_PILLS = [
-  { icon: 'calendar_month', label: 'Horarios automáticos' },
-  { icon: 'groups', label: 'Grupos inteligentes' },
-  { icon: 'how_to_vote', label: 'Votación en tiempo real' },
-  { icon: 'spa', label: 'Sin drama, solo planes' },
-];
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -77,12 +71,12 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-dvh bg-surface flex text-on-surface">
-      {/* Branding Panel (Desktop) */}
+      {/* Columna de marca: solo en pantallas anchas. */}
       <BrandingPanel />
 
-      {/* Form Panel */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
-        <div className="w-full max-w-md py-4">
+      {/* El formulario se lleva el resto. En móvil, la pantalla entera. */}
+      <div className="flex-1 flex items-center justify-center px-5 py-8 sm:p-10 lg:p-12 overflow-y-auto">
+        <div className="w-full max-w-[27rem] py-4">
           <MobileLogo />
 
           <div className="bg-surface-container-lowest rounded-3xl p-7 md:p-9 elev-2">
@@ -308,74 +302,6 @@ export default function RegisterPage() {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function BrandingPanel() {
-  return (
-    <div className="on-brand hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center p-12 bg-gradient-to-br from-brand-deep via-primary-hover to-primary text-white">
-      {/* Decorative Orbs */}
-      <div className="absolute top-1/4 -left-20 w-80 h-80 bg-secondary/25 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-primary-container/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-3/4 left-1/3 w-48 h-48 bg-tertiary-container/15 rounded-full blur-2xl pointer-events-none" />
-
-      <div className="relative z-10 text-center max-w-md">
-        <div className="mb-6 flex items-center justify-center">
-          <div className="relative">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-secondary to-primary flex items-center justify-center shadow-2xl shadow-black/30 border border-white/20">
-              <span className="text-4xl font-black text-white tracking-tighter">H</span>
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-primary-container rounded-full border-2 border-brand-deep flex items-center justify-center">
-              <div className="w-2 h-2 bg-primary rounded-full" />
-            </div>
-          </div>
-        </div>
-
-        <h1 className="text-5xl font-bold font-headline mb-2 tracking-tight text-white">
-          Huecko
-        </h1>
-        <p className="text-primary-container text-lg font-medium mb-8">
-          Coordinar horarios sin discutirlo en el grupo.
-        </p>
-
-        <div className="flex flex-wrap gap-2.5 justify-center mb-8">
-          {FEATURE_PILLS.map((item) => (
-            <span
-              key={item.label}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-surface-container-lowest/10 border border-white/15 rounded-lg text-xs text-surface-container-low backdrop-blur-sm shadow-xs"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-primary-container">
-                {item.icon}
-              </span>
-              {item.label}
-            </span>
-          ))}
-        </div>
-
-        <div className="p-4 bg-surface-container-lowest/10 border border-white/15 rounded-2xl text-left shadow-lg shadow-black/10">
-          <p className="text-surface-container-low text-sm italic leading-relaxed">
-            "Coordina tus huecos libres entre clases y sal con tus amigos al instante."
-          </p>
-          <div className="mt-3 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-secondary to-primary-container flex items-center justify-center text-xs font-bold text-brand-deep">
-              H
-            </div>
-            <span className="text-xs text-primary-container">Comunidad Universitaria Huecko</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MobileLogo() {
-  return (
-    <div className="lg:hidden flex items-center gap-3 mb-6 justify-center">
-      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-secondary to-primary flex items-center justify-center shadow-md shadow-secondary/20">
-        <span className="text-xl font-black text-white">H</span>
-      </div>
-      <span className="text-2xl font-bold font-headline text-on-surface tracking-tight">Huecko</span>
     </div>
   );
 }
