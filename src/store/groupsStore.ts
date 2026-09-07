@@ -534,13 +534,22 @@ export const useGroupsStore = create<GroupsState>()(
       },
 
       reportIncident: async (proposalId, incidenceData) => {
+        /* RF-16: la criticidad la decide el servidor, no el cliente. En modo
+           demo no hay servidor y `criticidad` viene nula: entonces se conserva
+           el comportamiento anterior, que asumía que toda baja replantea. */
+        let replantea = true;
         try {
-          await eventsService.reportIncident(proposalId, {
+          const res = await eventsService.reportIncident(proposalId, {
             reason: incidenceData.motivo,
             type: incidenceData.tipo,
           });
+          /* RF-19: una baja NO crítica no reabre la coordinación. Antes de
+             tener las reglas en el servidor, cualquier aviso mandaba el plan a
+             re-coordinación, y bastaba con que faltara alguien prescindible
+             para dejar en el aire un plan que seguía en pie. */
+          if (res.criticidad !== null) replantea = res.abrioVotacion;
         } catch {
-          // Fallback
+          // Sin servidor se mantiene la simulación local.
         }
 
         set((state) => {
@@ -567,7 +576,8 @@ export const useGroupsStore = create<GroupsState>()(
 
               return {
                 ...p,
-                estado: p.estado === 'confirmado' ? 'en_recoordinacion' : p.estado,
+                estado:
+                  replantea && p.estado === 'confirmado' ? 'en_recoordinacion' : p.estado,
                 incidencias: [newIncidence, ...current],
               };
             }),
