@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
@@ -12,6 +12,9 @@ import type {
 } from '../types/dashboard.types';
 import { DEFAULT_CATEGORY_COLOR } from '../theme/palette';
 import { useModalDismiss } from '../hooks/useModalDismiss';
+import { useIncidentsStore } from '../store/incidentsStore';
+import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
+import { ResumenPuntualidad } from '../components/ResumenPuntualidad';
 
 interface TodayScheduleBlock {
   id: string;
@@ -97,7 +100,12 @@ export default function DashboardPage() {
   );
 
   const reportIncident = useGroupsStore((s) => s.reportIncident);
-  const voteReplanification = useGroupsStore((s) => s.voteReplanification);
+  // Modulos 4 y 5: estado real del evento, alimentado por REST y por WebSocket.
+  const retrasosDelPlan = useIncidentsStore((s) => s.retrasos);
+  const votaciones = useIncidentsStore((s) => s.votaciones);
+  const cargarPlanIncidencias = useIncidentsStore((s) => s.cargarPlan);
+  const votarExpres = useIncidentsStore((s) => s.votarExpres);
+  const reportarRetrasoEnServidor = useIncidentsStore((s) => s.reportarRetraso);
   const withdrawIncident = useGroupsStore((s) => s.withdrawIncident);
 
   const upcomingEvent = useMemo<UpcomingEventDetail | null>(() => {
@@ -126,6 +134,16 @@ export default function DashboardPage() {
     };
   }, [groups, proposals, userEmail]);
 
+  /* Módulos 4 y 5 del evento en curso. Se piden una vez al aparecer el evento;
+     a partir de ahí el canal en tiempo real los mantiene al día sin volver a
+     preguntar (ver `useTiempoReal`). */
+  useEffect(() => {
+    if (upcomingEvent) void cargarPlanIncidencias(upcomingEvent.id);
+  }, [upcomingEvent, cargarPlanIncidencias]);
+
+  const retrasos = upcomingEvent ? retrasosDelPlan[upcomingEvent.id] ?? [] : [];
+  const votacionExpres = upcomingEvent ? votaciones[upcomingEvent.id] ?? null : null;
+
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isDelayModalOpen, setIsDelayModalOpen] = useState(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
@@ -137,8 +155,6 @@ export default function DashboardPage() {
   const [incidentReason, setIncidentReason] = useState('');
   const [notificationToast, setNotificationToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
 
-  // Estado de la votación exprés ante una ausencia importante
-  const [hasExpressVoteAlert, setHasExpressVoteAlert] = useState(true);
   /* Si ya avisé de algo sobre este plan, lo que toca es retirarlo, no mandar
      otro aviso encima: era lo que permitía avisar, votar y volver a avisar. */
   const miAvisoAbierto = upcomingEvent
@@ -147,7 +163,6 @@ export default function DashboardPage() {
         ?.incidencias?.find((i) => i.userEmail === userEmail && !i.resuelta) ?? null
     : null;
 
-  const [expressVoteChoice, setExpressVoteChoice] = useState<'reprogramar' | 'cancelar' | 'mantener' | null>(null);
 
   const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
     setNotificationToast({ message, type });
@@ -172,8 +187,17 @@ export default function DashboardPage() {
 
   const handleSendDelay = async () => {
     if (!upcomingEvent) return;
-    const res = await dashboardService.reportDelay(upcomingEvent.id, customDelayMinutes, userEmail);
-    
+
+    /* RF-12 contra el servidor. Se manda el número, no la frase: el backend
+       valida el rango y el resto del grupo lo recibe por WebSocket. */
+    try {
+      await reportarRetrasoEnServidor(upcomingEvent.id, customDelayMinutes);
+    } catch {
+      showToast('No se pudo avisar del retraso. Revisa tu conexión.', 'warning');
+      return;
+    }
+
+    // El estado local del plan sigue alimentando la vista en modo demo.
     reportIncident(upcomingEvent.id, {
       userEmail,
       userName: user?.nombre || 'Tú',
@@ -183,7 +207,10 @@ export default function DashboardPage() {
     });
 
     setIsDelayModalOpen(false);
-    showToast(res.message, 'warning');
+    showToast(
+      `Avisaste que llegarás ${customDelayMinutes} min tarde. El grupo ya lo ve.`,
+      'warning',
+    );
   };
 
   const handleSendIncident = async () => {
@@ -201,15 +228,6 @@ export default function DashboardPage() {
     showToast(res.message, 'info');
   };
 
-  const handleExpressVoteSubmit = (choice: 'reprogramar' | 'cancelar' | 'mantener') => {
-    setExpressVoteChoice(choice);
-    const action = choice === 'reprogramar' ? 'reschedule' : choice === 'cancelar' ? 'cancel' : 'keep';
-    if (upcomingEvent) {
-      voteReplanification(upcomingEvent.id, action, userEmail);
-    }
-    showToast(`Votación exprés registrada: "${choice.toUpperCase()}". Notificando al grupo...`, 'warning');
-    setTimeout(() => setHasExpressVoteAlert(false), 3000);
-  };
 
   return (
     <div className="min-h-screen bg-surface text-on-surface pb-28 md:pb-12">
@@ -258,70 +276,6 @@ export default function DashboardPage() {
             </button>
           </div>
         </section>
-
-        {/* Alerta de votación exprés ante una baja crítica */}
-        {hasExpressVoteAlert && (
-          <section className="p-5 rounded-3xl bg-warning/10 border-2 border-warning/60/40 text-on-surface shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fade-in">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-2xl bg-warning text-on-warning flex items-center justify-center shrink-0 shadow-xs">
-                <span aria-hidden="true" className="material-symbols-outlined text-[24px]">crisis_alert</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-lg bg-warning-container text-on-warning-container text-2xs font-bold uppercase">
-                    Votación exprés en curso
-                  </span>
-                  <span className="text-xs font-bold text-on-warning-container">Tiempo restante: 14:20 min</span>
-                </div>
-                <h3 className="text-base font-bold text-on-surface mt-1">
-                  María C. (Rol crítico) reportó imprevisto para la reunión del grupo
-                </h3>
-                <p className="text-xs text-on-surface-variant">
-                  Motivo: "Cruce con examen sorpresa". ¿Qué prefieres que haga el grupo?
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              <button
-                type="button"
-                onClick={() => handleExpressVoteSubmit('reprogramar')}
-                className={`flex-1 md:flex-initial min-w-24 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
-                  expressVoteChoice === 'reprogramar'
-                    ? 'bg-primary text-on-primary shadow-xs'
-                    : 'bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container'
-                }`}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">event_repeat</span>
-                Reprogramar
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExpressVoteSubmit('cancelar')}
-                className={`flex-1 md:flex-initial min-w-24 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
-                  expressVoteChoice === 'cancelar'
-                    ? 'bg-error text-on-error shadow-xs'
-                    : 'bg-surface-container-lowest border border-outline-variant text-error hover:bg-error-container'
-                }`}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">close</span>
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExpressVoteSubmit('mantener')}
-                className={`flex-1 md:flex-initial min-w-24 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
-                  expressVoteChoice === 'mantener'
-                    ? 'bg-primary text-on-primary shadow-xs'
-                    : 'bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container'
-                }`}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
-                Mantener
-              </button>
-            </div>
-          </section>
-        )}
 
         {/* Tarjetas de Métricas Resumen */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -395,6 +349,18 @@ export default function DashboardPage() {
             <p className="text-2xs text-on-surface-variant mt-1">Sincronizado con grupos</p>
           </button>
         </section>
+
+        {/* Votación exprés (RF-17). Va ANTES del próximo plan a propósito: es
+            lo único de esta página con un plazo corriendo, y enterrarla bajo
+            el evento haría que se venciera sin que nadie la viera. */}
+        {votacionExpres && (
+          <section className="space-y-3">
+            <VotacionExpresPanel
+              votacion={votacionExpres}
+              onVotar={(opcion) => votarExpres(votacionExpres.planId, opcion)}
+            />
+          </section>
+        )}
 
         {/* Próximo plan confirmado */}
         <section className="space-y-3">
@@ -823,6 +789,12 @@ export default function DashboardPage() {
                   </span>
                   <span className="text-2xs text-on-surface-variant">Monitoreo de puntualidad</span>
                 </div>
+
+                {/* RF-14: quién llega tarde y cuánto, con datos del servidor.
+                    Va sobre la rejilla de asistentes porque es lo que se mira
+                    con prisa: la rejilla dice quién viene, esto dice si hay
+                    que esperar. */}
+                <ResumenPuntualidad retrasos={retrasos} usuarioId={user?.id} />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                   {upcomingEvent.attendees.map((att, idx) => (
