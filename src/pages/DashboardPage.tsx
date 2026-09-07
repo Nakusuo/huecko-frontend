@@ -230,7 +230,7 @@ export default function DashboardPage() {
 
 
   return (
-    <div className="min-h-screen bg-surface text-on-surface pb-28 md:pb-12">
+    <div className="min-h-dvh bg-surface text-on-surface pb-28 md:pb-12">
       <Navbar currentTab="dashboard" />
 
       {/* Notificación Flotante (Toast) */}
