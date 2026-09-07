@@ -11,6 +11,7 @@ import { isApiEnabled } from '../lib/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { useGroupsStore } from '../store/groupsStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { useIncidentsStore } from '../store/incidentsStore';
 import { useProfileStore } from '../store/profileStore';
 import type { PlanConfirmadoDatos, RealtimeEvent, RealtimeStatus } from '../types/realtime.types';
 
@@ -30,6 +31,9 @@ export function useTiempoReal(): void {
   const groups = useGroupsStore((s) => s.groups);
   const fetchProposals = useGroupsStore((s) => s.fetchProposals);
   const addNotification = useNotificationStore((s) => s.addNotification);
+  const aplicarRetrasoRemoto = useIncidentsStore((s) => s.aplicarRetrasoRemoto);
+  const aplicarVotacionAbierta = useIncidentsStore((s) => s.aplicarVotacionAbierta);
+  const aplicarVotacionCerrada = useIncidentsStore((s) => s.aplicarVotacionCerrada);
 
   // --- conexión ---
   useEffect(() => {
@@ -81,13 +85,83 @@ export function useTiempoReal(): void {
           break;
         }
 
-        // Los módulos 4 y 5 todavía no emiten. Se ignoran sin ruido en vez de
-        // avisar de algo que la interfaz aún no sabe representar.
+        /* --- Módulo 4 --- */
+
+        case 'RETRASO_REPORTADO': {
+          const d = evento.datos as Record<string, unknown>;
+          const planId = String(d.planId);
+          const usuarioId = String(d.usuarioId);
+
+          if (d.retirado === true) {
+            aplicarRetrasoRemoto(planId, null, usuarioId);
+            break;
+          }
+
+          aplicarRetrasoRemoto(planId, {
+            usuarioId,
+            nombreUsuario: String(d.nombreUsuario ?? 'Alguien'),
+            minutosEstimados: Number(d.minutosEstimados ?? 0),
+            reportadoEn: evento.ocurridoEn,
+            corregido: false,
+          }, usuarioId);
+
+          addNotification({
+            type: 'incident',
+            title: 'Alguien llega tarde',
+            description: `${d.nombreUsuario} llegará ${d.minutosEstimados} min tarde a "${d.tituloPlan}".`,
+            groupId: evento.grupoId,
+          });
+          break;
+        }
+
+        /* --- Módulo 5 --- */
+
+        case 'AUSENCIA_REPORTADA': {
+          const d = evento.datos as Record<string, unknown>;
+          addNotification({
+            type: 'incident',
+            title: 'Baja en el plan',
+            description: d.motivo
+              ? `${d.nombreUsuario} no irá a "${d.tituloPlan}": ${d.motivo}`
+              : `${d.nombreUsuario} no irá a "${d.tituloPlan}".`,
+            groupId: evento.grupoId,
+          });
+          break;
+        }
+
+        case 'VOTACION_EXPRES_ABIERTA': {
+          const d = evento.datos as Record<string, unknown>;
+          // Se pide al servidor en vez de construirla del evento: el recuento y
+          // "mi voto" dependen de quién pregunta, y el topic es del grupo entero.
+          void aplicarVotacionAbierta(String(d.planId));
+          addNotification({
+            type: 'incident',
+            title: 'Hay que decidir',
+            description: `${d.nombreReporta} no podrá ir a "${d.tituloPlan}". Vota antes de que venza el plazo.`,
+            groupId: evento.grupoId,
+          });
+          break;
+        }
+
+        case 'VOTACION_EXPRES_CERRADA': {
+          const d = evento.datos as Record<string, unknown>;
+          const planId = String(d.planId);
+          aplicarVotacionCerrada(planId);
+          void fetchProposals(evento.grupoId);
+          addNotification({
+            type: 'confirmation',
+            title: 'Decisión tomada',
+            description: descripcionDeCierreExpres(d),
+            groupId: evento.grupoId,
+          });
+          break;
+        }
+
         default:
           break;
       }
     });
-  }, [addNotification, fetchProposals]);
+  }, [addNotification, fetchProposals, aplicarRetrasoRemoto, aplicarVotacionAbierta, aplicarVotacionCerrada]);
 }
 
 /** Estado de la conexión, para pintarlo donde haga falta. */
@@ -127,4 +201,21 @@ function formatearFechaHora(fecha: string, horaInicio: string, horaFin: string):
 /** `16:00:00` → `16:00`. El backend serializa LocalTime con segundos si los hay. */
 function recortarHora(hora: string): string {
   return hora.slice(0, 5);
+}
+
+/** «Decisión tomada» sin decir cuál no sirve de nada. */
+function descripcionDeCierreExpres(datos: Record<string, unknown>): string {
+  const titulo = String(datos.tituloPlan ?? 'El plan');
+  const porDefecto = datos.porDefecto === true ? ' (nadie votó a tiempo)' : '';
+
+  switch (datos.resultado) {
+    case 'MANTENER':
+      return `"${titulo}" sigue en pie${porDefecto}.`;
+    case 'REAGENDAR':
+      return `"${titulo}" vuelve a coordinación: hay que buscar otra fecha${porDefecto}.`;
+    case 'CANCELAR':
+      return `"${titulo}" se canceló${porDefecto}.`;
+    default:
+      return `Se cerró la votación de "${titulo}"${porDefecto}.`;
+  }
 }
