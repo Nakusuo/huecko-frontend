@@ -76,8 +76,9 @@ No cubre el módulo de grupos: para eso hace falta el backend real.
 | Sincronización de la rejilla | `src/store/scheduleStore.ts` | ✅ |
 | **Grupos, membresía y cruce de disponibilidad** | `src/services/groupsService.ts` | ✅ |
 | **Heatmap del panel de grupo** | `src/pages/GroupsPage.tsx` | ✅ usa el cruce del servidor |
+| **Planes, ventanas y votación** | `src/services/plansService.ts` | ✅ |
 | Carga inicial al entrar a la zona privada | `src/routes/ProtectedRoute.tsx` | ✅ |
-| Planes, votaciones, retrasos e imprevistos | `eventsService`, `groupsStore` | ⏳ siguen simulados |
+| Retrasos, imprevistos y votación exprés | `eventsService`, `groupsStore` | ⏳ siguen simulados |
 
 ### Cómo sincroniza el horario
 
@@ -125,6 +126,9 @@ saben nada de los nombres del backend.
 | `GroupMember.isEssential` | `MiembroResponse.esImprescindible` |
 | `GroupMember.color` | *no existe*: se deriva de la posición en la lista |
 | `GroupMember.status` | *no existe*: el backend no tiene invitaciones pendientes |
+| `TimeWindowProposal.dia` (día de la semana) | `VentanaPlan.fecha` (fecha concreta) |
+| `votosUsuarios: string[]` (correos) | `votantes: UUID[]` |
+| `estado: 'propuesto'` | `Estado.PROPUESTO` |
 
 El color de cada integrante es una decisión de presentación, no un dato del
 dominio, así que el backend no lo guarda. Se deriva de la posición en la lista,
@@ -135,26 +139,31 @@ de modo que a la misma persona le toca siempre el mismo color.
 
 ## 3. Lo que falta
 
-### 3.1 Módulos 3, 4 y 5
+### 3.1 RF-11: notificar la fecha confirmada
 
-Planes, ventanas, votos, retrasos, imprevistos y votación exprés siguen
-**simulados en `groupsStore`**. El backend todavía no expone nada de eso:
-faltan las entidades, el cierre automático de la votación al vencer el plazo
-(RF-10) y la evaluación de criticidad (RF-16).
+Cuando la votación se cierra, el plan queda confirmado en el backend, pero
+**nadie se entera hasta que vuelve a mirar**. Falta el canal de notificaciones
+(o el WebSocket de RNF-05) que avise a los integrantes.
 
-### 3.2 OCR en servidor
+### 3.2 Módulos 4 y 5
+
+Retrasos, imprevistos y votación exprés siguen **simulados en `groupsStore`**.
+El backend no expone nada de eso todavía: faltan las entidades y la evaluación
+de criticidad (RF-16).
+
+### 3.3 OCR en servidor
 
 Hoy el OCR se hace **en el navegador** con `tesseract.js` y solo se envía el
 resultado como bloques con `fuente: 'OCR'`, que el backend guarda en estado
 `BORRADOR` hasta que el usuario los confirma (RF-03, RNF-06).
 
-### 3.3 Tiempo real
+### 3.4 Tiempo real
 
 Falta WebSocket/STOMP en `/topic/groups/{groupId}` para RNF-05 (retrasos,
 votaciones y confirmaciones propagados en menos de 3 s). Mientras tanto, todo
 se refresca al navegar.
 
-### 3.4 `usuarioId` en la URL del módulo de horario
+### 3.5 `usuarioId` en la URL del módulo de horario
 
 `BloqueHorarioController` sigue recibiendo el `usuarioId` como `@PathVariable`,
 y su propio comentario dice que es temporal. El módulo de grupos ya hace lo
@@ -162,7 +171,7 @@ correcto: toma la identidad del token con `@AuthenticationPrincipal`. Cuando el
 de horario se alinee, las rutas pasarán a `/api/bloques-horario` y se ajusta en
 `endpoints.ts` y en `scheduleService`, en un único sitio cada uno.
 
-### 3.5 CORS (solo si no se usa el proxy)
+### 3.6 CORS (solo si no se usa el proxy)
 
 En despliegue, o si alguien apunta `VITE_API_URL` directo a
 `http://localhost:8080`, el backend necesita permitir el origen del frontend.
