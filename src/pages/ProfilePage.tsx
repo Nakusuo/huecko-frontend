@@ -123,7 +123,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
+    <div className="bg-surface text-on-surface min-h-dvh flex flex-col">
       <Navbar currentTab="profile" />
 
       {/* Main Container */}
