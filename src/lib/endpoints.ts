@@ -10,13 +10,13 @@
  */
 
 export const endpoints = {
-  /** ⏳ Spring Security + JWT aún no está en el backend. */
+  /** ✅ AuthController + Spring Security con JWT. */
   auth: {
     login: '/auth/login',
     register: '/auth/register',
   },
 
-  /** ⏳ Perfil y preferencias del usuario autenticado. */
+  /** ✅ MeController. */
   me: '/me',
 
   /** ✅ BloqueHorarioController. */
@@ -27,11 +27,23 @@ export const endpoints = {
     drafts: (usuarioId: string) => `/usuarios/${usuarioId}/bloques-horario/borradores`,
   },
 
-  /** ⏳ Módulo 2: grupos y cruce de disponibilidad. */
+  /**
+   * ✅ GrupoController (Módulo 2).
+   *
+   * Aquí el usuario NO viaja por la URL: el backend lo saca del JWT. Por eso
+   * no hay ningún `usuarioId` en las rutas de listado, a diferencia de las de
+   * horario, donde todavía es un `@PathVariable` temporal.
+   */
   groups: {
     list: '/grupos',
     detail: (grupoId: string) => `/grupos/${grupoId}`,
-    join: '/grupos/join',
+    join: '/grupos/unirse',
+    member: (grupoId: string, usuarioId: string) => `/grupos/${grupoId}/miembros/${usuarioId}`,
     availability: (grupoId: string) => `/grupos/${grupoId}/disponibilidad`,
+  },
+
+  /** ⏳ Módulos 3–5: planes, votaciones, retrasos e imprevistos. */
+  events: {
+    byGroup: (grupoId: string) => `/grupos/${grupoId}/eventos`,
   },
 } as const;
