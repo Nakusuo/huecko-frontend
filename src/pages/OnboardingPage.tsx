@@ -63,7 +63,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface text-on-surface pb-28 md:pb-12">
+    <div className="min-h-dvh bg-surface text-on-surface pb-28 md:pb-12">
       <Navbar currentTab="dashboard" />
 
       <main id="contenido" tabIndex={-1} className="max-w-3xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 pt-8">

@@ -97,8 +97,27 @@
   --radius-2xl: 0.75rem;
   --radius-3xl: 1rem;
 
-  --text-2xs: 0.6875rem; /* 11px */
-  --text-2xs--line-height: 1.45;
+  /* --- Escala tipográfica -------------------------------------------------
+     Recalibrada el 07/09/2026. El 70 % del texto de la app vivía en 11 y 12 px
+     —244 usos de `text-xs` y 100 de `text-2xs`— y de ahí saltaba directamente a
+     titulares de 30 px: el centro de la escala estaba vacío y todo se leía
+     apretado.
+
+     Se sube el suelo un escalón y se corrigen los interlineados. Tailwind da a
+     `text-xs` un interlineado de 1.33; para texto que forma frases la guía es
+     1.5–1.75, y por debajo de eso las líneas se pegan.
+
+     Los tres siguen siendo texto denso de interfaz. El texto de lectura larga
+     usa `text-sm` o `text-base`. */
+
+  --text-2xs: 0.75rem; /* 12px — insignias, contadores, sellos de tiempo */
+  --text-2xs--line-height: 1.4;
+
+  --text-xs: 0.8125rem; /* 13px — el texto de trabajo de la interfaz */
+  --text-xs--line-height: 1.5;
+
+  --text-sm: 0.875rem; /* 14px — sin cambio de tamaño, sí de aire */
+  --text-sm--line-height: 1.55;
 
   --font-headline: 'Geist', ui-sans-serif, system-ui, sans-serif;
   --font-body: 'Geist', ui-sans-serif, system-ui, sans-serif;

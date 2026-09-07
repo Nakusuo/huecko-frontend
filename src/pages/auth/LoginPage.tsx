@@ -66,7 +66,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface flex text-on-surface">
+    <div className="min-h-dvh bg-surface flex text-on-surface">
       {/* Branding Panel (Desktop) */}
       <BrandingPanel />
 
