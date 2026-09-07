@@ -15,6 +15,9 @@ import type { Criticidad, OpcionExpres } from '../types/incidents.types';
  */
 
 /** El store usa inglés en minúsculas; el backend, español en mayúsculas. */
+/** Lo que ofrece la interfaz cuando nadie indica minutos. */
+const MINUTOS_POR_DEFECTO = 15;
+
 const OPCIONES: Record<'cancel' | 'reschedule' | 'keep', OpcionExpres> = {
   cancel: 'CANCELAR',
   reschedule: 'REAGENDAR',
@@ -31,12 +34,17 @@ export const eventsService = {
    */
   async reportIncident(
     planId: string,
-    payload: { reason?: string; type?: 'falta' | 'tardanza' | 'imprevisto' },
+    payload: {
+      reason?: string;
+      type?: 'falta' | 'tardanza' | 'imprevisto';
+      /** Minutos de retraso. Solo tiene sentido con `type: 'tardanza'`. */
+      minutos?: number;
+    },
   ): Promise<{ criticidad: Criticidad | null; razon?: string; abrioVotacion: boolean }> {
     // Una tardanza es Módulo 4, no Módulo 5: son endpoints distintos y solo
     // el imprevisto puede abrir una votación exprés.
     if (payload.type === 'tardanza') {
-      await incidentsService.reportarRetraso(planId, minutosDe(payload.reason));
+      await incidentsService.reportarRetraso(planId, payload.minutos ?? MINUTOS_POR_DEFECTO);
       return { criticidad: null, abrioVotacion: false };
     }
 
@@ -56,15 +64,3 @@ export const eventsService = {
   },
 };
 
-/**
- * Saca los minutos del texto «Llegará con 20 minutos de retraso».
- *
- * Es una costura temporal: el store construye esa frase antes de llamar. Lo
- * correcto es que pase el número, y así lo hace ya el panel nuevo; esto solo
- * cubre el camino viejo mientras siga vivo. Sin número reconocible se asume
- * el valor que ofrece la interfaz por defecto.
- */
-function minutosDe(texto: string | undefined): number {
-  const encontrado = texto?.match(/(\d+)\s*min/i);
-  return encontrado ? Number(encontrado[1]) : 15;
-}

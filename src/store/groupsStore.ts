@@ -534,6 +534,9 @@ export const useGroupsStore = create<GroupsState>()(
           const res = await eventsService.reportIncident(proposalId, {
             reason: incidenceData.motivo,
             type: incidenceData.tipo,
+            // El numero va explicito: antes se sacaba de la frase "Llegara con 20
+            // minutos de retraso" con una expresion regular.
+            minutos: incidenceData.minutosTardanza,
           });
           /* RF-19: una baja NO crítica no reabre la coordinación. Antes de
              tener las reglas en el servidor, cualquier aviso mandaba el plan a
