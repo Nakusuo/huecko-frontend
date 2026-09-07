@@ -261,7 +261,7 @@ export default function DashboardPage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => navigate('/schedule')}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-surface-container hover:bg-surface-variant text-primary-hover text-xs font-bold border border-outline-variant transition-all cursor-pointer shadow-xs active:scale-95"
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-surface-container hover:bg-surface-variant text-primary-hover text-xs font-bold transition-all cursor-pointer elev-0 active:scale-95"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[18px]">document_scanner</span>
               <span>Importar OCR</span>
@@ -281,7 +281,7 @@ export default function DashboardPage() {
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <button type="button"
             onClick={() => navigate('/groups')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-on-surface-variant">Grupos activos</span>
@@ -298,7 +298,7 @@ export default function DashboardPage() {
 
           <button type="button"
             onClick={() => navigate('/groups')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-on-surface-variant">Votaciones activas</span>
@@ -317,7 +317,7 @@ export default function DashboardPage() {
 
           <button type="button"
             onClick={() => navigate('/schedule')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-on-surface-variant">Huecos coincidentes</span>
@@ -334,7 +334,7 @@ export default function DashboardPage() {
 
           <button type="button"
             onClick={() => navigate('/schedule')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-on-surface-variant">Mi horario</span>
@@ -370,7 +370,7 @@ export default function DashboardPage() {
           </div>
 
           {upcomingEvent ? (
-            <div className="bg-surface-container border border-outline-variant rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-sm">
+            <div className="bg-surface-container rounded-3xl p-6 md:p-8 relative overflow-hidden elev-1">
               <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
                 <div className="space-y-3 max-w-2xl">
                   <div className="flex items-center gap-2">
@@ -458,7 +458,7 @@ export default function DashboardPage() {
         {/* SECCIÓN DOBLE: MI HORARIO DE HOY (IZQUIERDA) Y MIS GRUPOS ACTIVOS (DERECHA) */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Mi horario de Hoy */}
-          <div className="p-6 rounded-3xl bg-surface-container-lowest border border-outline-variant/70 shadow-sm space-y-4">
+          <div className="p-6 rounded-3xl bg-surface-container-lowest elev-1 space-y-4">
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-semibold text-on-surface">Mi horario de hoy</h3>
@@ -522,7 +522,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Mis grupos activos */}
-          <div className="p-6 rounded-3xl bg-surface-container-lowest border border-outline-variant/70 shadow-sm space-y-4">
+          <div className="p-6 rounded-3xl bg-surface-container-lowest elev-1 space-y-4">
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-semibold text-on-surface">Mis grupos activos</h3>
@@ -611,7 +611,7 @@ export default function DashboardPage() {
               {pendingVotes.map((vote) => (
                 <div
                   key={vote.id}
-                  className="p-6 rounded-3xl bg-surface-container-lowest border border-outline-variant/70 shadow-sm space-y-4"
+                  className="p-6 rounded-3xl bg-surface-container-lowest elev-1 space-y-4"
                 >
                   <div className="flex justify-between items-start">
                     <div>
@@ -727,7 +727,7 @@ export default function DashboardPage() {
       {/* Modal de detalle del evento */}
       {isDetailModalOpen && upcomingEvent && (
         <div role="dialog" aria-modal="true" aria-label="Detalles del evento" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-xs">
-          <div className="bg-surface border border-outline-variant rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl animate-modal-in">
+          <div className="bg-surface rounded-3xl max-w-2xl w-full overflow-hidden elev-3 animate-modal-in">
             {/* Banner de Imagen Superior */}
             <div className="relative h-48 sm:h-60 w-full overflow-hidden">
               <img
@@ -894,7 +894,7 @@ export default function DashboardPage() {
       {/* Modal para avisar retraso */}
       {isDelayModalOpen && (
         <div role="dialog" aria-modal="true" aria-label="Avisar retraso" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-xs">
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-modal-in">
+          <div className="bg-surface-container-lowest rounded-3xl max-w-md w-full p-6 space-y-5 elev-3 animate-modal-in">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-on-surface flex items-center gap-2">
                 <span aria-hidden="true" className="material-symbols-outlined text-on-warning-container">timer</span>
@@ -957,7 +957,7 @@ export default function DashboardPage() {
       {/* Modal para reportar imprevisto */}
       {isIncidentModalOpen && (
         <div role="dialog" aria-modal="true" aria-label="Reportar imprevisto" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-xs">
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-modal-in">
+          <div className="bg-surface-container-lowest rounded-3xl max-w-md w-full p-6 space-y-5 elev-3 animate-modal-in">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-on-error-container flex items-center gap-2">
                 <span aria-hidden="true" className="material-symbols-outlined text-error">report</span>
