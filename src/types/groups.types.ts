@@ -16,7 +16,6 @@ export interface Group {
   id: string;
   nombre: string;
   descripcion: string;
-  codigoInvitacion: string;
   creadoPor: string;
   umbralDisponibilidad: number;
   miembros: GroupMember[];
@@ -26,10 +25,6 @@ export interface CreateGroupPayload {
   nombre: string;
   descripcion?: string;
   umbral_disponibilidad?: number;
-}
-
-export interface JoinGroupPayload {
-  codigo_invitacion: string;
 }
 
 export interface SuggestedWindow {
@@ -117,7 +112,6 @@ export interface GrupoResponse {
   id: string;
   nombre: string;
   descripcion: string | null;
-  codigoInvitacion: string;
   creadoPor: string;
   umbralDisponibilidad: number;
   creadoEn: string;
