@@ -595,7 +595,7 @@ export default function GroupsPage() {
    */
   const renderGroupPanel = (grp: Group) => (
     <div className="space-y-6">
-          <section className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 md:p-8 shadow-sm">
+          <section className="bg-surface-container-lowest rounded-2xl p-6 md:p-8 elev-1">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-outline-variant/60 pb-4">
               <div>
                 <h2 className="text-2xl font-bold text-on-surface flex items-center gap-2 font-headline">
@@ -838,7 +838,7 @@ export default function GroupsPage() {
               </div>
             )}
           </section>
-          <section className="bg-surface-container-low border border-outline-variant rounded-2xl p-6 md:p-8 shadow-sm animate-fade-in">
+          <section className="bg-surface-container-low rounded-2xl p-6 md:p-8 elev-1 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-outline-variant/60 pb-4">
               <div>
                 <div className="flex items-center gap-3 mb-1">
@@ -866,7 +866,10 @@ export default function GroupsPage() {
                       </header>
                       <div className="p-2 space-y-2 min-h-28">
                         {windows.length ? windows.map((window) => (
-                          <div key={`${day}-${window.start}`} className="rounded-lg bg-primary-container border-l-4 border-secondary px-2.5 py-2">
+                          /* Sin barra de acento a la izquierda: el relleno ya
+                             identifica la franja, y una barra de color fija que
+                             no codifica ningún dato solo añade ruido. */
+                          <div key={`${day}-${window.start}`} className="rounded-lg bg-primary-container px-2.5 py-2">
                             <p className="text-xs font-bold text-on-primary-container">
                               {window.start.toString().padStart(2, '0')}:00 - {window.end.toString().padStart(2, '0')}:00
                             </p>
@@ -1202,7 +1205,7 @@ export default function GroupsPage() {
       {/* Modal para proponer un nuevo plan */}
       {isProposeModalOpen && selectedGroup && (
         <div role="dialog" aria-modal="true" aria-label="Proponer plan" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-lg elev-3 overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">campaign</span>
@@ -1370,7 +1373,7 @@ export default function GroupsPage() {
       {/* Modal para reportar un imprevisto */}
       {isIncidentModalOpen && targetProposalForIncident && (
         <div role="dialog" aria-modal="true" aria-label="Avisar imprevisto o falta" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-md elev-3">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
                 <span aria-hidden="true" className="material-symbols-outlined text-warning">warning</span>
@@ -1444,7 +1447,7 @@ export default function GroupsPage() {
       {/* Modal: Unirse a Grupo por Código */}
       {isJoinModalOpen && (
         <div role="dialog" aria-modal="true" aria-label="Unirse a un grupo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-md elev-3">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">key</span>
@@ -1504,7 +1507,7 @@ export default function GroupsPage() {
           aria-label={`Ficha de ${memberDetail.nombre}`}
           className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4"
         >
-          <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-sm elev-3">
             <div className="flex justify-between items-start gap-3 mb-4 pb-4 border-b border-outline-variant/60">
               <div className="flex items-center gap-3 min-w-0">
                 <span
@@ -1625,7 +1628,7 @@ function GroupFormModal({
 }: GroupFormModalProps) {
   return (
     <div role="dialog" aria-modal="true" aria-label="Formulario de grupo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
-      <div className="bg-surface border border-outline-variant rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
+      <div className="bg-surface rounded-2xl p-6 w-full max-w-lg elev-3 overflow-y-auto max-h-[90vh]">
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
           <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
             <span aria-hidden="true" className="material-symbols-outlined text-primary">group</span>
