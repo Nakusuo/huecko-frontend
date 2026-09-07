@@ -1,9 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { ApiError, isApiEnabled } from '../lib/apiClient';
 import { groupsService } from '../services/groupsService';
 import { eventsService } from '../services/eventsService';
+import { plansService, type CrearPlanPayload } from '../services/plansService';
 import type {
   Group,
+  GroupAvailability,
   GroupMember,
   PlanProposal,
   PlanIncidence,
@@ -30,17 +33,30 @@ interface GroupsState {
   selectedGroupId: string | null;
   occupiedSlots: GroupOccupiedSlot[];
   groupProposals: PlanProposal[];
+  /**
+   * Cruce calculado por el backend, por grupo (RF-05). Vacío en modo demo, y
+   * entonces la UI cae a su cálculo local sobre `occupiedSlots`.
+   */
+  availability: Record<string, GroupAvailability>;
   isLoading: boolean;
   syncError: string | null;
 
   setSelectedGroupId: (id: string) => void;
   fetchGroupsFromServer: () => Promise<void>;
+  fetchAvailability: (groupId: string, threshold?: number) => Promise<void>;
+  fetchProposals: (groupId: string) => Promise<void>;
   createGroup: (nombre: string, descripcion: string, umbralDisponibilidad: number, userEmail: string, userName: string) => Promise<Group>;
   joinGroupByCode: (codigo: string, userEmail: string, userName: string) => Promise<boolean>;
   updateGroupThreshold: (groupId: string, threshold: number) => Promise<void>;
   toggleMemberEssential: (groupId: string, memberEmail: string) => Promise<void>;
 
-  addProposal: (proposal: Omit<PlanProposal, 'id'>) => Promise<void>;
+  /**
+   * `backendPayload` lleva la propuesta ya en el formato del Módulo 3 (fechas
+   * concretas e instante de cierre). Va aparte del objeto de demo porque son
+   * dos formas distintas del mismo plan: la de la UI razona en días de la
+   * semana, y la del backend necesita fechas.
+   */
+  addProposal: (proposal: Omit<PlanProposal, 'id'>, backendPayload?: CrearPlanPayload) => Promise<void>;
   voteProposalWindow: (proposalId: string, windowId: string, userEmail: string) => Promise<void>;
   closeVotingManually: (proposalId: string) => Promise<void>;
   reportIncident: (proposalId: string, incidence: Omit<PlanIncidence, 'id' | 'fechaReporte'>) => Promise<void>;
@@ -198,28 +214,56 @@ export const useGroupsStore = create<GroupsState>()(
       selectedGroupId: '1',
       occupiedSlots: INITIAL_OCCUPIED_SLOTS,
       groupProposals: INITIAL_PROPOSALS,
+      availability: {},
       isLoading: false,
       syncError: null,
 
       setSelectedGroupId: (id) => set({ selectedGroupId: id }),
 
+      /**
+       * En modo conectado la lista del servidor SUSTITUYE a la local, incluso
+       * si viene vacía: antes se conservaban los grupos de demo cuando el
+       * servidor no devolvía ninguno, así que alguien recién registrado veía
+       * grupos a los que no pertenece.
+       */
       fetchGroupsFromServer: async () => {
+        if (!isApiEnabled) return;
+
         set({ isLoading: true, syncError: null });
         try {
           const serverGroups = await groupsService.getGroups();
-          if (serverGroups && serverGroups.length > 0) {
-            set({ groups: serverGroups, isLoading: false });
-          } else {
-            set({ isLoading: false });
-          }
+          set((state) => ({
+            groups: serverGroups,
+            selectedGroupId: serverGroups.some((g) => g.id === state.selectedGroupId)
+              ? state.selectedGroupId
+              : serverGroups[0]?.id ?? null,
+            isLoading: false,
+          }));
         } catch (error) {
           const msg = error instanceof Error ? error.message : 'Error al conectar grupos con el servidor';
           set({ syncError: msg, isLoading: false });
         }
       },
 
-      createGroup: async (nombre, descripcion, umbralDisponibilidad, userEmail, userName) => {
+      /**
+       * RF-05 / RF-07. Se vuelve a pedir en cada apertura del panel y tras
+       * cambiar el umbral: el backend lo recalcula sobre los bloques vigentes,
+       * así que nunca se sirve un cruce viejo.
+       */
+      fetchAvailability: async (groupId, threshold) => {
+        if (!isApiEnabled) return;
+
         try {
+          const cruce = await groupsService.getAvailability(groupId, threshold);
+          set((state) => ({ availability: { ...state.availability, [groupId]: cruce } }));
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : 'Error al calcular la disponibilidad';
+          set({ syncError: msg });
+        }
+      },
+
+      createGroup: async (nombre, descripcion, umbralDisponibilidad, userEmail, userName) => {
+        if (isApiEnabled) {
           const created = await groupsService.createGroup({
             nombre,
             descripcion,
@@ -230,7 +274,9 @@ export const useGroupsStore = create<GroupsState>()(
             selectedGroupId: created.id,
           }));
           return created;
-        } catch {
+        }
+
+        {
           const newGroup: Group = {
             id: `group-${Date.now()}`,
             nombre,
@@ -251,20 +297,30 @@ export const useGroupsStore = create<GroupsState>()(
       },
 
       joinGroupByCode: async (codigo, userEmail, userName) => {
-        try {
-          const joinedGroup = await groupsService.joinGroup({ codigo_invitacion: codigo });
-          set((state) => {
-            const exists = state.groups.some((g) => g.id === joinedGroup.id);
-            return {
-              groups: exists
-                ? state.groups.map((g) => (g.id === joinedGroup.id ? joinedGroup : g))
-                : [...state.groups, joinedGroup],
-              selectedGroupId: joinedGroup.id,
-            };
-          });
-          return true;
-        } catch {
-          // Fallback local
+        if (isApiEnabled) {
+          try {
+            const joinedGroup = await groupsService.joinGroup({ codigo_invitacion: codigo });
+            set((state) => {
+              const exists = state.groups.some((g) => g.id === joinedGroup.id);
+              return {
+                groups: exists
+                  ? state.groups.map((g) => (g.id === joinedGroup.id ? joinedGroup : g))
+                  : [...state.groups, joinedGroup],
+                selectedGroupId: joinedGroup.id,
+              };
+            });
+            return true;
+          } catch (error) {
+            // Un código que no existe es un 404, y la UI ya sabe mostrar
+            // "no encontrado" con el `false`. Cualquier otro fallo (sesión
+            // caducada, servidor caído) sí tiene que llegar arriba en vez de
+            // disfrazarse de código inválido.
+            if (error instanceof ApiError && error.status === 404) return false;
+            throw error;
+          }
+        }
+
+        {
           const state = get();
           const targetGroup = state.groups.find(
             (g) => g.codigoInvitacion.trim().toUpperCase() === codigo.trim().toUpperCase()
@@ -290,73 +346,146 @@ export const useGroupsStore = create<GroupsState>()(
         }
       },
 
+      /**
+       * RF-06. Se aplica en local primero para que el deslizador responda al
+       * instante, igual que hace la rejilla de horario, y el cruce se vuelve a
+       * pedir después porque el umbral cambia qué casillas cumplen (RF-07).
+       */
       updateGroupThreshold: async (groupId, threshold) => {
-        try {
-          await groupsService.updateGroup(groupId, { umbral_disponibilidad: threshold });
-        } catch {
-          // Offline fallback
-        }
+        const anterior = get().groups.find((g) => g.id === groupId)?.umbralDisponibilidad;
+
         set((state) => ({
           groups: state.groups.map((g) => (g.id === groupId ? { ...g, umbralDisponibilidad: threshold } : g)),
         }));
+
+        if (!isApiEnabled) return;
+
+        try {
+          await groupsService.updateGroup(groupId, { umbral_disponibilidad: threshold });
+          await get().fetchAvailability(groupId);
+        } catch (error) {
+          // El servidor mandó (p. ej. 403 si quien lo mueve no es el
+          // organizador): se deshace el cambio para no dejar en pantalla un
+          // umbral que nadie más ve.
+          if (anterior != null) {
+            set((state) => ({
+              groups: state.groups.map((g) =>
+                g.id === groupId ? { ...g, umbralDisponibilidad: anterior } : g
+              ),
+            }));
+          }
+          set({ syncError: error instanceof Error ? error.message : 'No se pudo guardar el umbral' });
+        }
       },
 
       toggleMemberEssential: async (groupId, memberEmail) => {
         const group = get().groups.find((g) => g.id === groupId);
         const member = group?.miembros.find((m) => m.email === memberEmail);
-        const newEssentialState = !member?.isEssential;
+        if (!member) return;
 
-        try {
-          if (member?.userId || member?.id) {
-            await groupsService.updateMemberRole(groupId, member.userId || member.id || '', {
-              es_imprescindible: newEssentialState,
+        const nuevoEstado = !member.isEssential;
+        const userId = member.userId ?? member.id;
+
+        if (isApiEnabled && userId) {
+          try {
+            const actualizado = await groupsService.updateMember(groupId, userId, {
+              esImprescindible: nuevoEstado,
             });
+            set((state) => ({
+              groups: state.groups.map((g) => (g.id === groupId ? actualizado : g)),
+            }));
+            return;
+          } catch (error) {
+            set({
+              syncError:
+                error instanceof Error ? error.message : 'No se pudo actualizar al integrante',
+            });
+            return;
           }
-        } catch {
-          // Offline fallback
         }
 
         set((state) => ({
           groups: state.groups.map((g) => {
             if (g.id !== groupId) return g;
             const updatedMembers = g.miembros.map((m) =>
-              m.email === memberEmail ? { ...m, isEssential: !m.isEssential } : m
+              m.email === memberEmail ? { ...m, isEssential: nuevoEstado } : m
             );
             return { ...g, miembros: updatedMembers };
           }),
         }));
       },
 
-      addProposal: async (proposalData) => {
+      /**
+       * RF-08 a RF-10. Los planes de un grupo sustituyen a los que hubiera de
+       * ese mismo grupo; los de los demas se dejan intactos, porque cada grupo
+       * se consulta por separado.
+       */
+      fetchProposals: async (groupId) => {
+        if (!isApiEnabled) return;
+
+        const miembros = get().groups.find((g) => g.id === groupId)?.miembros ?? [];
         try {
-          const created = await eventsService.createProposal(proposalData.groupId, {
-            titulo: proposalData.titulo,
-            lugar: proposalData.lugar,
-            fecha_cierre: proposalData.plazoVotacion,
-            ventanas: proposalData.ventanasSugeridas.map((v) => ({
-              dia: v.dia,
-              hora_inicio: v.horaInicio,
-              hora_fin: v.horaFin,
-            })),
-          });
-          set((state) => ({
-            groupProposals: [created, ...state.groupProposals],
-          }));
-        } catch {
+          const planes = await plansService.getPlans(groupId, miembros);
           set((state) => ({
             groupProposals: [
-              { ...proposalData, id: `prop-${Date.now()}` },
-              ...state.groupProposals,
+              ...planes,
+              ...state.groupProposals.filter((p) => p.groupId !== groupId),
             ],
           }));
+        } catch (error) {
+          set({
+            syncError: error instanceof Error ? error.message : 'No se pudieron cargar los planes',
+          });
         }
       },
 
+      addProposal: async (proposalData, backendPayload) => {
+        if (isApiEnabled && backendPayload) {
+          const miembros = get().groups.find((g) => g.id === proposalData.groupId)?.miembros ?? [];
+          // Sin capturar el error: el backend rechaza las ventanas que no
+          // cumplen el umbral (RF-08) y ese mensaje tiene que llegar a quien
+          // propone, no perderse en un fallback silencioso.
+          const creado = await plansService.createPlan(proposalData.groupId, backendPayload, miembros);
+          set((state) => ({ groupProposals: [creado, ...state.groupProposals] }));
+          return;
+        }
+
+        set((state) => ({
+          groupProposals: [
+            { ...proposalData, id: `prop-${Date.now()}` },
+            ...state.groupProposals,
+          ],
+        }));
+      },
+
+      /**
+       * RF-09. Pulsar una ventana alterna el voto: si ya estaba marcada, se
+       * retira. El backend responde con el plan entero ya recontado, asi que
+       * no hace falta recalcular el recuento en el cliente.
+       */
       voteProposalWindow: async (proposalId, windowId, userEmail) => {
-        try {
-          await eventsService.voteWindow(proposalId, windowId);
-        } catch {
-          // Fallback
+        const plan = get().groupProposals.find((p) => p.id === proposalId);
+        const yaVotada = plan?.ventanasSugeridas
+          .find((w) => w.id === windowId)
+          ?.votosUsuarios.includes(userEmail) ?? false;
+
+        if (isApiEnabled) {
+          const miembros = get().groups.find((g) => g.id === plan?.groupId)?.miembros ?? [];
+          try {
+            const actualizado = yaVotada
+              ? await plansService.removeVote(proposalId, windowId, miembros)
+              : await plansService.vote(proposalId, windowId, miembros);
+            set((state) => ({
+              groupProposals: state.groupProposals.map((p) =>
+                p.id === proposalId ? { ...p, ...actualizado } : p
+              ),
+            }));
+          } catch (error) {
+            set({
+              syncError: error instanceof Error ? error.message : 'No se pudo registrar tu voto',
+            });
+          }
+          return;
         }
 
         set((state) => ({
@@ -364,8 +493,7 @@ export const useGroupsStore = create<GroupsState>()(
             if (p.id !== proposalId || p.estado === 'confirmado') return p;
             const updatedWindows = p.ventanasSugeridas.map((w) => {
               if (w.id === windowId) {
-                const hasVoted = w.votosUsuarios.includes(userEmail);
-                const newVotes = hasVoted
+                const newVotes = yaVotada
                   ? w.votosUsuarios.filter((e) => e !== userEmail)
                   : [...w.votosUsuarios, userEmail];
                 return { ...w, votosUsuarios: newVotes };
@@ -378,10 +506,24 @@ export const useGroupsStore = create<GroupsState>()(
       },
 
       closeVotingManually: async (proposalId) => {
-        try {
-          await eventsService.closeVoting(proposalId);
-        } catch {
-          // Fallback
+        if (isApiEnabled) {
+          const plan = get().groupProposals.find((p) => p.id === proposalId);
+          const miembros = get().groups.find((g) => g.id === plan?.groupId)?.miembros ?? [];
+          try {
+            const cerrado = await plansService.closeVoting(proposalId, miembros);
+            // El estado lo decide el servidor: si nadie voto, el plan queda
+            // CANCELADO y no confirmado (RF-10).
+            set((state) => ({
+              groupProposals: state.groupProposals.map((p) =>
+                p.id === proposalId ? { ...p, ...cerrado } : p
+              ),
+            }));
+          } catch (error) {
+            set({
+              syncError: error instanceof Error ? error.message : 'No se pudo cerrar la votacion',
+            });
+          }
+          return;
         }
 
         set((state) => ({
