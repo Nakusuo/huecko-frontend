@@ -85,7 +85,7 @@ export default function RegisterPage() {
         <div className="w-full max-w-md py-4">
           <MobileLogo />
 
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-3xl p-7 md:p-9 shadow-lg shadow-secondary/10">
+          <div className="bg-surface-container-lowest rounded-3xl p-7 md:p-9 elev-2">
             <div className="mb-6">
               <h2 className="text-2xl md:text-3xl font-bold text-on-surface font-headline mb-1.5">
                 Crea tu cuenta
@@ -314,7 +314,7 @@ export default function RegisterPage() {
 
 function BrandingPanel() {
   return (
-    <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center p-12 bg-gradient-to-br from-brand-deep via-primary-hover to-primary text-white">
+    <div className="on-brand hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center p-12 bg-gradient-to-br from-brand-deep via-primary-hover to-primary text-white">
       {/* Decorative Orbs */}
       <div className="absolute top-1/4 -left-20 w-80 h-80 bg-secondary/25 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-primary-container/20 rounded-full blur-3xl pointer-events-none" />
