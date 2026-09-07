@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useScheduleStore } from '../store/scheduleStore';
+import { useTiempoReal } from '../hooks/useTiempoReal';
 
 export function ProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -12,6 +13,10 @@ export function ProtectedRoute() {
   useEffect(() => {
     if (isAuthenticated) void hydrateSchedule();
   }, [isAuthenticated, hydrateSchedule]);
+
+  /* RNF-05. Aquí y no en cada página: una sola conexión para toda la zona
+     privada, que se cierra al salir. */
+  useTiempoReal();
 
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 }
