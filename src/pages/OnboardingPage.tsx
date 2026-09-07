@@ -10,7 +10,7 @@ export default function OnboardingPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const createGroup = useGroupsStore((s) => s.createGroup);
-  const joinGroupByCode = useGroupsStore((s) => s.joinGroupByCode);
+  const addMemberByEmail = useGroupsStore((s) => s.addMemberByEmail);
 
   const [step, setStep] = useState<OnboardingStep>(1);
   const [profileType, setProfileType] = useState<
@@ -18,48 +18,66 @@ export default function OnboardingPage() {
   >('universitario');
 
   // Estado del Grupo
-  const [groupAction, setGroupAction] = useState<'create' | 'join'>('create');
   const [groupName, setGroupName] = useState('Mis Amigos de Siempre');
   const [groupDescription, setGroupDescription] = useState(
     'Coordinar salidas, reuniones y estudio'
   );
   const [groupThreshold, setGroupThreshold] = useState<number>(100);
-  const [invitationCodeInput, setInvitationCodeInput] = useState('');
 
-  // Código de invitación
-  const [activeInviteCode, setActiveInviteCode] = useState(() => {
-    const randomSuffix = Math.random()
-      .toString(36)
-      .substring(2, 6)
-      .toUpperCase();
-    return `HUECKO-${randomSuffix}`;
-  });
-  const [copiedCode, setCopiedCode] = useState(false);
+  /* Integrantes del grupo nuevo. Sustituye al código de invitación: la gente
+     entra porque alguien la añade, aquí y desde la ficha de integrantes. */
+  const [correoNuevo, setCorreoNuevo] = useState('');
+  const [correos, setCorreos] = useState<string[]>([]);
+  const [errorCorreo, setErrorCorreo] = useState<string | null>(null);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(activeInviteCode);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2500);
+  const agregarCorreo = () => {
+    const limpio = correoNuevo.trim().toLowerCase();
+    if (!limpio) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(limpio)) {
+      setErrorCorreo('Ese correo no tiene un formato válido.');
+      return;
+    }
+    if (correos.includes(limpio)) {
+      setErrorCorreo('Ese correo ya está en la lista.');
+      return;
+    }
+    setCorreos([...correos, limpio]);
+    setCorreoNuevo('');
+    setErrorCorreo(null);
   };
+
+  /** El grupo se crea al salir del paso 2; los integrantes entran en el 3. */
+  const [grupoCreadoId, setGrupoCreadoId] = useState<string | null>(null);
 
   const handleStep2Submit = async () => {
     const userEmail = user?.email || 'alex.rodriguez@huecko.com';
     const userName = user?.nombre || 'Alex R.';
 
-    if (groupAction === 'create') {
-      const newG = await createGroup(
-        groupName || 'Mi Nuevo grupo',
-        groupDescription || 'Coordinación de horarios',
-        groupThreshold,
-        userEmail,
-        userName
-      );
-      setActiveInviteCode(newG.codigoInvitacion);
-    } else if (invitationCodeInput.trim()) {
-      await joinGroupByCode(invitationCodeInput, userEmail, userName);
-      setActiveInviteCode(invitationCodeInput.toUpperCase());
-    }
+    const nuevo = await createGroup(
+      groupName || 'Mi Nuevo grupo',
+      groupDescription || 'Coordinación de horarios',
+      groupThreshold,
+      userEmail,
+      userName
+    );
+    setGrupoCreadoId(nuevo.id);
     setStep(3);
+  };
+
+  /**
+   * Da de alta a los correos reunidos en el paso 3.
+   *
+   * Se hace al avanzar y no correo a correo: quien está montando su primer
+   * grupo escribe la lista de un tirón, y una petición por tecla convertiría
+   * el paso en una sucesión de esperas.
+   */
+  const handleStep3Submit = async () => {
+    if (grupoCreadoId) {
+      for (const correo of correos) {
+        await addMemberByEmail(grupoCreadoId, correo);
+      }
+    }
+    setStep(4);
   };
 
   return (
@@ -187,38 +205,10 @@ export default function OnboardingPage() {
                 Conéctate con tu círculo
               </h2>
               <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
-                Crea un espacio para tus amigos o únete con un código que te hayan compartido.
+                Crea el grupo y añade a tu gente por su correo. Después podrás ajustar los integrantes cuando quieras.
               </p>
             </div>
 
-            {/* Selector de Pestaña */}
-            <div className="flex bg-surface-container p-1 rounded-2xl border border-outline-variant/40">
-              <button
-                type="button"
-                onClick={() => setGroupAction('create')}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  groupAction === 'create'
-                    ? 'bg-primary text-on-primary shadow-xs'
-                    : 'text-on-surface-variant hover:text-on-surface'
-                }`}
-              >
-                Crear grupo
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setGroupAction('join')}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  groupAction === 'join'
-                    ? 'bg-primary text-on-primary shadow-xs'
-                    : 'text-on-surface-variant hover:text-on-surface'
-                }`}
-              >
-                Unirme por Código
-              </button>
-            </div>
-
-            {groupAction === 'create' ? (
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-on-surface-variant block mb-1">Nombre del grupo</label>
@@ -265,25 +255,6 @@ export default function OnboardingPage() {
                   />
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4 py-4">
-                <div>
-                  <label className="text-xs font-bold text-on-surface-variant block mb-1">
-                    Código de invitación (ej. HUECKO-78A9)
-                  </label>
-                  <input
-                    type="text"
-                    value={invitationCodeInput}
-                    onChange={(e) => setInvitationCodeInput(e.target.value.toUpperCase())}
-                    placeholder="HUECKO-XXXX"
-                    className="w-full p-3 rounded-xl border border-outline-variant font-mono text-center text-sm font-bold tracking-widest focus:outline-none focus:border-primary"
-                  />
-                </div>
-                <p className="text-xs text-on-surface-variant text-center">
-                  Pídele el código al creador del grupo para sincronizar tus huecos de inmediato.
-                </p>
-              </div>
-            )}
 
             <div className="flex justify-between items-center pt-4 border-t border-outline-variant/40">
               <button
@@ -311,43 +282,66 @@ export default function OnboardingPage() {
           <div className="bg-surface-container-lowest elev-1 rounded-3xl p-6 sm:p-8 space-y-6 animate-modal-in">
             <div>
               <h2 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface mt-1">
-                ¡Tu grupo está listo! Ahora invita a tus amigos
+                Tu grupo está listo. Ahora añade a tu gente
               </h2>
-              <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
-                Comparte este código con los integrantes para que carguen sus horarios y el sistema empiece a cruzar coincidencias.
+              <p className="text-sm text-on-surface-variant mt-1">
+                Escribe el correo con el que se registraron en Huecko. Podrás añadir o quitar a
+                quien quieras después, desde los integrantes del grupo.
               </p>
             </div>
 
-            <div className="p-6 rounded-3xl bg-surface-container border-2 border-dashed border-secondary text-center space-y-4">
-              <span className="text-xs font-semibold text-on-surface-variant">CÓDIGO EXCLUSIVO DE INVITACIÓN</span>
-              <div className="text-3xl sm:text-4xl font-mono font-bold text-primary-hover tracking-wider">
-                {activeInviteCode}
-              </div>
-
-              <div className="flex justify-center gap-3 pt-2">
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  aria-label="Correo de un integrante"
+                  placeholder="correo@huecko.com"
+                  value={correoNuevo}
+                  onChange={(e) => setCorreoNuevo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      agregarCorreo();
+                    }
+                  }}
+                  className="min-w-0 flex-1 rounded-xl border border-outline-variant bg-surface-container-lowest px-3.5 py-2.5 text-sm text-on-surface placeholder-outline focus:border-secondary focus:outline-none"
+                />
                 <button
                   type="button"
-                  onClick={handleCopy}
-                  className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-xs"
+                  onClick={agregarCorreo}
+                  className="shrink-0 cursor-pointer rounded-xl bg-surface-container px-4 py-2.5 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high active:scale-95"
                 >
-                  <span aria-hidden="true" className="material-symbols-outlined text-[16px]">
-                    {copiedCode ? 'check' : 'content_copy'}
-                  </span>
-                  <span>{copiedCode ? '¡Copiado!' : 'Copiar código'}</span>
+                  Añadir
                 </button>
-
-                <a
-                  href={`https://wa.me/?text=${encodeURIComponent(
-                    `¡Hola! Únete a mi grupo en Huecko para coordinar nuestros horarios libres. Usa el código: ${activeInviteCode}`
-                  )}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-5 py-2.5 rounded-xl bg-whatsapp hover:bg-whatsapp-hover text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-xs"
-                >
-                  <span aria-hidden="true" className="material-symbols-outlined text-[16px]">share</span>
-                  <span>WhatsApp</span>
-                </a>
               </div>
+
+              {errorCorreo && (
+                <p role="alert" className="text-xs font-semibold text-error">{errorCorreo}</p>
+              )}
+
+              {correos.length > 0 ? (
+                <ul className="flex flex-wrap gap-1.5 pt-1">
+                  {correos.map((correo) => (
+                    <li key={correo}>
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-surface-container py-1 pl-2.5 pr-1.5 text-2xs text-on-surface">
+                        {correo}
+                        <button
+                          type="button"
+                          aria-label={`Quitar ${correo}`}
+                          onClick={() => setCorreos(correos.filter((c) => c !== correo))}
+                          className="cursor-pointer text-on-surface-variant transition-colors hover:text-error"
+                        >
+                          <span aria-hidden="true" className="material-symbols-outlined text-[14px]">close</span>
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="pt-1 text-2xs text-on-surface-variant">
+                  Puedes saltarte este paso y añadirlos más adelante.
+                </p>
+              )}
             </div>
 
             <div className="flex justify-between items-center pt-4 border-t border-outline-variant/40">
@@ -361,7 +355,7 @@ export default function OnboardingPage() {
 
               <button
                 type="button"
-                onClick={() => setStep(4)}
+                onClick={handleStep3Submit}
                 className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-2"
               >
                 <span>Finalizar</span>
@@ -402,7 +396,7 @@ export default function OnboardingPage() {
               <div className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60">
                 <span className="text-2xs font-bold text-primary uppercase block">Grupo</span>
                 <span className="text-xs font-bold text-on-surface truncate block">
-                  {groupAction === 'create' ? groupName : 'Unido por código'}
+                  {groupName}
                 </span>
               </div>
 

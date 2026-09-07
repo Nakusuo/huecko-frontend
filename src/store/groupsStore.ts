@@ -46,7 +46,7 @@ interface GroupsState {
   fetchAvailability: (groupId: string, threshold?: number) => Promise<void>;
   fetchProposals: (groupId: string) => Promise<void>;
   createGroup: (nombre: string, descripcion: string, umbralDisponibilidad: number, userEmail: string, userName: string) => Promise<Group>;
-  joinGroupByCode: (codigo: string, userEmail: string, userName: string) => Promise<boolean>;
+  addMemberByEmail: (groupId: string, email: string) => Promise<boolean>;
   updateGroupThreshold: (groupId: string, threshold: number) => Promise<void>;
   toggleMemberEssential: (groupId: string, memberEmail: string) => Promise<void>;
 
@@ -69,7 +69,6 @@ const INITIAL_GROUPS: Group[] = [
     id: '1',
     nombre: 'Grupo Universitario - Ing. Software',
     descripcion: 'Coordinación para proyecto final, entregables y sesiones de estudio de fin de ciclo.',
-    codigoInvitacion: 'UNIV-2026',
     creadoPor: 'alex.rodriguez@huecko.com',
     umbralDisponibilidad: 80,
     miembros: [
@@ -84,7 +83,6 @@ const INITIAL_GROUPS: Group[] = [
     id: '2',
     nombre: 'Amigos de Fin de Semana',
     descripcion: 'Pichangas de fútbol, asados de domingo, salidas y cumpleaños del grupo.',
-    codigoInvitacion: 'WEEKEND-99',
     creadoPor: 'carlos.m@huecko.com',
     umbralDisponibilidad: 70,
     miembros: [
@@ -281,7 +279,6 @@ export const useGroupsStore = create<GroupsState>()(
             id: `group-${Date.now()}`,
             nombre,
             descripcion,
-            codigoInvitacion: `HUECKO-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
             creadoPor: userEmail,
             umbralDisponibilidad,
             miembros: [
@@ -296,54 +293,49 @@ export const useGroupsStore = create<GroupsState>()(
         }
       },
 
-      joinGroupByCode: async (codigo, userEmail, userName) => {
+      /**
+       * Da de alta a alguien en el grupo, por correo.
+       *
+       * Sustituye a `joinGroupByCode`. El cambio no es solo de dato: antes
+       * quien entraba era quien tenía el código, ahora es el organizador quien
+       * decide. Por eso recibe el grupo: ya no hay que buscarlo por una cadena.
+       *
+       * Devuelve `false` si no hay ninguna cuenta con ese correo (404), que es
+       * un caso normal que la interfaz sabe explicar. Cualquier otro fallo sube.
+       */
+      addMemberByEmail: async (groupId, email) => {
         if (isApiEnabled) {
           try {
-            const joinedGroup = await groupsService.joinGroup({ codigo_invitacion: codigo });
-            set((state) => {
-              const exists = state.groups.some((g) => g.id === joinedGroup.id);
-              return {
-                groups: exists
-                  ? state.groups.map((g) => (g.id === joinedGroup.id ? joinedGroup : g))
-                  : [...state.groups, joinedGroup],
-                selectedGroupId: joinedGroup.id,
-              };
-            });
+            const actualizado = await groupsService.addMember(groupId, email);
+            set((state) => ({
+              groups: state.groups.map((g) => (g.id === groupId ? actualizado : g)),
+            }));
             return true;
           } catch (error) {
-            // Un código que no existe es un 404, y la UI ya sabe mostrar
-            // "no encontrado" con el `false`. Cualquier otro fallo (sesión
-            // caducada, servidor caído) sí tiene que llegar arriba en vez de
-            // disfrazarse de código inválido.
             if (error instanceof ApiError && error.status === 404) return false;
             throw error;
           }
         }
 
-        {
-          const state = get();
-          const targetGroup = state.groups.find(
-            (g) => g.codigoInvitacion.trim().toUpperCase() === codigo.trim().toUpperCase()
-          );
-          if (!targetGroup) return false;
+        // Modo demo: se añade con los datos que hay, sin comprobar cuentas.
+        const grupo = get().groups.find((g) => g.id === groupId);
+        if (!grupo) return false;
+        if (grupo.miembros.some((m) => m.email === email)) return true;
 
-          const alreadyMember = targetGroup.miembros.some((m) => m.email === userEmail);
-          if (alreadyMember) {
-            set({ selectedGroupId: targetGroup.id });
-            return true;
-          }
-
-          const updatedMembers: GroupMember[] = [
-            ...targetGroup.miembros,
-            { email: userEmail, nombre: userName, isEssential: false, color: colorByIndex(3), status: 'confirmado' },
-          ];
-
-          set((s) => ({
-            groups: s.groups.map((g) => (g.id === targetGroup.id ? { ...g, miembros: updatedMembers } : g)),
-            selectedGroupId: targetGroup.id,
-          }));
-          return true;
-        }
+        const nuevos: GroupMember[] = [
+          ...grupo.miembros,
+          {
+            email,
+            nombre: email.split('@')[0],
+            isEssential: false,
+            color: colorByIndex(grupo.miembros.length),
+            status: 'confirmado',
+          },
+        ];
+        set((s) => ({
+          groups: s.groups.map((g) => (g.id === groupId ? { ...g, miembros: nuevos } : g)),
+        }));
+        return true;
       },
 
       /**
