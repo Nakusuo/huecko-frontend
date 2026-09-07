@@ -35,6 +35,14 @@ export interface JoinGroupPayload {
 export interface SuggestedWindow {
   id: string;
   dia: DayOfWeek;
+  /**
+   * Fecha concreta (ISO `YYYY-MM-DD`) a la que corresponde ese día.
+   *
+   * El heatmap razona en «martes de 10 a 12» porque describe una rutina
+   * semanal, pero un plan ocurre un día determinado. Sin esto no habría cómo
+   * convertir una ventana sugerida en una propuesta votable.
+   */
+  fecha?: string;
   horaInicio: string;
   horaFin: string;
   disponibilidadPorcentaje: number;
@@ -57,9 +65,18 @@ export interface PlanIncidence {
 export interface TimeWindowProposal {
   id: string;
   dia: DayOfWeek;
+  /** Fecha concreta (ISO `YYYY-MM-DD`) de esta opción. Ver `SuggestedWindow.fecha`. */
+  fecha?: string;
   horaInicio: string;
   horaFin: string;
   disponibilidadPorcentaje: number;
+  /**
+   * Correos de quienes votaron esta opción.
+   *
+   * El backend los devuelve como UUID; `plansService` los traduce a correo
+   * usando los integrantes del grupo, para que la UI siga comparando por
+   * correo igual que en modo demo.
+   */
   votosUsuarios: string[];
 }
 
@@ -158,4 +175,48 @@ export interface GroupAvailability {
   hourTo: number;
   cells: Record<string, { freeCount: number; freePercentage: number; meetsThreshold: boolean }>;
   windows: SuggestedWindow[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Contrato del backend (com.huecko.backend.plan) — Módulo 3
+ * ------------------------------------------------------------------ */
+
+export type EstadoPlan = 'PROPUESTO' | 'CONFIRMADO' | 'CANCELADO' | 'EN_RECOORDINACION';
+
+/** Espejo de `VentanaPlanResponse`. */
+export interface VentanaPlanResponse {
+  id: string;
+  fecha: string;
+  diaSemana: number;
+  horaInicio: string;
+  horaFin: string;
+  disponibilidadPorcentaje: number;
+  votos: number;
+  /** UUID de quienes votaron. `plansService` los traduce a correo. */
+  votantes: string[];
+  votadaPorMi: boolean;
+}
+
+/** Espejo de `PlanResponse`. */
+export interface PlanResponse {
+  id: string;
+  grupoId: string;
+  titulo: string;
+  lugar: string | null;
+  creadoPor: string;
+  plazoVotacion: string;
+  estado: EstadoPlan;
+  votosMultiples: boolean;
+  ventanas: VentanaPlanResponse[];
+  ventanaConfirmadaId: string | null;
+  /**
+   * Si la votación sigue aceptando votos AHORA, según el reloj del servidor.
+   *
+   * No se recalcula en el cliente comparando `plazoVotacion` con `Date.now()`:
+   * el reloj del navegador puede ir desfasado, y con él la decisión de mostrar
+   * o no el botón de votar.
+   */
+  votacionAbierta: boolean;
+  creadoEn: string;
+  cerradoEn: string | null;
 }
