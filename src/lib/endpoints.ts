@@ -61,4 +61,19 @@ export const endpoints = {
   incidents: {
     byPlan: (planId: string) => `/planes/${planId}/incidencias`,
   },
+
+  /**
+   * ✅ WebSocketConfig (RNF-05).
+   *
+   * No se pide con axios: lo abre `lib/realtime.ts` con SockJS. Se apunta aquí
+   * para que las rutas del backend sigan estando todas en un mismo sitio.
+   *
+   * El JWT viaja en la cabecera del frame CONNECT, no en la URL.
+   */
+  realtime: {
+    /** Handshake de SockJS. */
+    endpoint: '/ws',
+    /** Topic al que se suscribe cada grupo. */
+    topicGrupo: (grupoId: string) => `/topic/grupos/${grupoId}`,
+  },
 } as const;
