@@ -42,9 +42,15 @@ export interface BloqueHorarioResponse {
   diaSemana: number | null;
   /** ISO `YYYY-MM-DD`. Solo en bloques puntuales. */
   fecha: string | null;
+  /** ISO `YYYY-MM-DD`. Último día de un puntual que dura varios. */
+  fechaFin: string | null;
   horaInicio: string; // "HH:mm" o "HH:mm:ss"
   horaFin: string;
   etiqueta: string | null;
+  /** Categoría del bloque (Clase, Trabajo, Personal…), distinta del título. */
+  categoria: string | null;
+  /** Color con el que se pinta el bloque, en formato CSS. */
+  color: string | null;
   fuente: BloqueFuente;
   estado: BloqueEstado;
 }
@@ -54,7 +60,12 @@ export interface BloqueHorarioRequest {
   tipo: BloqueTipo;
   diaSemana?: number | null;
   fecha?: string | null;
+  fechaFin?: string | null;
   horaInicio: string;
   horaFin: string;
   etiqueta?: string | null;
+  categoria?: string | null;
+  color?: string | null;
+  /** Si se manda OCR, el backend crea el bloque como BORRADOR (RF-03). */
+  fuente?: BloqueFuente;
 }
