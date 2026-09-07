@@ -57,9 +57,22 @@ export const endpoints = {
     close: (planId: string) => `/planes/${planId}/cerrar`,
   },
 
-  /** ⏳ Módulos 4 y 5: retrasos, imprevistos y votación exprés. */
+  /**
+   * ✅ RetrasoController (Módulo 4) e ImprevistoController (Módulo 5).
+   *
+   * Cuelgan del plan y no del grupo: un retraso o una ausencia siempre lo son
+   * respecto de un evento concreto, y el plan ya sabe a qué grupo pertenece.
+   */
   incidents: {
-    byPlan: (planId: string) => `/planes/${planId}/incidencias`,
+    /** RF-14: estado de puntualidad de todos. */
+    retrasos: (planId: string) => `/planes/${planId}/retrasos`,
+    /** RF-12: el mío. `PUT` porque repetirlo corrige, no acumula. */
+    miRetraso: (planId: string) => `/planes/${planId}/retrasos/mio`,
+    /** RF-15: reportar que no podré ir. */
+    imprevistos: (planId: string) => `/planes/${planId}/imprevistos`,
+    /** RF-17: la votación exprés abierta. Devuelve 204 si no hay ninguna. */
+    votacionExpres: (planId: string) => `/planes/${planId}/votacion-expres`,
+    votoExpres: (planId: string) => `/planes/${planId}/votacion-expres/voto`,
   },
 
   /**
