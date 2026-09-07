@@ -68,7 +68,7 @@ export default function OnboardingPage() {
 
       <main id="contenido" tabIndex={-1} className="max-w-3xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 pt-8">
         {/* Barra de Progreso del Asistente */}
-        <div className="bg-surface-container-lowest border border-outline-variant/60 rounded-3xl p-6 shadow-xs">
+        <div className="bg-surface-container-lowest rounded-3xl p-6 elev-1">
           <div className="flex items-center justify-between mb-4">
             <span className="text-xs font-bold uppercase tracking-wider text-primary">
               Paso {step} de 4
@@ -91,7 +91,7 @@ export default function OnboardingPage() {
 
         {/* PASO 1: CONFIGURAR DISPONIBILIDAD INICIAL */}
         {step === 1 && (
-          <div className="bg-surface-container-lowest border border-outline-variant/70 rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm animate-modal-in">
+          <div className="bg-surface-container-lowest elev-1 rounded-3xl p-6 sm:p-8 space-y-6 animate-modal-in">
             <div>
               <h2 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface mt-1">
                 ¿Cuál es tu tipo de rutina habitual?
@@ -181,7 +181,7 @@ export default function OnboardingPage() {
 
         {/* PASO 2: CREAR O UNIRSE A UN GRUPO */}
         {step === 2 && (
-          <div className="bg-surface-container-lowest border border-outline-variant/70 rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm animate-modal-in">
+          <div className="bg-surface-container-lowest elev-1 rounded-3xl p-6 sm:p-8 space-y-6 animate-modal-in">
             <div>
               <h2 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface mt-1">
                 Conéctate con tu círculo
@@ -308,7 +308,7 @@ export default function OnboardingPage() {
 
         {/* PASO 3: INVITAR AMIGOS */}
         {step === 3 && (
-          <div className="bg-surface-container-lowest border border-outline-variant/70 rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm animate-modal-in">
+          <div className="bg-surface-container-lowest elev-1 rounded-3xl p-6 sm:p-8 space-y-6 animate-modal-in">
             <div>
               <h2 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface mt-1">
                 ¡Tu grupo está listo! Ahora invita a tus amigos
@@ -373,7 +373,7 @@ export default function OnboardingPage() {
 
         {/* PASO 4: CONFIRMACIÓN Y ACCESO AL DASHBOARD */}
         {step === 4 && (
-          <div className="bg-surface-container-lowest border border-outline-variant/70 rounded-3xl p-8 sm:p-10 space-y-6 text-center shadow-sm animate-modal-in">
+          <div className="bg-surface-container-lowest rounded-3xl p-8 sm:p-10 space-y-6 text-center elev-1 animate-modal-in">
             <div className="w-16 h-16 rounded-full bg-primary text-on-primary flex items-center justify-center mx-auto text-3xl shadow-lg shadow-primary/20">
               <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
             </div>
