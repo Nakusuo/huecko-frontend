@@ -11,6 +11,8 @@ import {
 } from '../store/groupsStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { availabilityKey } from '../services/groupsService';
+import { fechaParaDia } from '../services/plansService';
+import { useAuthStore } from '../store/authStore';
 import { colorByIndex, DEFAULT_CATEGORY_COLOR } from '../theme/palette';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 
@@ -30,6 +32,50 @@ export interface GroupOccupiedSlot {
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const timeSlotsHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
 
+/** Lunes de la semana en curso, en ISO. Respaldo si aun no llego el cruce. */
+function lunesDeEstaSemana(): string {
+  const hoy = new Date();
+  hoy.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
+  const dd = (n: number) => String(n).padStart(2, '0');
+  return `${hoy.getFullYear()}-${dd(hoy.getMonth() + 1)}-${dd(hoy.getDate())}`;
+}
+
+/**
+ * Convierte el plazo que elige el organizador ("24 horas") en el instante ISO
+ * que espera el backend.
+ *
+ * La lista de opciones es cerrada, asi que no hace falta interpretar texto
+ * libre; lo unico que se cubre es que alguien anada una opcion nueva sin tocar
+ * esta funcion, y por eso el caso por defecto son 24 horas en vez de un fallo.
+ */
+function plazoAInstante(plazo: string): string {
+  const horas = /^(\d+)\s*horas?$/i.exec(plazo.trim());
+  if (horas) {
+    return new Date(Date.now() + Number(horas[1]) * 3_600_000).toISOString();
+  }
+
+  if (/viernes/i.test(plazo)) {
+    const cierre = new Date();
+    // 5 = viernes. Si hoy ya es viernes por la tarde, se va al siguiente.
+    const diasHastaViernes = (5 - cierre.getDay() + 7) % 7;
+    cierre.setDate(cierre.getDate() + diasHastaViernes);
+    cierre.setHours(20, 0, 0, 0);
+    if (cierre.getTime() <= Date.now()) cierre.setDate(cierre.getDate() + 7);
+    return cierre.toISOString();
+  }
+
+  return new Date(Date.now() + 24 * 3_600_000).toISOString();
+}
+
+/** Muestra el plazo: si es un instante ISO se formatea, y si no se deja tal cual. */
+function formatearPlazo(plazo: string): string {
+  const fecha = new Date(plazo);
+  if (Number.isNaN(fecha.getTime())) return plazo;
+  return fecha.toLocaleString('es-PE', {
+    weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
 export default function GroupsPage() {
   const {
     groups,
@@ -39,6 +85,7 @@ export default function GroupsPage() {
     groupProposals,
     availability,
     fetchAvailability,
+    fetchProposals,
     createGroup,
     joinGroupByCode,
     updateGroupThreshold,
@@ -53,6 +100,13 @@ export default function GroupsPage() {
 
   const { addNotification } = useNotificationStore();
 
+  /* Identidad real de quien usa la app. Antes estaba escrita a mano en cinco
+     sitios como 'alex.rodriguez@huecko.com', asi que con backend real todo el
+     mundo votaba y creaba grupos en nombre del usuario de demo. */
+  const authUser = useAuthStore((state) => state.user);
+  const userEmail = authUser?.email ?? 'alex.rodriguez@huecko.com';
+  const userName = authUser?.nombre ?? 'Alex R.';
+
   const selectedGroup = groups.find((g) => g.id === selectedGroupId) || groups[0] || null;
 
   /**
@@ -62,14 +116,17 @@ export default function GroupsPage() {
    */
   const activeGroupId = selectedGroup?.id;
   useEffect(() => {
-    if (activeGroupId) fetchAvailability(activeGroupId);
-  }, [activeGroupId, fetchAvailability]);
+    if (!activeGroupId) return;
+    fetchAvailability(activeGroupId);
+    fetchProposals(activeGroupId);
+  }, [activeGroupId, fetchAvailability, fetchProposals]);
 
   // Proposal Modal State
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
   const [proposalTitle, setProposalTitle] = useState('');
   const [proposalLugar, setProposalLugar] = useState('');
   const [proposalPlazo, setProposalPlazo] = useState('24 horas');
+  const [proposalError, setProposalError] = useState('');
   const [suggestedWindows, setSuggestedWindows] = useState<TimeWindowProposal[]>([]);
 
   // Form window input temporary
@@ -116,7 +173,7 @@ export default function GroupsPage() {
   const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!joinCodeInput.trim()) return;
-    const success = await joinGroupByCode(joinCodeInput, 'alex.rodriguez@huecko.com', 'Alex R.');
+    const success = await joinGroupByCode(joinCodeInput, userEmail, userName);
     if (success) {
       setIsJoinModalOpen(false);
       setJoinCodeInput('');
@@ -137,7 +194,7 @@ export default function GroupsPage() {
     setDescripcion('');
     setUmbral(100);
     setMembersList([
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.', isEssential: true, color: DEFAULT_CATEGORY_COLOR, status: 'confirmado' },
+      { email: userEmail, nombre: userName, isEssential: true, color: DEFAULT_CATEGORY_COLOR, status: 'confirmado' },
     ]);
     setNewMemberEmail('');
     setNewMemberName('');
@@ -198,7 +255,7 @@ export default function GroupsPage() {
     e.preventDefault();
     if (!nombre) return;
 
-    createGroup(nombre, descripcion, umbral, 'alex.rodriguez@huecko.com', 'Alex R.');
+    createGroup(nombre, descripcion, umbral, userEmail, userName);
     setIsCreateModalOpen(false);
   };
 
@@ -248,6 +305,7 @@ export default function GroupsPage() {
     setProposalTitle('');
     setProposalLugar('');
     setProposalPlazo('24 horas');
+    setProposalError('');
 
     const avail1 = calculateWindowAvailability(
       group,
@@ -312,8 +370,9 @@ export default function GroupsPage() {
     );
   };
 
-  const handleCreateProposalSubmit = (e: React.FormEvent) => {
+  const handleCreateProposalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setProposalError('');
     if (
       !selectedGroup ||
       !proposalTitle ||
@@ -323,15 +382,45 @@ export default function GroupsPage() {
       return;
     }
 
-    addProposal({
-      groupId: selectedGroup.id,
-      titulo: proposalTitle,
-      lugar: proposalLugar,
-      creadoPor: 'Alex R.',
-      plazoVotacion: proposalPlazo,
-      estado: 'propuesto',
-      ventanasSugeridas: suggestedWindows,
-    });
+    /* El backend necesita una fecha concreta por ventana y un instante de
+       cierre; la UI razona en dias de la semana y en textos como "24 horas".
+       La conversion se hace aqui, en el borde. */
+    const lunesDeLaSemana = availability[selectedGroup.id]?.weekFrom ?? lunesDeEstaSemana();
+    const ventanasConFecha = suggestedWindows.map((w) => ({
+      ...w,
+      fecha: w.fecha ?? fechaParaDia(lunesDeLaSemana, w.dia),
+    }));
+
+    try {
+      await addProposal(
+        {
+          groupId: selectedGroup.id,
+          titulo: proposalTitle,
+          lugar: proposalLugar,
+          creadoPor: userName,
+          plazoVotacion: proposalPlazo,
+          estado: 'propuesto',
+          ventanasSugeridas: ventanasConFecha,
+        },
+        {
+          titulo: proposalTitle,
+          lugar: proposalLugar || undefined,
+          plazoVotacion: plazoAInstante(proposalPlazo),
+          votosMultiples: true,
+          ventanas: ventanasConFecha.map((w) => ({
+            fecha: w.fecha as string,
+            horaInicio: w.horaInicio,
+            horaFin: w.horaFin,
+          })),
+        }
+      );
+    } catch (error: unknown) {
+      /* El backend rechaza las ventanas que no llegan al umbral del grupo
+         (RF-08). Ese motivo tiene que verse en el formulario, y el modal
+         quedarse abierto para poder corregir las opciones. */
+      setProposalError(error instanceof Error ? error.message : 'No se pudo crear el plan');
+      return;
+    }
 
     addNotification({
       title: 'Nuevo plan propuesto',
@@ -347,11 +436,7 @@ export default function GroupsPage() {
     proposalId: string,
     windowId: string
   ) => {
-    voteProposalWindow(
-      proposalId,
-      windowId,
-      'alex.rodriguez@huecko.com'
-    );
+    voteProposalWindow(proposalId, windowId, userEmail);
   };
 
   const handleCloseVotingManually = (proposalId: string) => {
@@ -381,8 +466,8 @@ export default function GroupsPage() {
     if (!targetProposalForIncident || !incidentMotivo) return;
 
     reportIncident(targetProposalForIncident.id, {
-      userEmail: 'alex.rodriguez@huecko.com',
-      userName: 'Alex R.',
+      userEmail,
+      userName,
       tipo: incidentType,
       motivo: incidentMotivo,
     });
@@ -398,7 +483,7 @@ export default function GroupsPage() {
   };
 
   const handleReplanVote = (proposalId: string, action: 'cancel' | 'reschedule' | 'keep') => {
-    voteReplanification(proposalId, action, 'alex.rodriguez@huecko.com');
+    voteReplanification(proposalId, action, userEmail);
   };
 
   /**
@@ -705,7 +790,7 @@ export default function GroupsPage() {
 
                         {/* Pie de tarjeta ultra-limpio */}
                         <div className="pt-2.5 border-t border-outline-variant/60 flex justify-between items-center text-xs text-on-surface-variant">
-                          <span className="text-2xs font-mono">Plazo: {proposal.plazoVotacion}</span>
+                          <span className="text-2xs font-mono">Plazo: {formatearPlazo(proposal.plazoVotacion)}</span>
 
                           <div className="flex gap-2">
                             {/* Un plan cancelado no admite avisos, y quien ya
@@ -1252,6 +1337,15 @@ export default function GroupsPage() {
                   ))}
                 </div>
               </div>
+
+              {/* El backend rechaza las ventanas que no llegan al umbral del
+                  grupo (RF-08); el motivo se lee aqui y el modal sigue abierto
+                  para poder cambiar las opciones. */}
+              {proposalError && (
+                <p role="alert" className="text-xs text-error bg-error-container/40 border border-error/30 rounded-xl px-3.5 py-2.5">
+                  {proposalError}
+                </p>
+              )}
 
               <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/60">
                 <button
