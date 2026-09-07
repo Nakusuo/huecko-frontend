@@ -15,6 +15,7 @@ import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
 import { ResumenPuntualidad } from '../components/ResumenPuntualidad';
+import { AccionesRapidas } from '../components/AccionesRapidas';
 
 interface TodayScheduleBlock {
   id: string;
@@ -258,24 +259,11 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => navigate('/schedule')}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-surface-container hover:bg-surface-variant text-primary-hover text-xs font-bold transition-all cursor-pointer elev-0 active:scale-95"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-[18px]">document_scanner</span>
-              <span>Importar OCR</span>
-            </button>
-
-            <button
-              onClick={() => navigate('/groups')}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer active:scale-95"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
-              <span>Proponer plan</span>
-            </button>
-          </div>
         </section>
+
+        {/* Las acciones viven aquí, no al final de la página: es donde el ojo
+            ya está después de leer el saludo. */}
+        <AccionesRapidas />
 
         {/* Tarjetas de Métricas Resumen */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -686,42 +674,6 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* Accesos Rápidos (Quick Hub) */}
-        <section className="p-6 rounded-3xl bg-surface-container border border-outline-variant/50">
-          <h3 className="text-sm font-bold text-on-surface mb-3">Acciones rápidas</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <button
-              onClick={() => navigate('/groups')}
-              className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary hover:bg-surface-container flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-primary mb-1 group-hover:scale-110 transition-transform">
-                group_add
-              </span>
-              <span className="text-xs font-bold text-on-surface">Crear grupo</span>
-            </button>
-
-            <button
-              onClick={() => navigate('/schedule')}
-              className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary hover:bg-surface-container flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-primary mb-1 group-hover:scale-110 transition-transform">
-                edit_calendar
-              </span>
-              <span className="text-xs font-bold text-on-surface">Ajustar horario</span>
-            </button>
-
-
-            <button
-              onClick={() => navigate('/onboarding')}
-              className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary hover:bg-surface-container flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-primary mb-1 group-hover:scale-110 transition-transform">
-                school
-              </span>
-              <span className="text-xs font-bold text-on-surface">Tutorial de Huecko</span>
-            </button>
-          </div>
-        </section>
       </main>
 
       {/* Modal de detalle del evento */}
