@@ -364,7 +364,7 @@ export default function SchedulePage() {
   };
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
+    <div className="bg-surface text-on-surface min-h-dvh flex flex-col">
       <Navbar currentTab="schedule" />
 
       {/* Toast Notification */}
@@ -460,7 +460,7 @@ export default function SchedulePage() {
                     }`}
                   >
                     <span className="block text-xs font-bold">{day}</span>
-                    <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-outline'}`}>
+                    <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-on-surface-variant'}`}>
                       {total === 0 ? 'libre' : `${total} ${total === 1 ? 'bloque' : 'bloques'}`}
                     </span>
                   </button>
