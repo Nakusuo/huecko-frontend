@@ -878,7 +878,7 @@ export default function GroupsPage() {
                             </p>
                           </div>
                         )) : (
-                          <p className="px-1 py-3 text-2xs leading-relaxed text-outline">No hay una franja que cumpla el umbral.</p>
+                          <p className="px-1 py-3 text-2xs leading-relaxed text-on-surface-variant">No hay una franja que cumpla el umbral.</p>
                         )}
                       </div>
                     </article>
@@ -906,7 +906,7 @@ export default function GroupsPage() {
                         }`}
                       >
                         <span className="block text-xs font-bold">{day}</span>
-                        <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-outline'}`}>
+                        <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-on-surface-variant'}`}>
                           {libres === 0 ? 'sin hueco' : `${libres} ${libres === 1 ? 'franja' : 'franjas'}`}
                         </span>
                       </button>
@@ -957,7 +957,7 @@ export default function GroupsPage() {
   );
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
+    <div className="bg-surface text-on-surface min-h-dvh flex flex-col">
       <Navbar currentTab="groups" />
 
       {/* Main Content Canvas */}
