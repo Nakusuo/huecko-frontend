@@ -8,7 +8,7 @@ import type {
   GroupAvailability,
   GroupMember,
   GrupoResponse,
-  JoinGroupPayload,
+
   MiembroResponse,
   SuggestedWindow,
 } from '../types/groups.types';
@@ -75,7 +75,7 @@ function toGroup(grupo: GrupoResponse): Group {
     id: grupo.id,
     nombre: grupo.nombre,
     descripcion: grupo.descripcion ?? '',
-    codigoInvitacion: grupo.codigoInvitacion,
+
     creadoPor: grupo.creadoPor,
     umbralDisponibilidad: grupo.umbralDisponibilidad,
     miembros: grupo.miembros.map(toMember),
@@ -138,12 +138,19 @@ export const groupsService = {
     return toGroup(data);
   },
 
-  async joinGroup(payload: JoinGroupPayload): Promise<Group> {
-    if (!isApiEnabled) throw new Error('API no habilitada.');
+  /**
+   * Da de alta a alguien en el grupo, por correo. Solo lo acepta al organizador.
+   *
+   * Sustituye a `joinGroup`, que unia por codigo de invitacion. La entrada ya
+   * no la decide quien tiene la cadena, sino quien organiza el grupo.
+   */
+  async addMember(groupId: string, email: string): Promise<Group> {
+    if (!isApiEnabled) throw new Error("API no habilitada.");
 
-    const { data } = await apiClient.post<GrupoResponse>(endpoints.groups.join, {
-      codigoInvitacion: payload.codigo_invitacion,
-    });
+    const { data } = await apiClient.post<GrupoResponse>(
+      endpoints.groups.miembros(groupId),
+      { email },
+    );
     return toGroup(data);
   },
 
