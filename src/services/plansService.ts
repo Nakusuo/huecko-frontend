@@ -20,12 +20,12 @@ import type { DayOfWeek } from '../types/schedule.types';
 
 const DAY_ORDER: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-function numberToDay(diaSemana: number): DayOfWeek {
+export function numberToDay(diaSemana: number): DayOfWeek {
   if (diaSemana < 1 || diaSemana > 7) return 'Lun';
   return DAY_ORDER[diaSemana - 1];
 }
 
-function normalizeTime(value: string): string {
+export function normalizeTime(value: string): string {
   return value.slice(0, 5);
 }
 
