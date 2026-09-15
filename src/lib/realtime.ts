@@ -1,6 +1,7 @@
 import { Client, type IMessage, type StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { apiBaseUrl, isApiEnabled } from './apiClient';
+import { endpoints } from './endpoints';
 import { useAuthStore } from '../store/authStore';
 import type { RealtimeEvent, RealtimeStatus } from '../types/realtime.types';
 
@@ -16,7 +17,7 @@ import type { RealtimeEvent, RealtimeStatus } from '../types/realtime.types';
  * que hablar y los reintentos llenarían la consola de errores.
  */
 
-const ENDPOINT = `${apiBaseUrl || '/api'}/ws`;
+const ENDPOINT = `${apiBaseUrl || '/api'}${endpoints.realtime.endpoint}`;
 
 /** Espera antes de reintentar. Cinco segundos: el free tier tarda en despertar. */
 const REINTENTO_MS = 5_000;
@@ -34,10 +35,6 @@ const gruposDeseados = new Set<string>();
 
 const escuchas = new Set<Escucha>();
 const escuchasEstado = new Set<EscuchaEstado>();
-
-function destinoDeGrupo(grupoId: string): string {
-  return `/topic/grupos/${grupoId}`;
-}
 
 function cambiarEstado(nuevo: RealtimeStatus) {
   if (estado === nuevo) return;
@@ -60,7 +57,7 @@ function suscribirPendientes() {
   if (!cliente?.connected) return;
   gruposDeseados.forEach((grupoId) => {
     if (suscripciones.has(grupoId)) return;
-    suscripciones.set(grupoId, cliente!.subscribe(destinoDeGrupo(grupoId), repartir));
+    suscripciones.set(grupoId, cliente!.subscribe(endpoints.realtime.topicGrupo(grupoId), repartir));
   });
 }
 
@@ -74,8 +71,7 @@ function suscribirPendientes() {
 export function conectarTiempoReal(): void {
   if (!isApiEnabled) return;
 
-  const token = useAuthStore.getState().token;
-  if (!token) return;
+  if (!useAuthStore.getState().token) return;
 
   if (cliente) {
     // Ya hay cliente: si estaba parado por un logout previo, se reactiva.
@@ -85,11 +81,21 @@ export function conectarTiempoReal(): void {
 
   cambiarEstado('conectando');
 
-  cliente = new Client({
+  const nuevo: Client = new Client({
     // SockJS y no WebSocket a pelo: el backend registra el endpoint con
     // `withSockJS()`, y algunas redes cortan el upgrade a WebSocket (RNF-08).
     webSocketFactory: () => new SockJS(ENDPOINT) as WebSocket,
-    connectHeaders: { Authorization: `Bearer ${token}` },
+    /* El token se lee en cada intento y no una sola vez al crear el cliente:
+       si la sesión se renovó, una reconexión con el token viejo fallaría una
+       y otra vez. Sin token no se reintenta. */
+    beforeConnect: (c) => {
+      const token = useAuthStore.getState().token;
+      if (!token) {
+        void c.deactivate();
+        return;
+      }
+      c.connectHeaders = { Authorization: `Bearer ${token}` };
+    },
     reconnectDelay: REINTENTO_MS,
     // Latido en los dos sentidos: sin él, un proxy que corta la conexión en
     // silencio dejaría al cliente creyendo que sigue conectado.
@@ -100,10 +106,16 @@ export function conectarTiempoReal(): void {
       suscripciones.clear(); // tras reconectar, las viejas ya no sirven
       suscribirPendientes();
     },
-    onWebSocketClose: () => cambiarEstado('conectando'),
+    /* Un cierre solo significa «reconectando» si el cliente sigue vivo. Al
+       cerrar sesión, `deactivate()` también dispara este aviso, y sin la guarda
+       el estado volvía a «conectando» después de haber quedado desconectado. */
+    onWebSocketClose: () => {
+      if (cliente === nuevo && nuevo.active) cambiarEstado('conectando');
+    },
     onStompError: () => cambiarEstado('desconectado'),
   });
 
+  cliente = nuevo;
   cliente.activate();
 }
 

@@ -1,5 +1,6 @@
 import type { AppNotification } from '../store/notificationStore';
 import type { PlanConfirmadoDatos, RealtimeEvent } from '../types/realtime.types';
+import { normalizeTime } from './formatoBackend';
 
 /**
  * De un evento del canal en tiempo real al aviso que ve el usuario.
@@ -118,5 +119,5 @@ export function formatearFechaHora(fecha: string, horaInicio: string, horaFin: s
 
 /** `16:00:00` → `16:00`. El backend serializa LocalTime con segundos si los hay. */
 export function recortarHora(hora: string): string {
-  return hora.slice(0, 5);
+  return normalizeTime(hora);
 }

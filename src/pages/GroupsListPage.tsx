@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import { useGroupsStore } from '../store/groupsStore';
 import { useAuthStore } from '../store/authStore';
 import { CrearGrupoModal } from '../components/CrearGrupoModal';
+import { useNotificationStore } from '../store/notificationStore';
+import { avisarAltasPendientes } from '../lib/avisosAltas';
+import { AvisoError } from '../components/AvisoError';
 
 /**
  * «Mis grupos»: solo la lista.
@@ -22,10 +25,20 @@ export default function GroupsListPage() {
   const navigate = useNavigate();
   const groups = useGroupsStore((s) => s.groups);
   const createGroup = useGroupsStore((s) => s.createGroup);
-  const addMemberByEmail = useGroupsStore((s) => s.addMemberByEmail);
+  const addMembersByEmail = useGroupsStore((s) => s.addMembersByEmail);
+  const fetchGroups = useGroupsStore((s) => s.fetchGroupsFromServer);
+  const syncError = useGroupsStore((s) => s.syncError);
+  const clearSyncError = useGroupsStore((s) => s.clearSyncError);
+  const addNotification = useNotificationStore((s) => s.addNotification);
   const user = useAuthStore((s) => s.user);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  /* Se vuelve a pedir al abrir la lista: si alguien te añadió a un grupo
+     mientras navegabas, aparece sin tener que recargar la página. */
+  useEffect(() => {
+    void fetchGroups();
+  }, [fetchGroups]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface text-on-surface">
@@ -36,6 +49,8 @@ export default function GroupsListPage() {
         tabIndex={-1}
         className="mx-auto w-full max-w-[1200px] flex-grow px-6 pb-24 pt-8 md:px-10 md:pb-12"
       >
+        {syncError && <AvisoError mensaje={syncError} onCerrar={clearSyncError} />}
+
         <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="font-headline text-3xl font-bold text-on-surface md:text-4xl">
@@ -116,12 +131,13 @@ export default function GroupsListPage() {
               user?.email ?? "",
               user?.nombre ?? "",
             );
-            /* Las altas van despues de crear: el grupo tiene que existir para
-               poder meter a nadie en el. Si alguna falla, el grupo ya esta
-               creado y se puede reintentar desde integrantes. */
-            for (const correo of datos.correos) {
-              await addMemberByEmail(nuevo.id, correo);
-            }
+            /* A partir de aquí el grupo ya existe, así que nada puede volver a
+               lanzar: si una alta fallara y el error llegara al modal, este
+               diría «No se pudo crear el grupo» y reintentar crearía otro
+               igual. Las altas pendientes se avisan y se reintentan desde
+               «Editar grupo». */
+            const { sinCuenta, fallidos } = await addMembersByEmail(nuevo.id, datos.correos);
+            avisarAltasPendientes(addNotification, sinCuenta, fallidos, nuevo.id);
             setIsCreateOpen(false);
             // Entrar directo al grupo recién creado: lo siguiente que quiere
             // hacer quien acaba de crearlo es añadir gente.
