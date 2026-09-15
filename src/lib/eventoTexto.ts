@@ -35,6 +35,13 @@ export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
         description: `"${String(d.titulo ?? 'El plan')}" se canceló: nadie votó antes del plazo.`,
       };
 
+    case 'PLAN_REPROPUESTO':
+      return {
+        type: 'proposal',
+        title: 'Nuevas fechas para votar',
+        description: `"${String(d.titulo ?? 'El plan')}" tiene fechas nuevas. Vota antes de que cierre la votación.`,
+      };
+
     case 'RETRASO_REPORTADO':
       // Retirar un aviso no genera notificación: quien llega a tiempo al final
       // no tiene por qué aparecer en la bandeja de nadie.

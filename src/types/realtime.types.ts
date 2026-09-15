@@ -17,7 +17,9 @@ export type RealtimeEventType =
   /** RF-17: baja crítica, se abre votación exprés. */
   | 'VOTACION_EXPRES_ABIERTA'
   /** RF-17 y RF-18: la votación exprés terminó. */
-  | 'VOTACION_EXPRES_CERRADA';
+  | 'VOTACION_EXPRES_CERRADA'
+  /** Tras un REAGENDAR, el plan vuelve a votarse con fechas nuevas. */
+  | 'PLAN_REPROPUESTO';
 
 export interface RealtimeEvent {
   tipo: RealtimeEventType;

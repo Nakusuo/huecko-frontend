@@ -102,6 +102,7 @@ export default function GroupDetailPage() {
     toggleMemberEssential,
     addProposal,
     voteProposalWindow,
+    reproponerPlan,
     closeVotingManually,
     reportIncident,
     voteReplanification,
@@ -125,6 +126,7 @@ export default function GroupDetailPage() {
       toggleMemberEssential: s.toggleMemberEssential,
       addProposal: s.addProposal,
       voteProposalWindow: s.voteProposalWindow,
+      reproponerPlan: s.reproponerPlan,
       closeVotingManually: s.closeVotingManually,
       reportIncident: s.reportIncident,
       voteReplanification: s.voteReplanification,
@@ -174,6 +176,9 @@ export default function GroupDetailPage() {
   const [proposalLugar, setProposalLugar] = useState('');
   const [proposalPlazo, setProposalPlazo] = useState('24 horas');
   const [proposalError, setProposalError] = useState('');
+  /* Con un id, el mismo formulario propone fechas nuevas para ese plan en
+     re-coordinación en vez de crear un plan. */
+  const [proposalReplanId, setProposalReplanId] = useState<string | null>(null);
   const [suggestedWindows, setSuggestedWindows] = useState<TimeWindowProposal[]>([]);
 
   // Form window input temporary
@@ -310,9 +315,30 @@ export default function GroupDetailPage() {
 
   // Acciones de propuestas y votaciones.
   const openProposePlanModal = (group: Group) => {
-    setSelectedGroupId(group.id);
+    setProposalReplanId(null);
     setProposalTitle('');
     setProposalLugar('');
+    prepararFormularioDeVentanas(group);
+  };
+
+  /** Tras un REAGENDAR: mismo plan (título y lugar fijos), fechas nuevas. */
+  const openReproponerModal = (proposal: PlanProposal, group: Group) => {
+    setProposalReplanId(proposal.id);
+    setProposalTitle(proposal.titulo);
+    setProposalLugar(proposal.lugar ?? '');
+    prepararFormularioDeVentanas(group);
+  };
+
+  /** Lo mismo que exige el backend: quien propuso el plan o un organizador. */
+  const puedeReproponer = (proposal: PlanProposal, group: Group) => {
+    if (authUser?.id && proposal.creadoPorId === authUser.id) return true;
+    return group.miembros.some(
+      (m) => m.email.toLowerCase() === userEmail.toLowerCase() && m.rol === 'ORGANIZADOR'
+    );
+  };
+
+  const prepararFormularioDeVentanas = (group: Group) => {
+    setSelectedGroupId(group.id);
     setProposalPlazo('24 horas');
     setProposalError('');
 
@@ -400,6 +426,38 @@ export default function GroupDetailPage() {
       fecha: w.fecha ?? fechaParaDia(lunesDeLaSemana, w.dia),
     }));
 
+    const plazoInstante = plazoAInstante(proposalPlazo);
+    const ventanasBackend = ventanasConFecha.map((w) => ({
+      fecha: w.fecha as string,
+      horaInicio: w.horaInicio,
+      horaFin: w.horaFin,
+    }));
+
+    if (proposalReplanId) {
+      try {
+        await reproponerPlan(proposalReplanId, ventanasConFecha, proposalPlazo, {
+          plazoVotacion: plazoInstante,
+          ventanas: ventanasBackend,
+        });
+      } catch (error: unknown) {
+        setProposalError(error instanceof Error ? error.message : 'No se pudieron proponer las fechas');
+        return;
+      }
+
+      // Con backend el aviso llega a todos, incluida quien envía, como
+      // PLAN_REPROPUESTO por tiempo real; añadirlo aquí lo duplicaba.
+      if (!isApiEnabled) {
+        addNotification({
+          title: 'Nuevas fechas propuestas',
+          description: `"${proposalTitle}" vuelve a votarse con ${ventanasConFecha.length} opciones.`,
+          type: 'proposal',
+          groupId: selectedGroup.id,
+        });
+      }
+      setIsProposeModalOpen(false);
+      return;
+    }
+
     try {
       await addProposal(
         {
@@ -414,13 +472,9 @@ export default function GroupDetailPage() {
         {
           titulo: proposalTitle,
           lugar: proposalLugar || undefined,
-          plazoVotacion: plazoAInstante(proposalPlazo),
+          plazoVotacion: plazoInstante,
           votosMultiples: true,
-          ventanas: ventanasConFecha.map((w) => ({
-            fecha: w.fecha as string,
-            horaInicio: w.horaInicio,
-            horaFin: w.horaFin,
-          })),
+          ventanas: ventanasBackend,
         }
       );
     } catch (error: unknown) {
@@ -745,8 +799,10 @@ export default function GroupDetailPage() {
                                 </div>
                               ))}
 
-                              {/* Votación exprés: solo mientras el plan está en re-coordinación. */}
-                              {isInReplan && (
+                              {/* Votación exprés simulada: solo en modo demo. Con backend la
+                                  votación exprés vive en el panel de inicio, y un plan en
+                                  re-coordinación ya la resolvió (ver el bloque de abajo). */}
+                              {isInReplan && !isApiEnabled && (
                               <div className="pt-2 border-t border-warning/30 flex flex-wrap items-center justify-between gap-2 text-xs">
                                 <span className="text-2xs text-on-warning-container font-semibold shrink-0">
                                   ¿Qué hacemos?
@@ -791,6 +847,30 @@ export default function GroupDetailPage() {
                             </div>
                           )}
 
+                          {/* Con backend, EN_RECOORDINACION significa que la votación
+                              exprés decidió reagendar: el plan espera fechas nuevas. */}
+                          {isInReplan && isApiEnabled && (
+                            <div className="mb-3 p-3 rounded-xl bg-warning-container border border-warning/30 text-xs text-on-warning-container space-y-2">
+                              <p>
+                                <strong>El grupo decidió reagendar.</strong> Las fechas anteriores ya no
+                                valen: hay que proponer otras y volver a votar.
+                              </p>
+                              {puedeReproponer(proposal, grp) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openReproponerModal(proposal, grp)}
+                                  className="px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary-hover text-on-secondary text-2xs font-semibold cursor-pointer"
+                                >
+                                  Proponer nuevas fechas
+                                </button>
+                              ) : (
+                                <p className="text-2xs opacity-80">
+                                  Quien propuso el plan o un organizador enviará las nuevas opciones.
+                                </p>
+                              )}
+                            </div>
+                          )}
+
                           {/* Ventanas de tiempo sugeridas */}
                           <div className="space-y-1.5 mb-3">
                             {proposal.ventanasSugeridas.map((ventana) => {
@@ -799,9 +879,10 @@ export default function GroupDetailPage() {
                               return (
                                 <button type="button"
                                   key={ventana.id}
-                                  onClick={() => !isClosed && handleVote(proposal.id, ventana.id)}
+                                  onClick={() => !isClosed && !isInReplan && handleVote(proposal.id, ventana.id)}
                                   aria-pressed={hasVoted}
-                                  disabled={isClosed}
+                                  // En re-coordinación esas fechas ya no se votan.
+                                  disabled={isClosed || isInReplan}
                                   className={`w-full text-left px-3 py-2 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
                                     hasVoted
                                       ? 'bg-inverse-primary/30 border-secondary'
@@ -1117,8 +1198,10 @@ export default function GroupDetailPage() {
           <div className="bg-surface rounded-2xl p-6 w-full max-w-lg elev-3 overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
-                <span aria-hidden="true" className="material-symbols-outlined text-primary">campaign</span>
-                Proponer plan: {selectedGroup.nombre}
+                <span aria-hidden="true" className="material-symbols-outlined text-primary">
+                  {proposalReplanId ? 'event_repeat' : 'campaign'}
+                </span>
+                {proposalReplanId ? `Nuevas fechas: ${proposalTitle}` : `Proponer plan: ${selectedGroup.nombre}`}
               </h2>
               <button aria-label="Cerrar"
                 onClick={() => setIsProposeModalOpen(false)}
@@ -1137,7 +1220,9 @@ export default function GroupDetailPage() {
                   placeholder="Ej. Almuerzo de integración, Estudio de Cálculo..."
                   value={proposalTitle}
                   onChange={(e) => setProposalTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
+                  // Al reproponer se conserva el plan: solo cambian las fechas.
+                  disabled={proposalReplanId !== null}
+                  className="disabled:opacity-60 w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
                 />
               </div>
 
@@ -1148,7 +1233,8 @@ export default function GroupDetailPage() {
                   placeholder="Ej. Biblioteca Central / Discord / Parque..."
                   value={proposalLugar}
                   onChange={(e) => setProposalLugar(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
+                  disabled={proposalReplanId !== null}
+                  className="disabled:opacity-60 w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
                 />
               </div>
 
@@ -1271,7 +1357,7 @@ export default function GroupDetailPage() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
                 >
-                  Enviar Propuesta a Todos
+                  {proposalReplanId ? 'Enviar nuevas fechas' : 'Enviar Propuesta a Todos'}
                 </button>
               </div>
             </form>

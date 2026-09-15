@@ -76,6 +76,36 @@ describe('groupsStore (demo)', () => {
     expect(grupo?.miembros.some((m) => m.email === 'nuevo@huecko.com')).toBe(true);
   });
 
+  it('reproponer vuelve a abrir la votación con las fechas nuevas y sin votos', async () => {
+    useGroupsStore.setState({
+      groupProposals: [
+        {
+          ...PLAN_CONFIRMADO,
+          estado: 'en_recoordinacion',
+          ventanasSugeridas: [
+            { id: 'v-vieja', dia: 'Lun', horaInicio: '10:00', horaFin: '12:00', disponibilidadPorcentaje: 100, votosUsuarios: ['a@huecko.com'] },
+          ],
+          votosReplanificacion: { cancel: [], reschedule: ['a@huecko.com'], keep: [] },
+        },
+      ],
+    });
+
+    await useGroupsStore.getState().reproponerPlan(
+      PLAN_CONFIRMADO.id,
+      [
+        { id: 'n1', dia: 'Mié', horaInicio: '16:00', horaFin: '18:00', disponibilidadPorcentaje: 90, votosUsuarios: ['x'] },
+        { id: 'n2', dia: 'Jue', horaInicio: '16:00', horaFin: '18:00', disponibilidadPorcentaje: 80, votosUsuarios: [] },
+      ],
+      '24 horas',
+    );
+
+    const plan = planEnStore();
+    expect(plan?.estado).toBe('propuesto');
+    expect(plan?.ventanasSugeridas.map((v) => v.id)).toEqual(['n1', 'n2']);
+    expect(plan?.ventanasSugeridas[0].votosUsuarios).toEqual([]);
+    expect(plan?.votosReplanificacion?.reschedule).toEqual([]);
+  });
+
   it('reset vuelve a los datos de ejemplo', () => {
     useGroupsStore.setState({ groups: [], syncError: 'algo' });
     useGroupsStore.getState().reset();
