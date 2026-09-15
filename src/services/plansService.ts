@@ -88,6 +88,7 @@ function toProposal(plan: PlanResponse, miembros: GroupMember[]): PlanProposal {
     titulo: plan.titulo,
     lugar: plan.lugar ?? undefined,
     creadoPor: creador?.nombre ?? plan.creadoPor,
+    creadoPorId: plan.creadoPor,
     // La votación cerrada se marca con el texto que la UI ya sabe pintar; si
     // sigue abierta viaja el instante ISO y lo formatea la página.
     plazoVotacion: plan.votacionAbierta ? plan.plazoVotacion : 'Finalizada',
@@ -104,6 +105,14 @@ export interface CrearPlanPayload {
   titulo: string;
   lugar?: string;
   /** Instante ISO en que se cierra la votación. */
+  plazoVotacion: string;
+  votosMultiples?: boolean;
+  ventanas: Array<{ fecha: string; horaInicio: string; horaFin: string }>;
+}
+
+/** Nuevas fechas para un plan en re-coordinación. El título y el lugar no cambian. */
+export interface ReproponerPayload {
+  /** Instante ISO en que se cierra la nueva votación. */
   plazoVotacion: string;
   votosMultiples?: boolean;
   ventanas: Array<{ fecha: string; horaInicio: string; horaFin: string }>;
@@ -141,6 +150,18 @@ export const plansService = {
     if (!isApiEnabled) throw new Error('API no habilitada.');
 
     const { data } = await apiClient.delete<PlanResponse>(endpoints.plans.vote(planId, windowId));
+    return toProposal(data, miembros);
+  },
+
+  /** Tras un REAGENDAR: el plan vuelve a votarse con estas ventanas. */
+  async repropose(
+    planId: string,
+    payload: ReproponerPayload,
+    miembros: GroupMember[]
+  ): Promise<PlanProposal> {
+    if (!isApiEnabled) throw new Error('API no habilitada.');
+
+    const { data } = await apiClient.post<PlanResponse>(endpoints.plans.repropose(planId), payload);
     return toProposal(data, miembros);
   },
 

@@ -4,7 +4,11 @@ import { ApiError, isApiEnabled } from '../lib/apiClient';
 import { groupsService } from '../services/groupsService';
 import { eventsService } from '../services/eventsService';
 import { useIncidentsStore } from './incidentsStore';
-import { plansService, type CrearPlanPayload } from '../services/plansService';
+import {
+  plansService,
+  type CrearPlanPayload,
+  type ReproponerPayload,
+} from '../services/plansService';
 import type {
   Group,
   GroupAvailability,
@@ -95,6 +99,17 @@ interface GroupsState {
   addProposal: (proposal: Omit<PlanProposal, 'id'>, backendPayload?: CrearPlanPayload) => Promise<void>;
   /** Devuelve `false` si el servidor no guardó el voto (el motivo queda en `syncError`). */
   voteProposalWindow: (proposalId: string, windowId: string, userEmail: string) => Promise<boolean>;
+  /**
+   * Tras un REAGENDAR: el plan vuelve a votarse con ventanas nuevas. Como
+   * `addProposal`, lleva las ventanas en el formato de la UI y, aparte, el
+   * payload del backend. Con backend el error sube para verlo en el formulario.
+   */
+  reproponerPlan: (
+    proposalId: string,
+    ventanas: TimeWindowProposal[],
+    plazoVotacion: string,
+    backendPayload?: ReproponerPayload
+  ) => Promise<void>;
   /** Devuelve el estado en que quedó el plan, o `null` si no se pudo cerrar. */
   closeVotingManually: (proposalId: string) => Promise<PlanProposal['estado'] | null>;
   /**
@@ -566,9 +581,20 @@ export const useGroupsStore = create<GroupsState>()(
             const anteriores = new Map(state.groupProposals.map((p) => [p.id, p]));
             const conAvisos = planes.map((plan) => {
               const anterior = anteriores.get(plan.id);
-              return anterior?.incidencias
-                ? { ...plan, incidencias: anterior.incidencias }
-                : plan;
+              if (!anterior?.incidencias) return plan;
+
+              /* Si el plan vuelve a votación después de haber estado confirmado
+                 o en re-coordinación, es una ronda nueva (se repropusieron
+                 fechas): los avisos de la fecha anterior quedan resueltos. Sin
+                 esto, quien avisó seguía viendo "Ya avisaste" y no podía avisar
+                 de la fecha nueva. */
+              const rondaNueva = plan.estado === 'propuesto' && anterior.estado !== 'propuesto';
+              return {
+                ...plan,
+                incidencias: rondaNueva
+                  ? anterior.incidencias.map((i) => ({ ...i, resuelta: true }))
+                  : anterior.incidencias,
+              };
             });
             return {
               groupProposals: [
@@ -650,6 +676,43 @@ export const useGroupsStore = create<GroupsState>()(
           }),
         }));
         return true;
+      },
+
+      reproponerPlan: async (proposalId, ventanas, plazoVotacion, backendPayload) => {
+        /* Los avisos y los votos de re-coordinación eran de la ronda anterior:
+           con fechas nuevas no dicen nada, así que se descartan. */
+        const nuevaRonda = (p: PlanProposal, cambios: Partial<PlanProposal>): PlanProposal => ({
+          ...p,
+          ...cambios,
+          incidencias: (p.incidencias ?? []).map((i) => ({ ...i, resuelta: true })),
+          votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
+        });
+
+        if (isApiEnabled && backendPayload) {
+          const plan = get().groupProposals.find((p) => p.id === proposalId);
+          const miembros = get().groups.find((g) => g.id === plan?.groupId)?.miembros ?? [];
+          // Sin capturar: si alguna ventana no cumple el umbral, el motivo del
+          // servidor tiene que verse en el formulario.
+          const actualizado = await plansService.repropose(proposalId, backendPayload, miembros);
+          set((state) => ({
+            groupProposals: state.groupProposals.map((p) =>
+              p.id === proposalId ? nuevaRonda(p, actualizado) : p
+            ),
+          }));
+          return;
+        }
+
+        set((state) => ({
+          groupProposals: state.groupProposals.map((p) =>
+            p.id === proposalId
+              ? nuevaRonda(p, {
+                  estado: 'propuesto',
+                  plazoVotacion,
+                  ventanasSugeridas: ventanas.map((v) => ({ ...v, votosUsuarios: [] })),
+                })
+              : p
+          ),
+        }));
       },
 
       closeVotingManually: async (proposalId) => {

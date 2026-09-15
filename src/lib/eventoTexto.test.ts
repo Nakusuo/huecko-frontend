@@ -127,10 +127,11 @@ describe('avisoDeEvento', () => {
     expect(aviso).toBeNull();
   });
 
-  it('los seis tipos conocidos producen aviso, salvo el retraso retirado', () => {
+  it('los siete tipos conocidos producen aviso, salvo el retraso retirado', () => {
     const tipos: RealtimeEventType[] = [
       'PLAN_CONFIRMADO',
       'PLAN_CANCELADO',
+      'PLAN_REPROPUESTO',
       'RETRASO_REPORTADO',
       'AUSENCIA_REPORTADA',
       'VOTACION_EXPRES_ABIERTA',
