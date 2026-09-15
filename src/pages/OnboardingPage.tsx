@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuthStore } from '../store/authStore';
 import { useGroupsStore } from '../store/groupsStore';
+import { useNotificationStore } from '../store/notificationStore';
+import { isApiEnabled } from '../lib/apiClient';
+import { avisarAltasPendientes } from '../lib/avisosAltas';
 
 type OnboardingStep = 1 | 2 | 3 | 4;
 
@@ -10,7 +13,10 @@ export default function OnboardingPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const createGroup = useGroupsStore((s) => s.createGroup);
-  const addMemberByEmail = useGroupsStore((s) => s.addMemberByEmail);
+  const addMembersByEmail = useGroupsStore((s) => s.addMembersByEmail);
+  const addNotification = useNotificationStore((s) => s.addNotification);
+  const [enviando, setEnviando] = useState(false);
+  const [errorGrupo, setErrorGrupo] = useState<string | null>(null);
 
   const [step, setStep] = useState<OnboardingStep>(1);
   const [profileType, setProfileType] = useState<
@@ -50,18 +56,37 @@ export default function OnboardingPage() {
   const [grupoCreadoId, setGrupoCreadoId] = useState<string | null>(null);
 
   const handleStep2Submit = async () => {
-    const userEmail = user?.email || 'alex.rodriguez@huecko.com';
-    const userName = user?.nombre || 'Alex R.';
+    /* Si se vuelve del paso 3 al 2 y se continúa otra vez, el grupo ya existe:
+       crearlo de nuevo dejaba dos grupos iguales. */
+    if (grupoCreadoId) {
+      setStep(3);
+      return;
+    }
+    if (enviando) return;
 
-    const nuevo = await createGroup(
-      groupName || 'Mi Nuevo grupo',
-      groupDescription || 'Coordinación de horarios',
-      groupThreshold,
-      userEmail,
-      userName
-    );
-    setGrupoCreadoId(nuevo.id);
-    setStep(3);
+    // El usuario de ejemplo solo existe en modo demo.
+    const userEmail = user?.email || (isApiEnabled ? '' : 'alex.rodriguez@huecko.com');
+    const userName = user?.nombre || (isApiEnabled ? '' : 'Alex R.');
+
+    setEnviando(true);
+    setErrorGrupo(null);
+    try {
+      const nuevo = await createGroup(
+        groupName || 'Mi Nuevo grupo',
+        groupDescription || 'Coordinación de horarios',
+        groupThreshold,
+        userEmail,
+        userName
+      );
+      setGrupoCreadoId(nuevo.id);
+      setStep(3);
+    } catch (error) {
+      setErrorGrupo(
+        error instanceof Error ? error.message : 'No se pudo crear el grupo. Vuelve a intentarlo.'
+      );
+    } finally {
+      setEnviando(false);
+    }
   };
 
   /**
@@ -72,10 +97,13 @@ export default function OnboardingPage() {
    * el paso en una sucesión de esperas.
    */
   const handleStep3Submit = async () => {
-    if (grupoCreadoId) {
-      for (const correo of correos) {
-        await addMemberByEmail(grupoCreadoId, correo);
-      }
+    if (enviando) return;
+    if (grupoCreadoId && correos.length > 0) {
+      setEnviando(true);
+      // No lanza: los correos sin cuenta o con fallo se avisan y el asistente sigue.
+      const { sinCuenta, fallidos } = await addMembersByEmail(grupoCreadoId, correos);
+      avisarAltasPendientes(addNotification, sinCuenta, fallidos, grupoCreadoId);
+      setEnviando(false);
     }
     setStep(4);
   };
@@ -256,6 +284,10 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
+            {errorGrupo && (
+              <p role="alert" className="text-xs font-semibold text-error">{errorGrupo}</p>
+            )}
+
             <div className="flex justify-between items-center pt-4 border-t border-outline-variant/40">
               <button
                 type="button"
@@ -267,8 +299,9 @@ export default function OnboardingPage() {
 
               <button
                 type="button"
-                onClick={handleStep2Submit}
-                className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-2"
+                onClick={() => void handleStep2Submit()}
+                disabled={enviando}
+                className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <span>Continuar al Paso 3</span>
                 <span aria-hidden="true" className="material-symbols-outlined text-[16px]">arrow_forward</span>
@@ -355,8 +388,9 @@ export default function OnboardingPage() {
 
               <button
                 type="button"
-                onClick={handleStep3Submit}
-                className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-2"
+                onClick={() => void handleStep3Submit()}
+                disabled={enviando}
+                className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <span>Finalizar</span>
                 <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check_circle</span>

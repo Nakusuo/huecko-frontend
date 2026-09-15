@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import { useAuthStore } from '../store/authStore';
-import { dashboardService } from '../services/dashboardService';
 import { useGroupsStore } from '../store/groupsStore';
 import { useScheduleStore, type DayOfWeek } from '../store/scheduleStore';
 import type {
@@ -16,6 +15,8 @@ import { useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
 import { ResumenPuntualidad } from '../components/ResumenPuntualidad';
 import { AccionesRapidas } from '../components/AccionesRapidas';
+import { AvisoError } from '../components/AvisoError';
+import { isApiEnabled } from '../lib/apiClient';
 
 interface TodayScheduleBlock {
   id: string;
@@ -32,7 +33,9 @@ export default function DashboardPage() {
   const proposals = useGroupsStore((s) => s.groupProposals);
   const voteProposalWindow = useGroupsStore((s) => s.voteProposalWindow);
   const scheduleSlots = useScheduleStore((s) => s.slots);
-  const userEmail = user?.email || 'alex.rodriguez@huecko.com';
+  // El usuario de ejemplo solo existe en modo demo: con backend, votar o avisar
+  // en su nombre sería actuar como otra persona.
+  const userEmail = user?.email || (isApiEnabled ? '' : 'alex.rodriguez@huecko.com');
 
   const today = (['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'] as DayOfWeek[])[new Date().getDay()];
   const todayBlocks: TodayScheduleBlock[] = useMemo(
@@ -106,8 +109,12 @@ export default function DashboardPage() {
   const votaciones = useIncidentsStore((s) => s.votaciones);
   const cargarPlanIncidencias = useIncidentsStore((s) => s.cargarPlan);
   const votarExpres = useIncidentsStore((s) => s.votarExpres);
-  const reportarRetrasoEnServidor = useIncidentsStore((s) => s.reportarRetraso);
+  const errorIncidencias = useIncidentsStore((s) => s.error);
+  const limpiarErrorIncidencias = useIncidentsStore((s) => s.limpiarError);
   const withdrawIncident = useGroupsStore((s) => s.withdrawIncident);
+  const syncError = useGroupsStore((s) => s.syncError);
+  const clearSyncError = useGroupsStore((s) => s.clearSyncError);
+  const [enviandoAviso, setEnviandoAviso] = useState(false);
 
   const upcomingEvent = useMemo<UpcomingEventDetail | null>(() => {
     const proposal = proposals.find((item) => item.estado === 'confirmado');
@@ -179,54 +186,69 @@ export default function DashboardPage() {
     return 'Buenas noches';
   };
 
-  const displayName = user?.nombre || 'Alejandro';
+  const displayName = user?.nombre || (isApiEnabled ? '' : 'Alejandro');
 
-  const handleVote = (voteId: string, windowId: string) => {
-    voteProposalWindow(voteId, windowId, userEmail);
-    showToast('Tu voto ha sido registrado correctamente.', 'success');
+  const handleVote = async (voteId: string, windowId: string) => {
+    const guardado = await voteProposalWindow(voteId, windowId, userEmail);
+    // Si el servidor rechazó el voto, el motivo ya se muestra arriba.
+    if (guardado) showToast('Tu voto ha sido registrado correctamente.', 'success');
   };
 
+  /* Un solo camino para avisar, con o sin servidor: `reportIncident` manda el
+     aviso al backend (RF-12 / RF-15), actualiza el panel del evento y el plan
+     local. Antes el retraso se enviaba dos veces, y el imprevisto usaba un
+     servicio simulado que respondía «notificado» sin enviar nada. */
   const handleSendDelay = async () => {
-    if (!upcomingEvent) return;
-
-    /* RF-12 contra el servidor. Se manda el número, no la frase: el backend
-       valida el rango y el resto del grupo lo recibe por WebSocket. */
+    if (!upcomingEvent || enviandoAviso) return;
+    setEnviandoAviso(true);
     try {
-      await reportarRetrasoEnServidor(upcomingEvent.id, customDelayMinutes);
-    } catch {
-      showToast('No se pudo avisar del retraso. Revisa tu conexión.', 'warning');
-      return;
+      await reportIncident(upcomingEvent.id, {
+        userEmail,
+        userName: user?.nombre || 'Tú',
+        tipo: 'tardanza',
+        motivo: `Llegará con ${customDelayMinutes} minutos de retraso.`,
+        minutosTardanza: customDelayMinutes,
+      });
+      setIsDelayModalOpen(false);
+      showToast(
+        `Avisaste que llegarás ${customDelayMinutes} min tarde. El grupo ya lo ve.`,
+        'warning',
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : 'No se pudo avisar del retraso. Vuelve a intentarlo.',
+        'warning',
+      );
+    } finally {
+      setEnviandoAviso(false);
     }
-
-    // El estado local del plan sigue alimentando la vista en modo demo.
-    reportIncident(upcomingEvent.id, {
-      userEmail,
-      userName: user?.nombre || 'Tú',
-      tipo: 'tardanza',
-      motivo: `Llegará con ${customDelayMinutes} minutos de retraso.`,
-      minutosTardanza: customDelayMinutes,
-    });
-
-    setIsDelayModalOpen(false);
-    showToast(
-      `Avisaste que llegarás ${customDelayMinutes} min tarde. El grupo ya lo ve.`,
-      'warning',
-    );
   };
 
   const handleSendIncident = async () => {
-    if (!upcomingEvent) return;
-    const res = await dashboardService.cancelAttendance(upcomingEvent.id, incidentReason, userEmail);
-    
-    reportIncident(upcomingEvent.id, {
-      userEmail,
-      userName: user?.nombre || 'Tú',
-      tipo: 'imprevisto',
-      motivo: incidentReason || 'Imprevisto de última hora',
-    });
-
-    setIsIncidentModalOpen(false);
-    showToast(res.message, 'info');
+    if (!upcomingEvent || enviandoAviso) return;
+    setEnviandoAviso(true);
+    try {
+      const resultado = await reportIncident(upcomingEvent.id, {
+        userEmail,
+        userName: user?.nombre || 'Tú',
+        tipo: 'imprevisto',
+        motivo: incidentReason || 'Imprevisto de última hora',
+      });
+      setIsIncidentModalOpen(false);
+      showToast(
+        resultado.replantea
+          ? 'Tu ausencia es crítica: se abrió una votación para decidir qué hacer.'
+          : 'Tu imprevisto se notificó al grupo. El plan sigue en pie.',
+        'info',
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : 'No se pudo enviar el reporte. Vuelve a intentarlo.',
+        'warning',
+      );
+    } finally {
+      setEnviandoAviso(false);
+    }
   };
 
 
@@ -245,6 +267,11 @@ export default function DashboardPage() {
       )}
 
       <main id="contenido" tabIndex={-1} className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 pt-8">
+        {syncError && <AvisoError mensaje={syncError} onCerrar={clearSyncError} />}
+        {errorIncidencias && (
+          <AvisoError mensaje={errorIncidencias} onCerrar={limpiarErrorIncidencias} />
+        )}
+
         {/* Cabecera de la página */}
         <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-2 border-b border-outline-variant/40">
           <div>
@@ -252,7 +279,14 @@ export default function DashboardPage() {
               {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             <h1 className="text-3xl sm:text-4xl font-headline font-bold text-on-surface mt-1">
-              {getGreeting()}, <span className="text-primary">{displayName}.</span>
+              {getGreeting()}
+              {displayName ? (
+                <>
+                  , <span className="text-primary">{displayName}.</span>
+                </>
+              ) : (
+                '.'
+              )}
             </h1>
             <p className="text-sm md:text-base text-on-surface-variant mt-1">
               Esto es lo que está pasando en tus grupos, horarios y planes el día de hoy.
@@ -626,7 +660,7 @@ export default function DashboardPage() {
                     {vote.suggestedWindows.map((win) => (
                       <button type="button"
                         key={win.id}
-                        onClick={() => handleVote(vote.id, win.id)}
+                        onClick={() => void handleVote(vote.id, win.id)}
                         aria-pressed={win.hasVoted}
                         className={`w-full text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
                           win.hasVoted
@@ -800,17 +834,22 @@ export default function DashboardPage() {
                     <p className="flex-1 text-xs text-on-surface-variant">
                       Ya avisaste: <strong className="text-on-surface">{miAvisoAbierto.motivo}</strong>
                     </p>
-                    <button
-                      onClick={() => {
-                        withdrawIncident(upcomingEvent.id, userEmail);
-                        setIsDetailModalOpen(false);
-                        showToast('Retiraste tu aviso. El plan vuelve a su estado anterior.', 'info');
-                      }}
-                      className="py-3 px-4 rounded-2xl bg-surface-container-lowest hover:bg-surface-container text-on-surface border border-outline-variant text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
-                    >
-                      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">undo</span>
-                      <span>Retirar mi aviso</span>
-                    </button>
+                    {/* Con backend solo una tardanza se puede retirar. */}
+                    {(!isApiEnabled || miAvisoAbierto.tipo === 'tardanza') && (
+                      <button
+                        onClick={async () => {
+                          const retirado = await withdrawIncident(upcomingEvent.id, userEmail);
+                          setIsDetailModalOpen(false);
+                          if (retirado) {
+                            showToast('Retiraste tu aviso. El plan vuelve a su estado anterior.', 'info');
+                          }
+                        }}
+                        className="py-3 px-4 rounded-2xl bg-surface-container-lowest hover:bg-surface-container text-on-surface border border-outline-variant text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
+                      >
+                        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">undo</span>
+                        <span>Retirar mi aviso</span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -896,10 +935,11 @@ export default function DashboardPage() {
               </button>
               <button
                 type="button"
-                onClick={handleSendDelay}
-                className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold cursor-pointer transition-all shadow-xs"
+                onClick={() => void handleSendDelay()}
+                disabled={enviandoAviso}
+                className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold cursor-pointer transition-all shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Confirmar Aviso
+                {enviandoAviso ? 'Enviando…' : 'Confirmar Aviso'}
               </button>
             </div>
           </div>
@@ -950,10 +990,11 @@ export default function DashboardPage() {
               </button>
               <button
                 type="button"
-                onClick={handleSendIncident}
-                className="flex-1 py-2.5 rounded-xl bg-error hover:bg-error text-on-error text-xs font-bold cursor-pointer transition-all shadow-xs"
+                onClick={() => void handleSendIncident()}
+                disabled={enviandoAviso}
+                className="flex-1 py-2.5 rounded-xl bg-error hover:bg-error text-on-error text-xs font-bold cursor-pointer transition-all shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Enviar Reporte
+                {enviandoAviso ? 'Enviando…' : 'Enviar Reporte'}
               </button>
             </div>
           </div>

@@ -8,6 +8,7 @@ import type {
   DayOfWeek,
   TimeSlot,
 } from '../types/schedule.types';
+import { DAY_ORDER, dayToNumber, normalizeTime, numberToDay } from '../lib/formatoBackend';
 
 /**
  * Puente entre la rejilla del frontend (`TimeSlot`) y el módulo de horario del
@@ -15,24 +16,6 @@ import type {
  * el store no sabe nada de `diaSemana` ni de mayúsculas en los enums.
  */
 
-/** El backend numera 1 = lunes … 7 = domingo. */
-const DAY_ORDER: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-
-function dayToNumber(day: DayOfWeek): number {
-  const index = DAY_ORDER.indexOf(day);
-  return index >= 0 ? index + 1 : 1;
-}
-
-function numberToDay(diaSemana: number | null | undefined): DayOfWeek {
-  if (!diaSemana || diaSemana < 1 || diaSemana > 7) return 'Lun';
-  return DAY_ORDER[diaSemana - 1];
-}
-
-/** El backend serializa `LocalTime` como "HH:mm" o "HH:mm:ss"; la rejilla usa "HH:mm". */
-function normalizeTime(value: string | null | undefined): string {
-  if (!value) return '00:00';
-  return value.slice(0, 5);
-}
 
 /** Día de la semana (1-7) de una fecha ISO, para poder ubicar un bloque puntual. */
 function dayFromIsoDate(fecha: string): DayOfWeek {

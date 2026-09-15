@@ -9,6 +9,7 @@ import type {
   VentanaPlanResponse,
 } from '../types/groups.types';
 import type { DayOfWeek } from '../types/schedule.types';
+import { DAY_ORDER, normalizeTime, numberToDay } from '../lib/formatoBackend';
 
 /**
  * Puente entre las propuestas del frontend y el Módulo 3 del backend.
@@ -18,16 +19,8 @@ import type { DayOfWeek } from '../types/schedule.types';
  * backend dice `ventanas` y usa UUID.
  */
 
-const DAY_ORDER: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-
-export function numberToDay(diaSemana: number): DayOfWeek {
-  if (diaSemana < 1 || diaSemana > 7) return 'Lun';
-  return DAY_ORDER[diaSemana - 1];
-}
-
-export function normalizeTime(value: string): string {
-  return value.slice(0, 5);
-}
+// Se reexportan porque las pruebas existentes las importan desde aquí.
+export { normalizeTime, numberToDay };
 
 /** El backend usa MAYÚSCULAS; la UI, minúsculas con guion bajo. */
 const ESTADOS: Record<EstadoPlan, PlanProposal['estado']> = {

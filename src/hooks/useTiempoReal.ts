@@ -47,13 +47,17 @@ export function useTiempoReal(): void {
   }, [isAuthenticated, activado]);
 
   // --- una suscripción por grupo ---
+  /* Depende de los ids y no del array: cada recarga de grupos crea un array
+     nuevo aunque sean los mismos, y eso daba de baja y volvía a suscribir todos
+     los topics. */
+  const idsDeGrupos = groups.map((g) => g.id).join(',');
   useEffect(() => {
-    if (!isApiEnabled || !isAuthenticated || !activado) return;
+    if (!isApiEnabled || !isAuthenticated || !activado || !idsDeGrupos) return;
 
-    const ids = groups.map((g) => g.id);
+    const ids = idsDeGrupos.split(',');
     ids.forEach(escucharGrupo);
     return () => ids.forEach(dejarDeEscucharGrupo);
-  }, [groups, isAuthenticated, activado]);
+  }, [idsDeGrupos, isAuthenticated, activado]);
 
   // --- del evento a la interfaz ---
   useEffect(() => {
@@ -79,8 +83,11 @@ export function useTiempoReal(): void {
           break;
 
         case 'RETRASO_REPORTADO': {
-          const planId = String(d.planId);
-          const usuarioId = String(d.usuarioId);
+          // Sin identificadores el evento no se puede aplicar: se ignora antes
+          // que guardar un retraso con planId "undefined".
+          if (typeof d.planId !== 'string' || typeof d.usuarioId !== 'string') break;
+          const planId = d.planId;
+          const usuarioId = d.usuarioId;
           aplicarRetrasoRemoto(
             planId,
             d.retirado === true
@@ -98,13 +105,14 @@ export function useTiempoReal(): void {
         }
 
         case 'VOTACION_EXPRES_ABIERTA':
+          if (typeof d.planId !== 'string') break;
           // Se pide al servidor en vez de construirla del evento: el recuento y
           // "mi voto" dependen de quién pregunta, y el topic es del grupo entero.
-          void aplicarVotacionAbierta(String(d.planId));
+          void aplicarVotacionAbierta(d.planId);
           break;
 
         case 'VOTACION_EXPRES_CERRADA':
-          aplicarVotacionCerrada(String(d.planId));
+          if (typeof d.planId === 'string') aplicarVotacionCerrada(d.planId);
           void fetchProposals(evento.grupoId);
           break;
 

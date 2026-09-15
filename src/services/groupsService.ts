@@ -1,6 +1,7 @@
 import { apiClient, isApiEnabled } from '../lib/apiClient';
 import { endpoints } from '../lib/endpoints';
 import { colorByIndex } from '../theme/palette';
+import { normalizeTime, numberToDay } from '../lib/formatoBackend';
 import type {
   CreateGroupPayload,
   DisponibilidadResponse,
@@ -8,7 +9,6 @@ import type {
   GroupAvailability,
   GroupMember,
   GrupoResponse,
-
   MiembroResponse,
   SuggestedWindow,
 } from '../types/groups.types';
@@ -22,18 +22,6 @@ import type { DayOfWeek } from '../types/schedule.types';
  * ni de los nombres en español de los DTO de Java.
  */
 
-/** El backend numera 1 = lunes … 7 = domingo. */
-const DAY_ORDER: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-
-function numberToDay(diaSemana: number): DayOfWeek {
-  if (diaSemana < 1 || diaSemana > 7) return 'Lun';
-  return DAY_ORDER[diaSemana - 1];
-}
-
-/** El backend serializa `LocalTime` como "HH:mm" o "HH:mm:ss"; la rejilla usa "HH:mm". */
-function normalizeTime(value: string): string {
-  return value.slice(0, 5);
-}
 
 /**
  * Clave con la que la UI localiza una casilla del heatmap.
