@@ -77,6 +77,7 @@ export function useTiempoReal(): void {
       switch (evento.tipo) {
         case 'PLAN_CONFIRMADO':
         case 'PLAN_CANCELADO':
+        case 'PLAN_REPROPUESTO':
           // El aviso ya dice la fecha, pero la vista del grupo seguiría
           // mostrando la votación abierta hasta recargar las propuestas.
           void fetchProposals(evento.grupoId);

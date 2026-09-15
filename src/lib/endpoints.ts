@@ -56,6 +56,8 @@ export const endpoints = {
     detail: (planId: string) => `/planes/${planId}`,
     vote: (planId: string, ventanaId: string) => `/planes/${planId}/ventanas/${ventanaId}/voto`,
     close: (planId: string) => `/planes/${planId}/cerrar`,
+    /** Tras un REAGENDAR: nuevas fechas para el mismo plan. */
+    repropose: (planId: string) => `/planes/${planId}/reproponer`,
   },
 
   /**

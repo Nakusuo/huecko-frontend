@@ -81,6 +81,8 @@ export interface PlanProposal {
   titulo: string;
   lugar?: string;
   creadoPor: string;
+  /** Id de quien lo propuso. Solo con backend; decide quién puede reproponer fechas. */
+  creadoPorId?: string;
   plazoVotacion: string;
   estado: 'propuesto' | 'confirmado' | 'cancelado' | 'en_recoordinacion';
   ventanasSugeridas: TimeWindowProposal[];

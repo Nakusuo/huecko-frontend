@@ -16,6 +16,7 @@ const { useGroupsStore } = await import('./groupsStore');
 const { useIncidentsStore } = await import('./incidentsStore');
 const { incidentsService } = await import('../services/incidentsService');
 const { groupsService } = await import('../services/groupsService');
+const { plansService } = await import('../services/plansService');
 const { ApiError, isApiEnabled } = await import('../lib/apiClient');
 
 const PLAN: PlanProposal = {
@@ -195,6 +196,58 @@ describe('groupsStore (con backend)', () => {
     await carga;
 
     expect(useGroupsStore.getState().groups.map((g) => g.id)).toEqual(['nuevo']);
+  });
+
+  it('reproponer manda las fechas al servidor y usa el plan que devuelve', async () => {
+    useGroupsStore.setState({ groupProposals: [{ ...PLAN, estado: 'en_recoordinacion' }] });
+    let enviado: unknown = null;
+    plansService.repropose = async (_planId, payload) => {
+      enviado = payload;
+      return { ...PLAN, estado: 'propuesto', plazoVotacion: '2099-01-01T00:00:00Z' };
+    };
+
+    await useGroupsStore.getState().reproponerPlan(PLAN.id, [], '24 horas', {
+      plazoVotacion: '2099-01-01T00:00:00Z',
+      ventanas: [{ fecha: '2099-01-01', horaInicio: '10:00', horaFin: '12:00' }],
+    });
+
+    expect(enviado).not.toBeNull();
+    expect(plan()?.estado).toBe('propuesto');
+  });
+
+  it('al recargar un plan repropuesto, los avisos de la fecha anterior quedan resueltos', async () => {
+    useGroupsStore.setState({
+      groups: [{ id: PLAN.groupId, nombre: 'G', descripcion: '', creadoPor: 'u-1', umbralDisponibilidad: 80, miembros: [] }],
+      groupProposals: [
+        {
+          ...PLAN,
+          estado: 'en_recoordinacion',
+          incidencias: [
+            { id: 'i-1', userEmail: 'sam@huecko.com', userName: 'Sam', tipo: 'falta', motivo: 'x', fechaReporte: 'Ahora' },
+          ],
+        },
+      ],
+    });
+    plansService.getPlans = async () => [{ ...PLAN, estado: 'propuesto' }];
+
+    await useGroupsStore.getState().fetchProposals(PLAN.groupId);
+
+    expect(plan()?.incidencias?.[0].resuelta).toBe(true);
+  });
+
+  it('si el servidor rechaza las fechas nuevas, el error sube y el plan no cambia', async () => {
+    useGroupsStore.setState({ groupProposals: [{ ...PLAN, estado: 'en_recoordinacion' }] });
+    plansService.repropose = async () => {
+      throw new ApiError('La ventana no cumple el umbral', 400);
+    };
+
+    await expect(
+      useGroupsStore.getState().reproponerPlan(PLAN.id, [], '24 horas', {
+        plazoVotacion: '2099-01-01T00:00:00Z',
+        ventanas: [],
+      }),
+    ).rejects.toThrow();
+    expect(plan()?.estado).toBe('en_recoordinacion');
   });
 
   it('las altas distinguen correos sin cuenta de fallos', async () => {
