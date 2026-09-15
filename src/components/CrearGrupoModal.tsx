@@ -67,8 +67,13 @@ export function CrearGrupoModal({ title, onClose, onSubmit }: Props) {
     setError(null);
     try {
       await onSubmit({ nombre: nombre.trim(), descripcion: descripcion.trim(), umbral, correos });
-    } catch {
-      setError('No se pudo crear el grupo. Vuelve a intentarlo.');
+    } catch (err) {
+      // El motivo del servidor (p. ej. un nombre repetido) dice más que un genérico.
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo crear el grupo. Vuelve a intentarlo.'
+      );
       setEnviando(false);
     }
   }

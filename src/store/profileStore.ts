@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { profileService } from '../services/profileService';
 import type { UserProfileData } from '../types/profile.types';
+import { isApiEnabled } from '../lib/apiClient';
 
 export type { UserProfileData };
 
@@ -11,6 +12,11 @@ interface ProfileState {
   syncError: string | null;
   fetchProfile: () => Promise<void>;
   updateProfile: (updated: Partial<UserProfileData>) => Promise<void>;
+  /**
+   * Vuelve al perfil inicial. Con backend se arranca con el nombre y el correo
+   * de la cuenta que entra, para no mostrar los del usuario de demo.
+   */
+  reset: (cuenta?: { nombre?: string; email?: string }) => void;
 }
 
 const INITIAL_PROFILE: UserProfileData = {
@@ -46,6 +52,15 @@ export const useProfileStore = create<ProfileState>()(
           set({ syncError: msg, isLoading: false });
         }
       },
+
+      reset: (cuenta) =>
+        set({
+          profile: isApiEnabled
+            ? { ...INITIAL_PROFILE, nombre: cuenta?.nombre ?? '', email: cuenta?.email ?? '' }
+            : INITIAL_PROFILE,
+          isLoading: false,
+          syncError: null,
+        }),
 
       updateProfile: async (updated) => {
         set((state) => ({

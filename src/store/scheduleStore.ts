@@ -23,6 +23,8 @@ interface ScheduleState {
   /** Trae los bloques del backend. No hace nada en modo demo. */
   hydrate: () => Promise<void>;
   clearError: () => void;
+  /** Vuelve al estado inicial. Se llama al cerrar sesión. */
+  reset: () => void;
 }
 
 /* Horario de ejemplo. Cada categoría lleva un tono distinto a propósito: dos
@@ -118,6 +120,14 @@ export const useScheduleStore = create<ScheduleState>()(
         },
 
         clearError: () => set({ error: null }),
+
+        reset: () =>
+          set({
+            slots: isApiEnabled ? [] : INITIAL_SLOTS,
+            status: 'idle',
+            error: null,
+            lastSyncedAt: null,
+          }),
       };
     },
     {

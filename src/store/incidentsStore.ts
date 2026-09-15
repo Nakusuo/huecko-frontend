@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { incidentsService } from '../services/incidentsService';
-import type { OpcionExpres, Retraso, VotacionExpres } from '../types/incidents.types';
+import type {
+  OpcionExpres,
+  ResultadoReporte,
+  Retraso,
+  VotacionExpres,
+} from '../types/incidents.types';
 
 /**
  * Estado de los Módulos 4 y 5, indexado por plan.
@@ -25,7 +30,8 @@ interface IncidentsState {
   cargarPlan: (planId: string) => Promise<void>;
   reportarRetraso: (planId: string, minutos: number) => Promise<void>;
   retirarRetraso: (planId: string, usuarioId: string) => Promise<void>;
-  reportarImprevisto: (planId: string, motivo: string) => Promise<VotacionExpres | null>;
+  /** Devuelve el veredicto del servidor, o `null` en modo demo. */
+  reportarImprevisto: (planId: string, motivo: string) => Promise<ResultadoReporte | null>;
   votarExpres: (planId: string, opcion: OpcionExpres) => Promise<void>;
 
   /* Entradas desde el canal en tiempo real. No llaman a la API: el evento ya
@@ -34,13 +40,22 @@ interface IncidentsState {
   aplicarRetrasoRemoto: (planId: string, retraso: Retraso | null, usuarioId: string) => void;
   aplicarVotacionAbierta: (planId: string) => Promise<void>;
   aplicarVotacionCerrada: (planId: string) => void;
+
+  limpiarError: () => void;
+
+  /** Vuelve al estado inicial. Se llama al cerrar sesión. */
+  reset: () => void;
 }
 
-export const useIncidentsStore = create<IncidentsState>()((set) => ({
+const ESTADO_INICIAL = {
   retrasos: {},
   votaciones: {},
   cargando: {},
   error: null,
+};
+
+export const useIncidentsStore = create<IncidentsState>()((set) => ({
+  ...ESTADO_INICIAL,
 
   cargarPlan: async (planId) => {
     set((s) => ({ cargando: { ...s.cargando, [planId]: true }, error: null }));
@@ -91,7 +106,7 @@ export const useIncidentsStore = create<IncidentsState>()((set) => ({
     if (resultado.votacion) {
       set((s) => ({ votaciones: { ...s.votaciones, [planId]: resultado.votacion } }));
     }
-    return resultado.votacion;
+    return resultado;
   },
 
   votarExpres: async (planId, opcion) => {
@@ -114,13 +129,23 @@ export const useIncidentsStore = create<IncidentsState>()((set) => ({
     // Aquí sí se pide: el evento avisa de que hay votación, pero el recuento y
     // "mi voto" dependen de quién pregunta y no pueden viajar en un topic
     // compartido por todo el grupo.
-    const votacion = await incidentsService.votacionAbierta(planId);
-    set((s) => ({ votaciones: { ...s.votaciones, [planId]: votacion } }));
+    // Llega desde el canal en tiempo real, donde nadie espera la promesa: el
+    // fallo se guarda aquí en vez de quedar como un rechazo sin manejar.
+    try {
+      const votacion = await incidentsService.votacionAbierta(planId);
+      set((s) => ({ votaciones: { ...s.votaciones, [planId]: votacion } }));
+    } catch {
+      set({ error: 'Se abrió una votación, pero no se pudo cargar. Recarga la página.' });
+    }
   },
 
   aplicarVotacionCerrada: (planId) => {
     set((s) => ({ votaciones: { ...s.votaciones, [planId]: null } }));
   },
+
+  limpiarError: () => set({ error: null }),
+
+  reset: () => set(ESTADO_INICIAL),
 }));
 
 /** Sustituye el retraso de esa persona, o lo añade si es el primero. */

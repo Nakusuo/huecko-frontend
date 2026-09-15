@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
+import { useShallow } from 'zustand/react/shallow';
 import {
   useGroupsStore,
   type Group,
@@ -16,22 +17,21 @@ import { fechaParaDia } from '../services/plansService';
 import { useAuthStore } from '../store/authStore';
 import { colorByIndex } from '../theme/palette';
 import { useModalDismiss } from '../hooks/useModalDismiss';
-
-
-
-export interface GroupOccupiedSlot {
-  id: string;
-  userEmail: string;
-  userName: string;
-  userColor: string;
-  day: DayOfWeek;
-  startTime: string; // e.g. "08:00"
-  endTime: string;   // e.g. "10:00"
-  title: string;
-}
+import { isApiEnabled } from '../lib/apiClient';
+import { AvisoError } from '../components/AvisoError';
+import { avisarAltasPendientes } from '../lib/avisosAltas';
+import { describirAviso } from '../lib/avisosIncidencia';
 
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const timeSlotsHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+
+/** Lo que propone el formulario de tardanza antes de que la persona lo ajuste. */
+const MINUTOS_TARDANZA_POR_DEFECTO = 15;
+/** Más de dos horas ya no es llegar tarde: es no ir. */
+const MINUTOS_TARDANZA_MAXIMO = 120;
+
+/** Usuario de ejemplo del modo demo. Con backend conectado nunca se usa. */
+const USUARIO_DEMO = { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R.' };
 
 /** Lunes de la semana en curso, en ISO. Respaldo si aun no llego el cruce. */
 function lunesDeEstaSemana(): string {
@@ -68,6 +68,17 @@ function plazoAInstante(plazo: string): string {
   return new Date(Date.now() + 24 * 3_600_000).toISOString();
 }
 
+/** Qué opción votó esta persona en la re-coordinación, o `null` si no votó. */
+function votoDeReplanificacion(
+  proposal: PlanProposal,
+  email: string
+): 'cancel' | 'reschedule' | 'keep' | null {
+  const votos = proposal.votosReplanificacion;
+  if (!votos) return null;
+  const opciones = ['cancel', 'reschedule', 'keep'] as const;
+  return opciones.find((opcion) => votos[opcion].includes(email)) ?? null;
+}
+
 /** Muestra el plazo: si es un instante ISO se formatea, y si no se deja tal cual. */
 function formatearPlazo(plazo: string): string {
   const fecha = new Date(plazo);
@@ -86,9 +97,8 @@ export default function GroupDetailPage() {
     availability,
     fetchAvailability,
     fetchProposals,
-    createGroup,
     updateGroupThreshold,
-    addMemberByEmail,
+    addMembersByEmail,
     toggleMemberEssential,
     addProposal,
     voteProposalWindow,
@@ -96,16 +106,43 @@ export default function GroupDetailPage() {
     reportIncident,
     voteReplanification,
     withdrawIncident,
-  } = useGroupsStore();
+    syncError,
+    clearSyncError,
+    groupsLoaded,
+  } = useGroupsStore(
+    /* Con selector y comparación superficial: sin él la página entera se
+       redibujaba con cualquier cambio del store, incluido `isLoading`. */
+    useShallow((s) => ({
+      groups: s.groups,
+      setSelectedGroupId: s.setSelectedGroupId,
+      occupiedSlots: s.occupiedSlots,
+      groupProposals: s.groupProposals,
+      availability: s.availability,
+      fetchAvailability: s.fetchAvailability,
+      fetchProposals: s.fetchProposals,
+      updateGroupThreshold: s.updateGroupThreshold,
+      addMembersByEmail: s.addMembersByEmail,
+      toggleMemberEssential: s.toggleMemberEssential,
+      addProposal: s.addProposal,
+      voteProposalWindow: s.voteProposalWindow,
+      closeVotingManually: s.closeVotingManually,
+      reportIncident: s.reportIncident,
+      voteReplanification: s.voteReplanification,
+      withdrawIncident: s.withdrawIncident,
+      syncError: s.syncError,
+      clearSyncError: s.clearSyncError,
+      groupsLoaded: s.groupsLoaded,
+    }))
+  );
 
-  const { addNotification } = useNotificationStore();
+  const addNotification = useNotificationStore((s) => s.addNotification);
 
   /* Identidad real de quien usa la app. Antes estaba escrita a mano en cinco
      sitios como 'alex.rodriguez@huecko.com', asi que con backend real todo el
      mundo votaba y creaba grupos en nombre del usuario de demo. */
   const authUser = useAuthStore((state) => state.user);
-  const userEmail = authUser?.email ?? 'alex.rodriguez@huecko.com';
-  const userName = authUser?.nombre ?? 'Alex R.';
+  const userEmail = authUser?.email ?? (isApiEnabled ? '' : USUARIO_DEMO.email);
+  const userName = authUser?.nombre ?? (isApiEnabled ? '' : USUARIO_DEMO.nombre);
 
   /* El grupo lo manda la URL, no el estado. Asi un enlace a /groups/:id abre
      siempre el mismo grupo, y volver atras en el navegador funciona. */
@@ -145,7 +182,6 @@ export default function GroupDetailPage() {
   const [tempEnd, setTempEnd] = useState('16:00');
 
   // Group Create / Edit Modals State
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
 
   // Group Form Inputs
@@ -161,7 +197,6 @@ export default function GroupDetailPage() {
   // Join Group Modal State
 
   useModalDismiss(isProposeModalOpen, () => setIsProposeModalOpen(false));
-  useModalDismiss(isCreateModalOpen, () => setIsCreateModalOpen(false));
   useModalDismiss(isEditGroupModalOpen, () => setIsEditGroupModalOpen(false));
   /* Se guarda la referencia (grupo + correo) y no el objeto: así la ficha
      refleja los cambios del store en vez de quedarse con una copia vieja. */
@@ -218,14 +253,6 @@ export default function GroupDetailPage() {
     );
   };
 
-  const handleSaveNewGroup = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nombre) return;
-
-    createGroup(nombre, descripcion, umbral, userEmail, userName);
-    setIsCreateModalOpen(false);
-  };
-
   /**
    * Guarda el umbral y da de alta a quien se haya añadido a la lista.
    *
@@ -238,30 +265,19 @@ export default function GroupDetailPage() {
     e.preventDefault();
     if (!selectedGroup || !nombre) return;
 
-    await updateGroupThreshold(selectedGroup.id, umbral);
+    if (umbral !== selectedGroup.umbralDisponibilidad) {
+      // Si falla, el store deshace el cambio y deja el motivo en `syncError`.
+      await updateGroupThreshold(selectedGroup.id, umbral);
+    }
 
     const yaEstaban = new Set(selectedGroup.miembros.map((m) => m.email.toLowerCase()));
-    const nuevos = membersList.filter((m) => !yaEstaban.has(m.email.toLowerCase()));
-    const sinCuenta: string[] = [];
+    const nuevos = membersList
+      .filter((m) => !yaEstaban.has(m.email.toLowerCase()))
+      .map((m) => m.email);
 
-    for (const miembro of nuevos) {
-      const ok = await addMemberByEmail(selectedGroup.id, miembro.email);
-      if (!ok) sinCuenta.push(miembro.email);
-    }
+    const { sinCuenta, fallidos } = await addMembersByEmail(selectedGroup.id, nuevos);
+    avisarAltasPendientes(addNotification, sinCuenta, fallidos, selectedGroup.id);
 
-    if (sinCuenta.length > 0) {
-      addNotification({
-        title: 'No se pudo añadir a todos',
-        description: `Sin cuenta en Huecko: ${sinCuenta.join(', ')}. Pídeles que se registren y vuelve a intentarlo.`,
-        type: 'system',
-      });
-    }
-
-    setIsEditGroupModalOpen(false);
-  };
-
-  const handleDeleteGroup = (_groupId: string) => {
-    // Delete handling if needed
     setIsEditGroupModalOpen(false);
   };
 
@@ -429,16 +445,29 @@ export default function GroupDetailPage() {
     proposalId: string,
     windowId: string
   ) => {
-    voteProposalWindow(proposalId, windowId, userEmail);
+    void voteProposalWindow(proposalId, windowId, userEmail);
   };
 
-  const handleCloseVotingManually = (proposalId: string) => {
-    closeVotingManually(proposalId);
-    addNotification({
-      title: 'Plan confirmado',
-      description: 'El plan ha sido confirmado y cerrado.',
-      type: 'confirmation',
-    });
+  const handleCloseVotingManually = async (proposalId: string) => {
+    const estado = await closeVotingManually(proposalId);
+    // Si no se pudo cerrar, el error ya se muestra arriba; no se anuncia nada.
+    if (estado === null) return;
+
+    /* El servidor decide cómo queda: sin votos el plan se cancela (RF-10), así
+       que anunciar siempre «confirmado» mentía en ese caso. */
+    addNotification(
+      estado === 'cancelado'
+        ? {
+            title: 'Plan cancelado',
+            description: 'Se cerró la votación sin votos y el plan quedó cancelado.',
+            type: 'system',
+          }
+        : {
+            title: 'Plan confirmado',
+            description: 'Se cerró la votación y el plan quedó confirmado.',
+            type: 'confirmation',
+          }
+    );
   };
 
   // Incident Modal State (Faltas / Tardanzas)
@@ -446,37 +475,69 @@ export default function GroupDetailPage() {
   const [targetProposalForIncident, setTargetProposalForIncident] = useState<PlanProposal | null>(null);
   const [incidentType, setIncidentType] = useState<'falta' | 'tardanza' | 'imprevisto'>('falta');
   const [incidentMotivo, setIncidentMotivo] = useState('');
+  // Texto tal cual se escribe; se valida al enviar. Forzar un número en cada
+  // pulsación convertía el campo vacío en «1» y «30» acababa en «130».
+  const [incidentMinutos, setIncidentMinutos] = useState(String(MINUTOS_TARDANZA_POR_DEFECTO));
+  const [incidentEnviando, setIncidentEnviando] = useState(false);
+  const [incidentError, setIncidentError] = useState<string | null>(null);
 
   const openReportIncidentModal = (proposal: PlanProposal) => {
     setTargetProposalForIncident(proposal);
     setIncidentType('falta');
     setIncidentMotivo('');
+    setIncidentMinutos(String(MINUTOS_TARDANZA_POR_DEFECTO));
+    setIncidentError(null);
     setIsIncidentModalOpen(true);
   };
 
-  const handleReportIncidentSubmit = (e: React.FormEvent) => {
+  const handleReportIncidentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!targetProposalForIncident || !incidentMotivo) return;
+    if (!targetProposalForIncident || !incidentMotivo.trim() || incidentEnviando) return;
 
-    reportIncident(targetProposalForIncident.id, {
-      userEmail,
-      userName,
-      tipo: incidentType,
-      motivo: incidentMotivo,
-    });
+    const esTardanza = incidentType === 'tardanza';
+    const minutos = Math.round(Number(incidentMinutos));
+    if (esTardanza && !(minutos >= 1 && minutos <= MINUTOS_TARDANZA_MAXIMO)) {
+      setIncidentError(`Indica entre 1 y ${MINUTOS_TARDANZA_MAXIMO} minutos.`);
+      return;
+    }
 
-    addNotification({
-      title: 'Imprevisto reportado',
-      description: `Alex R. reportó ${incidentType} en "${targetProposalForIncident.titulo}". El plan pasó a re-coordinación.`,
-      type: 'incident',
-      groupId: targetProposalForIncident.groupId,
-    });
+    setIncidentEnviando(true);
+    setIncidentError(null);
 
-    setIsIncidentModalOpen(false);
+    try {
+      const resultado = await reportIncident(targetProposalForIncident.id, {
+        userEmail,
+        userName,
+        tipo: incidentType,
+        motivo: incidentMotivo.trim(),
+        minutosTardanza: esTardanza ? minutos : undefined,
+      });
+
+      addNotification({
+        title: esTardanza ? 'Retraso avisado' : 'Imprevisto reportado',
+        description: describirAviso(
+          userName,
+          targetProposalForIncident.titulo,
+          esTardanza ? minutos : null,
+          resultado
+        ),
+        type: 'incident',
+        groupId: targetProposalForIncident.groupId,
+      });
+
+      setIsIncidentModalOpen(false);
+    } catch (error) {
+      // El modal sigue abierto: quien reporta ve que no llegó y puede reintentar.
+      setIncidentError(
+        error instanceof Error ? error.message : 'No se pudo enviar el aviso. Vuelve a intentarlo.'
+      );
+    } finally {
+      setIncidentEnviando(false);
+    }
   };
 
   const handleReplanVote = (proposalId: string, action: 'cancel' | 'reschedule' | 'keep') => {
-    voteReplanification(proposalId, action, userEmail);
+    void voteReplanification(proposalId, action, userEmail);
   };
 
   /**
@@ -614,14 +675,7 @@ export default function GroupDetailPage() {
                   .map((proposal) => {
                     const isClosed = proposal.estado === 'confirmado';
                     const isInReplan = proposal.estado === 'en_recoordinacion';
-                    const userEmail = 'alex.rodriguez@huecko.com';
-                    const userReplanVote = proposal.votosReplanificacion?.cancel.includes(userEmail)
-                      ? 'cancel'
-                      : proposal.votosReplanificacion?.reschedule.includes(userEmail)
-                      ? 'reschedule'
-                      : proposal.votosReplanificacion?.keep.includes(userEmail)
-                      ? 'keep'
-                      : null;
+                    const userReplanVote = votoDeReplanificacion(proposal, userEmail);
                     const avisosAbiertos = (proposal.incidencias || []).filter((i) => !i.resuelta);
                     const miAvisoAbierto = avisosAbiertos.find((i) => i.userEmail === userEmail);
                     const planCancelado = proposal.estado === 'cancelado';
@@ -740,7 +794,7 @@ export default function GroupDetailPage() {
                           {/* Ventanas de tiempo sugeridas */}
                           <div className="space-y-1.5 mb-3">
                             {proposal.ventanasSugeridas.map((ventana) => {
-                              const hasVoted = ventana.votosUsuarios.includes('alex.rodriguez@huecko.com');
+                              const hasVoted = ventana.votosUsuarios.includes(userEmail);
 
                               return (
                                 <button type="button"
@@ -790,12 +844,19 @@ export default function GroupDetailPage() {
                                 avisó retira el suyo en vez de mandar otro. */}
                             {!planCancelado &&
                               (miAvisoAbierto ? (
-                                <button
-                                  onClick={() => withdrawIncident(proposal.id, userEmail)}
-                                  className="text-2xs text-on-surface-variant hover:text-on-surface font-semibold cursor-pointer underline"
-                                >
-                                  Retirar mi imprevisto
-                                </button>
+                                /* Con backend solo una tardanza se puede
+                                   retirar: una ausencia ya abrió la votación
+                                   para todo el grupo. */
+                                !isApiEnabled || miAvisoAbierto.tipo === 'tardanza' ? (
+                                  <button
+                                    onClick={() => void withdrawIncident(proposal.id, userEmail)}
+                                    className="text-2xs text-on-surface-variant hover:text-on-surface font-semibold cursor-pointer underline"
+                                  >
+                                    Retirar mi aviso
+                                  </button>
+                                ) : (
+                                  <span className="text-2xs text-on-surface-variant">Ya avisaste</span>
+                                )
                               ) : (
                                 <button
                                   onClick={() => openReportIncidentModal(proposal)}
@@ -807,7 +868,7 @@ export default function GroupDetailPage() {
 
                             {!isClosed && (
                               <button
-                                onClick={() => handleCloseVotingManually(proposal.id)}
+                                onClick={() => void handleCloseVotingManually(proposal.id)}
                                 className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer"
                               >
                                 Confirmar plan
@@ -955,6 +1016,10 @@ export default function GroupDetailPage() {
 
       {/* Main Content Canvas */}
       <main id="contenido" tabIndex={-1} className="flex-grow w-full max-w-[1200px] mx-auto px-6 md:px-10 pt-8 pb-24 md:pb-12">
+        {/* Los fallos del servidor se guardaban en `syncError` pero ninguna
+            pantalla lo mostraba: la acción parecía hecha y no lo estaba. */}
+        {syncError && <AvisoError mensaje={syncError} onCerrar={clearSyncError} />}
+
         {/* Cabecera del grupo. La vuelta a la lista va primero y siempre en el
             mismo sitio: es la única salida, porque desde aquí no se puede
             saltar a otro grupo. */}
@@ -1001,9 +1066,15 @@ export default function GroupDetailPage() {
           </div>
         </header>
 
-        {selectedGroup ? (
-          renderGroupPanel(selectedGroup)
-        ) : (
+        {selectedGroup && renderGroupPanel(selectedGroup)}
+
+        {!selectedGroup && !groupsLoaded && (
+          <p role="status" className="py-16 text-center text-sm text-on-surface-variant">
+            Cargando el grupo…
+          </p>
+        )}
+
+        {!selectedGroup && groupsLoaded && (
           <EmptyState
             icon="search_off"
             title="Ese grupo no existe o ya no perteneces a él"
@@ -1013,32 +1084,6 @@ export default function GroupDetailPage() {
           />
         )}
       </main>
-
-      {/* Modal: Crear grupo */}
-      {isCreateModalOpen && (
-        <GroupFormModal
-          title="Crear grupo"
-          nombre={nombre}
-          setNombre={setNombre}
-          descripcion={descripcion}
-          setDescripcion={setDescripcion}
-          umbral={umbral}
-          setUmbral={setUmbral}
-          membersList={membersList}
-          newMemberEmail={newMemberEmail}
-          setNewMemberEmail={setNewMemberEmail}
-          newMemberName={newMemberName}
-          setNewMemberName={setNewMemberName}
-          isEssentialNewMember={isEssentialNewMember}
-          setIsEssentialNewMember={setIsEssentialNewMember}
-          onAddMember={handleAddMemberToForm}
-          onRemoveMember={handleRemoveMemberFromForm}
-          onToggleEssential={handleToggleEssential}
-          onClose={() => setIsCreateModalOpen(false)}
-          onSubmit={handleSaveNewGroup}
-          submitLabel="Guardar Grupo"
-        />
-      )}
 
       {/* Modal: Editar Grupo / Integrantes */}
       {isEditGroupModalOpen && selectedGroup && (
@@ -1062,7 +1107,6 @@ export default function GroupDetailPage() {
           onToggleEssential={handleToggleEssential}
           onClose={() => setIsEditGroupModalOpen(false)}
           onSubmit={handleUpdateGroup}
-          onDelete={() => handleDeleteGroup(selectedGroup.id)}
           submitLabel="Guardar cambios"
         />
       )}
@@ -1282,12 +1326,43 @@ export default function GroupDetailPage() {
                 />
               </div>
 
+              {incidentType === 'tardanza' && (
+                <div>
+                  <label
+                    htmlFor="incidente-minutos"
+                    className="block text-xs font-medium text-on-surface-variant mb-1.5"
+                  >
+                    ¿Cuántos minutos tarde? *
+                  </label>
+                  <input
+                    id="incidente-minutos"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={MINUTOS_TARDANZA_MAXIMO}
+                    step={5}
+                    required
+                    value={incidentMinutos}
+                    onChange={(e) => setIncidentMinutos(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-warning"
+                  />
+                </div>
+              )}
+
               <div className="p-3 rounded-xl bg-warning-container border border-warning/30 text-on-warning-container text-xs flex items-start gap-2">
                 <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-warning shrink-0">lightbulb</span>
                 <p>
-                  El grupo recibirá una notificación inmediata y podrá votar si re-agendar, cancelar o mantener el evento.
+                  {incidentType === 'tardanza'
+                    ? 'El grupo verá cuánto tardarás. Llegar tarde no cambia el plan.'
+                    : 'El grupo recibirá una notificación inmediata. Si tu ausencia es crítica, se abrirá una votación para mantener, reagendar o cancelar.'}
                 </p>
               </div>
+
+              {incidentError && (
+                <p role="alert" className="text-xs text-error">
+                  {incidentError}
+                </p>
+              )}
 
               <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/60">
                 <button
@@ -1299,9 +1374,10 @@ export default function GroupDetailPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-warning hover:bg-warning text-on-warning text-xs font-semibold shadow-xs cursor-pointer"
+                  disabled={incidentEnviando}
+                  className="px-5 py-2 rounded-xl bg-warning hover:bg-warning text-on-warning text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Notificar al Grupo
+                  {incidentEnviando ? 'Enviando…' : 'Notificar al Grupo'}
                 </button>
               </div>
             </form>
@@ -1411,7 +1487,6 @@ interface GroupFormModalProps {
   onToggleEssential: (email: string) => void;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
-  onDelete?: () => void;
   submitLabel: string;
 }
 
@@ -1435,7 +1510,6 @@ function GroupFormModal({
   onToggleEssential,
   onClose,
   onSubmit,
-  onDelete,
   submitLabel,
 }: GroupFormModalProps) {
   return (
@@ -1581,17 +1655,9 @@ function GroupFormModal({
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-4 border-t border-outline-variant/60">
-            {onDelete ? (
-              <button
-                type="button"
-                onClick={onDelete}
-                className="px-3 py-2 rounded-xl bg-error-container border border-error/40 text-on-error-container hover:bg-error-container text-xs font-semibold cursor-pointer"
-              >
-                Eliminar Grupo
-              </button>
-            ) : <div />}
-
+          {/* Sin botón de eliminar: el backend no permite borrar grupos y el
+              que había solo cerraba el modal. */}
+          <div className="flex justify-end items-center pt-4 border-t border-outline-variant/60">
             <div className="flex gap-3">
               <button
                 type="button"
