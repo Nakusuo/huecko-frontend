@@ -12,7 +12,7 @@ import { useAuthStore } from '../store/authStore';
 import { useGroupsStore } from '../store/groupsStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { useIncidentsStore } from '../store/incidentsStore';
-import { useProfileStore } from '../store/profileStore';
+import { usePreferenciasLocales } from '../store/profileStore';
 import type { RealtimeEvent, RealtimeStatus } from '../types/realtime.types';
 import { avisoDeEvento } from '../lib/eventoTexto';
 
@@ -23,12 +23,13 @@ import { avisoDeEvento } from '../lib/eventoTexto';
  * Va montado una sola vez, en `ProtectedRoute`, y no en cada página: si cada
  * vista abriera su propia conexión, navegar dejaría sockets huérfanos.
  *
- * Respeta el interruptor `notificacionesWebSockets` del perfil. Hasta ahora ese
- * ajuste existía en la interfaz sin estar conectado a nada.
+ * El interruptor «Avisos de retrasos e imprevistos» del perfil solo silencia
+ * esos avisos en la campana. Antes desconectaba el canal entero, y con él
+ * dejaban de actualizarse en vivo los votos y los planes.
  */
 export function useTiempoReal(): void {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const activado = useProfileStore((s) => s.profile.notificacionesWebSockets);
+  const { alertasRetrasos } = usePreferenciasLocales();
   const groups = useGroupsStore((s) => s.groups);
   const fetchProposals = useGroupsStore((s) => s.fetchProposals);
   const addNotification = useNotificationStore((s) => s.addNotification);
@@ -40,13 +41,13 @@ export function useTiempoReal(): void {
 
   // --- conexión ---
   useEffect(() => {
-    if (!isApiEnabled || !isAuthenticated || !activado) {
+    if (!isApiEnabled || !isAuthenticated) {
       desconectarTiempoReal();
       return;
     }
     conectarTiempoReal();
     return () => desconectarTiempoReal();
-  }, [isAuthenticated, activado]);
+  }, [isAuthenticated]);
 
   // --- una suscripción por grupo ---
   /* Depende de los ids y no del array: cada recarga de grupos crea un array
@@ -54,12 +55,12 @@ export function useTiempoReal(): void {
      los topics. */
   const idsDeGrupos = groups.map((g) => g.id).join(',');
   useEffect(() => {
-    if (!isApiEnabled || !isAuthenticated || !activado || !idsDeGrupos) return;
+    if (!isApiEnabled || !isAuthenticated || !idsDeGrupos) return;
 
     const ids = idsDeGrupos.split(',');
     ids.forEach(escucharGrupo);
     return () => ids.forEach(dejarDeEscucharGrupo);
-  }, [idsDeGrupos, isAuthenticated, activado]);
+  }, [idsDeGrupos, isAuthenticated]);
 
   // --- del evento a la interfaz ---
   useEffect(() => {
@@ -74,7 +75,8 @@ export function useTiempoReal(): void {
       /* Lo que hice yo no me lo notifico: ya lo vi al hacerlo. Antes quien
          avisaba de un retraso recibía además «Alguien llega tarde: <yo>…». */
       const aviso = d.usuarioId && d.usuarioId === miUsuarioId ? null : avisoDeEvento(evento);
-      if (aviso) {
+      // Silenciar los retrasos solo quita el aviso: el evento se aplica igual.
+      if (aviso && (alertasRetrasos || aviso.type !== 'incident')) {
         addNotification({ ...aviso, groupId: evento.grupoId });
       }
 
@@ -138,7 +140,7 @@ export function useTiempoReal(): void {
           break;
       }
     });
-  }, [addNotification, fetchProposals, aplicarRetrasoRemoto, aplicarVotacionAbierta, aplicarVotacionCerrada, cargarPlanIncidencias, miUsuarioId]);
+  }, [addNotification, fetchProposals, aplicarRetrasoRemoto, aplicarVotacionAbierta, aplicarVotacionCerrada, cargarPlanIncidencias, miUsuarioId, alertasRetrasos]);
 }
 
 /** Estado de la conexión, para pintarlo donde haga falta. */
