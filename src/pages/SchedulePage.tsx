@@ -7,6 +7,7 @@ import type { DayOfWeek, TimeSlot } from '../store/scheduleStore';
 import { CATEGORY_COLORS, DEFAULT_CATEGORY_COLOR } from '../theme/palette';
 import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useModalDismiss } from '../hooks/useModalDismiss';
+import { HueckoMark } from '../components/Pixel';
 
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
@@ -1234,10 +1235,8 @@ export default function SchedulePage() {
       {/* Footer */}
       <footer className="w-full py-8 mt-auto bg-surface-container border-t border-outline-variant flex flex-col md:flex-row justify-between items-center px-10 gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-secondary to-primary flex items-center justify-center font-black text-white text-sm shadow-sm">
-            H
-          </div>
-          <span className="text-lg font-bold text-on-surface">Huecko</span>
+          <HueckoMark size={28} />
+          <span className="font-headline text-lg text-on-surface">Huecko</span>
         </div>
         <div className="flex gap-6">
           <a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Sincronización activa</a>
