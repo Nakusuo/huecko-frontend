@@ -52,9 +52,8 @@ function toMember(miembro: MiembroResponse, index: number): GroupMember {
     nombre: miembro.nombre,
     isEssential: miembro.esImprescindible,
     color: colorByIndex(index),
-    rol: miembro.rol,
     // El backend no tiene invitaciones pendientes: o eres miembro o no estás.
-    status: 'confirmado',
+    rol: miembro.rol,
   };
 }
 
@@ -142,7 +141,10 @@ export const groupsService = {
     return toGroup(data);
   },
 
-  /** RF-06: cambia el umbral guardado del grupo. Solo lo acepta al organizador. */
+  /**
+   * Cambia nombre, descripción o umbral (RF-06). Solo lo acepta al organizador.
+   * Es un PATCH: lo que llega `undefined` no viaja y el servidor no lo toca.
+   */
   async updateGroup(groupId: string, payload: Partial<CreateGroupPayload>): Promise<Group> {
     if (!isApiEnabled) throw new Error('API no habilitada.');
 

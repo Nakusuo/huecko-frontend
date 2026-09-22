@@ -122,6 +122,7 @@ export default function GroupsListPage() {
       {isCreateOpen && (
         <CrearGrupoModal
           title="Crear grupo"
+          correoPropio={user?.email}
           onClose={() => setIsCreateOpen(false)}
           onSubmit={async (datos) => {
             const nuevo = await createGroup(
@@ -135,9 +136,9 @@ export default function GroupsListPage() {
                lanzar: si una alta fallara y el error llegara al modal, este
                diría «No se pudo crear el grupo» y reintentar crearía otro
                igual. Las altas pendientes se avisan y se reintentan desde
-               «Editar grupo». */
+               «Integrantes y ajustes»: quien crea el grupo lo organiza. */
             const { sinCuenta, fallidos } = await addMembersByEmail(nuevo.id, datos.correos);
-            avisarAltasPendientes(addNotification, sinCuenta, fallidos, nuevo.id);
+            avisarAltasPendientes(addNotification, sinCuenta, fallidos, nuevo.id, true);
             setIsCreateOpen(false);
             // Entrar directo al grupo recién creado: lo siguiente que quiere
             // hacer quien acaba de crearlo es añadir gente.
