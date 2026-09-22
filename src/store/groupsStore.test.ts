@@ -64,10 +64,44 @@ describe('groupsStore (demo)', () => {
     expect(planEnStore()?.estado).toBe('en_recoordinacion');
   });
 
-  it('cerrar la votación devuelve el estado final', async () => {
-    useGroupsStore.setState({ groupProposals: [{ ...PLAN_CONFIRMADO, estado: 'propuesto' }] });
+  it('cerrar la votación confirma la ventana más votada', async () => {
+    useGroupsStore.setState({
+      groupProposals: [
+        {
+          ...PLAN_CONFIRMADO,
+          estado: 'propuesto',
+          ventanasSugeridas: [
+            { id: 'a', dia: 'Sáb', horaInicio: '10:00', horaFin: '12:00', disponibilidadPorcentaje: 100, votosUsuarios: ['x'] },
+            { id: 'b', dia: 'Dom', horaInicio: '10:00', horaFin: '12:00', disponibilidadPorcentaje: 100, votosUsuarios: ['x', 'y'] },
+          ],
+        },
+      ],
+    });
     const estado = await useGroupsStore.getState().closeVotingManually(PLAN_CONFIRMADO.id);
     expect(estado).toBe('confirmado');
+    expect(planEnStore()?.ventanaConfirmadaId).toBe('b');
+  });
+
+  it('cerrar la votación sin votos cancela el plan, como en el backend', async () => {
+    useGroupsStore.setState({ groupProposals: [{ ...PLAN_CONFIRMADO, estado: 'propuesto' }] });
+    const estado = await useGroupsStore.getState().closeVotingManually(PLAN_CONFIRMADO.id);
+    expect(estado).toBe('cancelado');
+  });
+
+  it('un plan cancelado no admite votos', async () => {
+    useGroupsStore.setState({
+      groupProposals: [
+        {
+          ...PLAN_CONFIRMADO,
+          estado: 'cancelado',
+          ventanasSugeridas: [
+            { id: 'a', dia: 'Sáb', horaInicio: '10:00', horaFin: '12:00', disponibilidadPorcentaje: 100, votosUsuarios: [] },
+          ],
+        },
+      ],
+    });
+    await useGroupsStore.getState().voteProposalWindow(PLAN_CONFIRMADO.id, 'a', 'yo@huecko.com');
+    expect(planEnStore()?.ventanasSugeridas[0].votosUsuarios).toEqual([]);
   });
 
   it('addMembersByEmail separa los correos que no se pudieron añadir', async () => {

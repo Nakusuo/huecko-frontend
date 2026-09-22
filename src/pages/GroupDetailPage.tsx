@@ -21,6 +21,13 @@ import { isApiEnabled } from '../lib/apiClient';
 import { AvisoError } from '../components/AvisoError';
 import { avisarAltasPendientes } from '../lib/avisosAltas';
 import { describirAviso } from '../lib/avisosIncidencia';
+import {
+  estadoVisible,
+  formatearPlazo,
+  formatearVentana,
+  problemasDePropuesta,
+  ventanaGanadora,
+} from '../lib/planes';
 
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const timeSlotsHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
@@ -79,14 +86,10 @@ function votoDeReplanificacion(
   return opciones.find((opcion) => votos[opcion].includes(email)) ?? null;
 }
 
-/** Muestra el plazo: si es un instante ISO se formatea, y si no se deja tal cual. */
-function formatearPlazo(plazo: string): string {
-  const fecha = new Date(plazo);
-  if (Number.isNaN(fecha.getTime())) return plazo;
-  return fecha.toLocaleString('es-PE', {
-    weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-  });
-}
+/** Porcentaje desconocido: todavía no llegó el cruce del servidor. */
+const SIN_DATO = -1;
+
+const aHora = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
 export default function GroupDetailPage() {
   const {
@@ -103,6 +106,7 @@ export default function GroupDetailPage() {
     addProposal,
     voteProposalWindow,
     closeVotingManually,
+    rescheduleProposal,
     reportIncident,
     voteReplanification,
     withdrawIncident,
@@ -126,6 +130,7 @@ export default function GroupDetailPage() {
       addProposal: s.addProposal,
       voteProposalWindow: s.voteProposalWindow,
       closeVotingManually: s.closeVotingManually,
+      rescheduleProposal: s.rescheduleProposal,
       reportIncident: s.reportIncident,
       voteReplanification: s.voteReplanification,
       withdrawIncident: s.withdrawIncident,
@@ -143,6 +148,14 @@ export default function GroupDetailPage() {
   const authUser = useAuthStore((state) => state.user);
   const userEmail = authUser?.email ?? (isApiEnabled ? '' : USUARIO_DEMO.email);
   const userName = authUser?.nombre ?? (isApiEnabled ? '' : USUARIO_DEMO.nombre);
+
+  /** Si quien usa la app organiza este grupo. `ADMIN` es el nombre del demo. */
+  const soyOrganizador = (group: Group) => {
+    const yo = group.miembros.find(
+      (m) => (authUser?.id && (m.userId ?? m.id) === authUser.id) || m.email === userEmail
+    );
+    return yo?.rol === 'ORGANIZADOR' || yo?.rol === 'ADMIN';
+  };
 
   /* El grupo lo manda la URL, no el estado. Asi un enlace a /groups/:id abre
      siempre el mismo grupo, y volver atras en el navegador funciona. */
@@ -175,6 +188,8 @@ export default function GroupDetailPage() {
   const [proposalPlazo, setProposalPlazo] = useState('24 horas');
   const [proposalError, setProposalError] = useState('');
   const [suggestedWindows, setSuggestedWindows] = useState<TimeWindowProposal[]>([]);
+  /** Plan en re-coordinación que se está reprogramando, o `null` si es uno nuevo. */
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
 
   // Form window input temporary
   const [tempDay, setTempDay] = useState<DayOfWeek>('Mié');
@@ -281,72 +296,60 @@ export default function GroupDetailPage() {
     setIsEditGroupModalOpen(false);
   };
 
-  // Calcula la disponibilidad real de una ventana de tiempo.
-  const calculateWindowAvailability = (group: Group, day: DayOfWeek, startTimeStr: string, endTimeStr: string) => {
-    const startH = parseInt(startTimeStr.split(':')[0], 10);
-    const endH = parseInt(endTimeStr.split(':')[0], 10);
-    if (isNaN(startH) || isNaN(endH) || endH <= startH) return 100;
+  /**
+   * Disponibilidad de una ventana: la peor de las horas que cubre, que es como
+   * la mide el backend. Sin cruce del servidor no se inventa nada: antes salía
+   * «100% libre» para cualquier opción en modo conectado.
+   */
+  const porcentajeDeVentana = (group: Group, day: DayOfWeek, inicio: string, fin: string): number => {
+    if (fin <= inicio) return SIN_DATO;
+    if (isApiEnabled && !availability[group.id]) return SIN_DATO;
+    const desde = Number(inicio.slice(0, 2));
+    const hasta = Math.ceil(Number(fin.slice(0, 2)) + Number(fin.slice(3, 5)) / 60);
+    let minimo = 100;
+    for (let hora = desde; hora < hasta; hora++) {
+      minimo = Math.min(minimo, getCellAvailability(group, day, hora).freePercentage);
+    }
+    return minimo;
+  };
 
-    const groupMemberEmails = group.miembros.map((m) => m.email);
-    const totalMembers = groupMemberEmails.length;
-    if (totalMembers === 0) return 100;
-
-    const occupiedEmailsInWindow = new Set<string>();
-    occupiedSlots.forEach((slot) => {
-      if (slot.day !== day) return;
-      if (!groupMemberEmails.includes(slot.userEmail)) return;
-
-      const slotStart = parseInt(slot.startTime.split(':')[0], 10);
-      const slotEnd = parseInt(slot.endTime.split(':')[0], 10);
-
-      if (startH < slotEnd && endH > slotStart) {
-        occupiedEmailsInWindow.add(slot.userEmail);
+  /**
+   * Las dos primeras franjas en las que cabe el grupo y que aún no han pasado.
+   * Antes se precargaban siempre Mié 11–13 y Jue 16–18, cayeran donde cayeran.
+   */
+  const ventanasIniciales = (group: Group): TimeWindowProposal[] => {
+    if (isApiEnabled && !availability[group.id]) return [];
+    const lunes = availability[group.id]?.weekFrom ?? lunesDeEstaSemana();
+    const candidatas: TimeWindowProposal[] = [];
+    for (const dia of days) {
+      for (const franja of getRecommendedWindows(group, dia)) {
+        const horaInicio = aHora(franja.start);
+        const horaFin = aHora(Math.min(franja.end, franja.start + 2));
+        candidatas.push({
+          id: `sugerida-${dia}-${horaInicio}`,
+          dia,
+          fecha: fechaParaDia(lunes, dia, horaInicio),
+          horaInicio,
+          horaFin,
+          disponibilidadPorcentaje: franja.minimumAvailability,
+          votosUsuarios: [],
+        });
       }
-    });
-
-    const freeCount = totalMembers - occupiedEmailsInWindow.size;
-    return Math.round((freeCount / totalMembers) * 100);
+    }
+    return candidatas
+      .sort((x, y) => `${x.fecha}${x.horaInicio}`.localeCompare(`${y.fecha}${y.horaInicio}`))
+      .slice(0, 2);
   };
 
   // Acciones de propuestas y votaciones.
-  const openProposePlanModal = (group: Group) => {
+  const openProposePlanModal = (group: Group, reprogramar?: PlanProposal) => {
     setSelectedGroupId(group.id);
-    setProposalTitle('');
-    setProposalLugar('');
+    setReschedulingId(reprogramar?.id ?? null);
+    setProposalTitle(reprogramar?.titulo ?? '');
+    setProposalLugar(reprogramar?.lugar ?? '');
     setProposalPlazo('24 horas');
     setProposalError('');
-
-    const avail1 = calculateWindowAvailability(
-      group,
-      'Mié',
-      '11:00',
-      '13:00'
-    );
-    const avail2 = calculateWindowAvailability(
-      group,
-      'Jue',
-      '16:00',
-      '18:00'
-    );
-
-    setSuggestedWindows([
-      {
-        id: 'ventana-mie-1100',
-        dia: 'Mié',
-        horaInicio: '11:00',
-        horaFin: '13:00',
-        disponibilidadPorcentaje: avail1,
-        votosUsuarios: [],
-      },
-      {
-        id: 'ventana-jue-1600',
-        dia: 'Jue',
-        horaInicio: '16:00',
-        horaFin: '18:00',
-        disponibilidadPorcentaje: avail2,
-        votosUsuarios: [],
-      },
-    ]);
+    setSuggestedWindows(ventanasIniciales(group));
     setIsProposeModalOpen(true);
   };
 
@@ -354,19 +357,14 @@ export default function GroupDetailPage() {
     if (!selectedGroup) return;
     if (suggestedWindows.length >= 5) return;
 
-    const realAvail = calculateWindowAvailability(
-      selectedGroup,
-      tempDay,
-      tempStart,
-      tempEnd
-    );
-
+    const lunes = availability[selectedGroup.id]?.weekFrom ?? lunesDeEstaSemana();
     const newW: TimeWindowProposal = {
-      id: Date.now().toString(),
+      id: `opcion-${tempDay}-${tempStart}-${tempEnd}`,
       dia: tempDay,
+      fecha: fechaParaDia(lunes, tempDay, tempStart),
       horaInicio: tempStart,
       horaFin: tempEnd,
-      disponibilidadPorcentaje: realAvail,
+      disponibilidadPorcentaje: porcentajeDeVentana(selectedGroup, tempDay, tempStart, tempEnd),
       votosUsuarios: [],
     };
     setSuggestedWindows([...suggestedWindows, newW]);
@@ -382,14 +380,9 @@ export default function GroupDetailPage() {
   const handleCreateProposalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setProposalError('');
-    if (
-      !selectedGroup ||
-      !proposalTitle ||
-      suggestedWindows.length < 2 ||
-      suggestedWindows.length > 5
-    ) {
-      return;
-    }
+    // El número de opciones lo explica `problemasDePropuesta`; antes el
+    // formulario simplemente no hacía nada con menos de dos.
+    if (!selectedGroup || !proposalTitle.trim()) return;
 
     /* El backend necesita una fecha concreta por ventana y un instante de
        cierre; la UI razona en dias de la semana y en textos como "24 horas".
@@ -397,32 +390,54 @@ export default function GroupDetailPage() {
     const lunesDeLaSemana = availability[selectedGroup.id]?.weekFrom ?? lunesDeEstaSemana();
     const ventanasConFecha = suggestedWindows.map((w) => ({
       ...w,
-      fecha: w.fecha ?? fechaParaDia(lunesDeLaSemana, w.dia),
+      fecha: w.fecha ?? fechaParaDia(lunesDeLaSemana, w.dia, w.horaInicio),
     }));
+    const ventanasPayload = ventanasConFecha.map((w) => ({
+      fecha: w.fecha,
+      horaInicio: w.horaInicio,
+      horaFin: w.horaFin,
+    }));
+    const plazoISO = plazoAInstante(proposalPlazo);
+
+    /* Lo que el backend rechazaría (opciones pasadas, solapadas, un plazo que
+       cierra después de la primera opción) se dice aquí, antes de enviar. */
+    const problemas = problemasDePropuesta(
+      ventanasConFecha.map((w) => ({ dia: w.dia, fecha: w.fecha, horaInicio: w.horaInicio, horaFin: w.horaFin })),
+      plazoISO
+    );
+    if (problemas.length > 0) {
+      setProposalError(problemas.join(' '));
+      return;
+    }
 
     try {
-      await addProposal(
-        {
-          groupId: selectedGroup.id,
-          titulo: proposalTitle,
-          lugar: proposalLugar,
-          creadoPor: userName,
-          plazoVotacion: proposalPlazo,
-          estado: 'propuesto',
-          ventanasSugeridas: ventanasConFecha,
-        },
-        {
-          titulo: proposalTitle,
-          lugar: proposalLugar || undefined,
-          plazoVotacion: plazoAInstante(proposalPlazo),
-          votosMultiples: true,
-          ventanas: ventanasConFecha.map((w) => ({
-            fecha: w.fecha as string,
-            horaInicio: w.horaInicio,
-            horaFin: w.horaFin,
-          })),
-        }
-      );
+      if (reschedulingId) {
+        await rescheduleProposal(
+          reschedulingId,
+          ventanasConFecha,
+          { plazoVotacion: plazoISO, ventanas: ventanasPayload },
+          proposalPlazo
+        );
+      } else {
+        await addProposal(
+          {
+            groupId: selectedGroup.id,
+            titulo: proposalTitle,
+            lugar: proposalLugar,
+            creadoPor: userName,
+            plazoVotacion: proposalPlazo,
+            estado: 'propuesto',
+            ventanasSugeridas: ventanasConFecha,
+          },
+          {
+            titulo: proposalTitle,
+            lugar: proposalLugar || undefined,
+            plazoVotacion: plazoISO,
+            votosMultiples: true,
+            ventanas: ventanasPayload,
+          }
+        );
+      }
     } catch (error: unknown) {
       /* El backend rechaza las ventanas que no llegan al umbral del grupo
          (RF-08). Ese motivo tiene que verse en el formulario, y el modal
@@ -431,12 +446,21 @@ export default function GroupDetailPage() {
       return;
     }
 
-    addNotification({
-      title: 'Nuevo plan propuesto',
-      description: `Se creó "${proposalTitle}" en ${selectedGroup.nombre}`,
-      type: 'proposal',
-      groupId: selectedGroup.id,
-    });
+    addNotification(
+      reschedulingId
+        ? {
+            title: 'Plan reprogramado',
+            description: `"${proposalTitle}" vuelve a votarse con fechas nuevas`,
+            type: 'proposal',
+            groupId: selectedGroup.id,
+          }
+        : {
+            title: 'Nuevo plan propuesto',
+            description: `Se creó "${proposalTitle}" en ${selectedGroup.nombre}`,
+            type: 'proposal',
+            groupId: selectedGroup.id,
+          }
+    );
 
     setIsProposeModalOpen(false);
   };
@@ -673,8 +697,23 @@ export default function GroupDetailPage() {
                 {groupProposals
                   .filter((p) => p.groupId === grp.id)
                   .map((proposal) => {
+                    const estado = estadoVisible(proposal);
                     const isClosed = proposal.estado === 'confirmado';
                     const isInReplan = proposal.estado === 'en_recoordinacion';
+                    /* Solo se vota con la votación abierta: antes un plan
+                       cancelado o con el plazo vencido seguía admitiendo votos
+                       y ofreciendo «Confirmar plan». */
+                    const abierta = estado === 'abierta';
+                    const ganadora = ventanaGanadora(proposal);
+                    /* El backend solo deja cerrar o reprogramar a quien propuso
+                       el plan o a un organizador; ofrecerlo a todos acababa en
+                       un 403. En demo no hay roles que comprobar. */
+                    const puedeGestionar =
+                      !isApiEnabled || soyOrganizador(grp) || proposal.creadoPorId === authUser?.id;
+                    /* En demo la votación exprés corre mientras el plan está en
+                       re-coordinación; con backend, ese estado significa que ya
+                       se decidió reprogramar y faltan las fechas nuevas. */
+                    const porReprogramar = isInReplan && isApiEnabled;
                     const userReplanVote = votoDeReplanificacion(proposal, userEmail);
                     const avisosAbiertos = (proposal.incidencias || []).filter((i) => !i.resuelta);
                     const miAvisoAbierto = avisosAbiertos.find((i) => i.userEmail === userEmail);
@@ -717,14 +756,20 @@ export default function GroupDetailPage() {
                                   ? 'bg-warning-container text-on-warning-container border border-warning/50'
                                   : isClosed
                                   ? 'bg-inverse-primary/50 text-on-tertiary-container border border-secondary'
-                                  : 'bg-secondary-container text-on-secondary-container border border-secondary/40'
+                                  : estado === 'abierta'
+                                  ? 'bg-secondary-container text-on-secondary-container border border-secondary/40'
+                                  : 'bg-surface-container-high text-on-surface-variant border border-outline-variant'
                               }`}
                             >
-                              {isInReplan
-                                ? 'Imprevisto'
-                                : isClosed
-                                ? 'Confirmado'
-                                : 'Votación abierta'}
+                              {
+                                {
+                                  abierta: 'Votación abierta',
+                                  cerrando: 'Votación cerrada',
+                                  confirmado: 'Confirmado',
+                                  cancelado: 'Cancelado',
+                                  recoordinacion: porReprogramar ? 'Por reprogramar' : 'Imprevisto',
+                                }[estado]
+                              }
                             </span>
                           </div>
 
@@ -746,7 +791,7 @@ export default function GroupDetailPage() {
                               ))}
 
                               {/* Votación exprés: solo mientras el plan está en re-coordinación. */}
-                              {isInReplan && (
+                              {isInReplan && !isApiEnabled && (
                               <div className="pt-2 border-t border-warning/30 flex flex-wrap items-center justify-between gap-2 text-xs">
                                 <span className="text-2xs text-on-warning-container font-semibold shrink-0">
                                   ¿Qué hacemos?
@@ -795,18 +840,21 @@ export default function GroupDetailPage() {
                           <div className="space-y-1.5 mb-3">
                             {proposal.ventanasSugeridas.map((ventana) => {
                               const hasVoted = ventana.votosUsuarios.includes(userEmail);
+                              const esLaElegida = isClosed && ganadora?.id === ventana.id;
 
                               return (
                                 <button type="button"
                                   key={ventana.id}
-                                  onClick={() => !isClosed && handleVote(proposal.id, ventana.id)}
+                                  onClick={() => abierta && handleVote(proposal.id, ventana.id)}
                                   aria-pressed={hasVoted}
-                                  disabled={isClosed}
+                                  disabled={!abierta}
                                   className={`w-full text-left px-3 py-2 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
-                                    hasVoted
+                                    esLaElegida
+                                      ? 'bg-olive/25 border-ink'
+                                      : hasVoted
                                       ? 'bg-inverse-primary/30 border-secondary'
                                       : 'bg-surface-container-lowest border-outline-variant/60 hover:border-secondary'
-                                  } ${isClosed ? 'cursor-default opacity-85' : ''}`}
+                                  } ${!abierta ? 'cursor-default' : ''} ${!abierta && !esLaElegida ? 'opacity-70' : ''}`}
                                 >
                                   <div className="flex items-center gap-2 text-xs">
                                     <span
@@ -819,11 +867,15 @@ export default function GroupDetailPage() {
                                       <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
                                     </span>
                                     <span className="font-semibold text-on-surface">
-                                      {ventana.dia} {ventana.horaInicio}-{ventana.horaFin}
+                                      {formatearVentana(ventana)}
                                     </span>
-                                    <span className="text-2xs text-primary font-bold">
-                                      ({ventana.disponibilidadPorcentaje}% libre)
-                                    </span>
+                                    {esLaElegida ? (
+                                      <span className="rotulo text-2xs bg-ink text-cream px-1.5 py-0.5">Elegida</span>
+                                    ) : (
+                                      <span className="text-2xs text-primary font-bold">
+                                        ({ventana.disponibilidadPorcentaje}% libre)
+                                      </span>
+                                    )}
                                   </div>
 
                                   <span className="text-xs font-bold text-on-surface-variant">
@@ -842,6 +894,15 @@ export default function GroupDetailPage() {
                           <div className="flex gap-2">
                             {/* Un plan cancelado no admite avisos, y quien ya
                                 avisó retira el suyo en vez de mandar otro. */}
+                            {porReprogramar && puedeGestionar && (
+                              <button
+                                onClick={() => openProposePlanModal(grp, proposal)}
+                                className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer"
+                              >
+                                Proponer nuevas fechas
+                              </button>
+                            )}
+
                             {!planCancelado &&
                               (miAvisoAbierto ? (
                                 /* Con backend solo una tardanza se puede
@@ -857,7 +918,9 @@ export default function GroupDetailPage() {
                                 ) : (
                                   <span className="text-2xs text-on-surface-variant">Ya avisaste</span>
                                 )
-                              ) : (
+                              ) : isClosed && (
+                                /* Solo hay algo a lo que faltar o llegar tarde
+                                   cuando el plan está confirmado. */
                                 <button
                                   onClick={() => openReportIncidentModal(proposal)}
                                   className="text-2xs text-on-warning-container hover:text-on-warning-container font-semibold cursor-pointer"
@@ -866,12 +929,14 @@ export default function GroupDetailPage() {
                                 </button>
                               ))}
 
-                            {!isClosed && (
+                            {/* «Cerrar» y no «Confirmar»: si nadie votó, cerrar
+                                cancela el plan. */}
+                            {abierta && puedeGestionar && (
                               <button
                                 onClick={() => void handleCloseVotingManually(proposal.id)}
                                 className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer"
                               >
-                                Confirmar plan
+                                Cerrar votación
                               </button>
                             )}
                           </div>
@@ -1118,7 +1183,7 @@ export default function GroupDetailPage() {
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">campaign</span>
-                Proponer plan: {selectedGroup.nombre}
+                {reschedulingId ? 'Nuevas fechas' : 'Proponer plan'}: {selectedGroup.nombre}
               </h2>
               <button aria-label="Cerrar"
                 onClick={() => setIsProposeModalOpen(false)}
@@ -1229,10 +1294,12 @@ export default function GroupDetailPage() {
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-primary">Opción {idx + 1}:</span>
                         <span className="text-on-surface font-medium">
-                          {w.dia}, {w.horaInicio} a {w.horaFin}
+                          {formatearVentana(w)}
                         </span>
                         <span className="text-2xs text-primary font-bold">
-                          ({w.disponibilidadPorcentaje}% libre)
+                          {w.disponibilidadPorcentaje === SIN_DATO
+                            ? '(sin datos del grupo)'
+                            : `(${w.disponibilidadPorcentaje}% libre)`}
                         </span>
                       </div>
 
@@ -1271,7 +1338,7 @@ export default function GroupDetailPage() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
                 >
-                  Enviar Propuesta a Todos
+                  {reschedulingId ? 'Volver a votar' : 'Enviar Propuesta a Todos'}
                 </button>
               </div>
             </form>
