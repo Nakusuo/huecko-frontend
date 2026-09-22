@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import { useGroupsStore } from '../store/groupsStore';
@@ -32,7 +32,20 @@ export default function GroupsListPage() {
   const addNotification = useNotificationStore((s) => s.addNotification);
   const user = useAuthStore((s) => s.user);
 
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  /* Las acciones rápidas del inicio llegan con la intención en la URL:
+     `?crear=1` abre el formulario y `?proponer=1` pide elegir grupo antes de
+     proponer. Se lee al montar y se quita de la URL, para que recargar o
+     volver atrás no vuelva a abrir el modal. */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [isCreateOpen, setIsCreateOpen] = useState(() => searchParams.get('crear') === '1');
+  const [eligiendoParaProponer] = useState(() => searchParams.get('proponer') === '1');
+  useEffect(() => {
+    if (searchParams.has('crear')) {
+      const resto = new URLSearchParams(searchParams);
+      resto.delete('crear');
+      setSearchParams(resto, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   /* Se vuelve a pedir al abrir la lista: si alguien te añadió a un grupo
      mientras navegabas, aparece sin tener que recargar la página. */
@@ -73,6 +86,18 @@ export default function GroupsListPage() {
           </button>
         </header>
 
+        {eligiendoParaProponer && groups.length > 0 && (
+          <p
+            role="status"
+            className="mb-6 flex items-center gap-2 rounded-xl border border-primary/40 bg-primary-container px-4 py-3 text-sm font-semibold text-on-primary-container"
+          >
+            <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
+              touch_app
+            </span>
+            Elige el grupo en el que quieres proponer el plan.
+          </p>
+        )}
+
         {groups.length === 0 ? (
           <EmptyState
             icon="groups"
@@ -87,7 +112,9 @@ export default function GroupsListPage() {
               <li key={group.id}>
                 <button
                   type="button"
-                  onClick={() => navigate(`/groups/${group.id}`)}
+                  onClick={() =>
+                    navigate(`/groups/${group.id}${eligiendoParaProponer ? '?proponer=1' : ''}`)
+                  }
                   className="elev-1 elev-hover flex h-full w-full cursor-pointer flex-col rounded-2xl bg-surface-container-lowest p-5 text-left"
                 >
                   <div className="flex items-start justify-between gap-3">
