@@ -29,7 +29,8 @@ import {
   validarCorreoNuevo,
 } from '../lib/grupos';
 import { calcularCelda, type BloqueDePersona } from '../lib/disponibilidad';
-import { fechaLocalIso, fechasDeSemana, inicioDeSemana, ocupaFecha } from '../lib/horario';
+import { bloquesDemoDeLaSemana } from '../lib/huecosSemana';
+import { fechaLocalIso, inicioDeSemana } from '../lib/horario';
 import { useScheduleStore } from '../store/scheduleStore';
 import { describirAviso } from '../lib/avisosIncidencia';
 import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
@@ -179,24 +180,13 @@ export default function GroupDetailPage() {
      del mes que viene no quita huecos hoy) y, como en el backend, un
      borrador de OCR sin revisar no bloquea a nadie. */
   const misBloques = useScheduleStore((s) => s.slots);
-  const bloquesDemoPorDia = useMemo(() => {
-    const porDia = new Map<DayOfWeek, BloqueDePersona[]>();
-    if (isApiEnabled) return porDia;
-
-    const yo = userEmail.toLowerCase();
-    for (const s of occupiedSlots) {
-      if (s.userEmail.toLowerCase() === yo) continue;
-      porDia.set(s.day, [...(porDia.get(s.day) ?? []), { persona: s.userEmail, startTime: s.startTime, endTime: s.endTime }]);
-    }
-    for (const { day, fecha } of fechasDeSemana(inicioDeSemana(fechaLocalIso()))) {
-      for (const b of misBloques) {
-        if (b.isOcrImported && !b.confirmado) continue;
-        if (!ocupaFecha(b, fecha)) continue;
-        porDia.set(day, [...(porDia.get(day) ?? []), { persona: userEmail, startTime: b.startTime, endTime: b.endTime }]);
-      }
-    }
-    return porDia;
-  }, [occupiedSlots, misBloques, userEmail]);
+  const bloquesDemoPorDia = useMemo(
+    () =>
+      isApiEnabled
+        ? new Map<DayOfWeek, BloqueDePersona[]>()
+        : bloquesDemoDeLaSemana(occupiedSlots, misBloques, userEmail, inicioDeSemana(fechaLocalIso())),
+    [occupiedSlots, misBloques, userEmail]
+  );
 
   /* El grupo lo manda la URL, no el estado. Asi un enlace a /groups/:id abre
      siempre el mismo grupo, y volver atras en el navegador funciona. */
