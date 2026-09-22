@@ -1,24 +1,56 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import type { OcrExtractedSlot } from '../services/ocrService';
-import { useScheduleStore } from '../store/scheduleStore';
+import { provisionalId, useScheduleStore } from '../store/scheduleStore';
 import type { DayOfWeek, TimeSlot } from '../store/scheduleStore';
 import { CATEGORY_COLORS, DEFAULT_CATEGORY_COLOR } from '../theme/palette';
 import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { HueckoMark } from '../components/Pixel';
+import { AvisoError } from '../components/AvisoError';
+import {
+  buscarSolape,
+  diaDeFecha,
+  esPuntual,
+  etiquetaSemana,
+  fechaLocalIso,
+  fechasDeSemana,
+  inicioDeSemana,
+  mensajeSolape,
+  ocupaFecha,
+  rangoRejilla,
+  separarRepetidos,
+  sumarDias,
+  validarBloque,
+} from '../lib/horario';
 
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+/** Las filas del borrador OCR se importan como bloques semanales. */
+type BloqueRecurrente = Pick<TimeSlot, 'type' | 'frequency'>;
 
 const RECURRENT_TAGS = ['Clase', 'Turno', 'Estudio', 'Gimnasio', 'Personal'];
 const PUNTUAL_TAGS = ['Cita Médica', 'Viaje', 'Examen', 'Trámite', 'Evento Especial'];
 
 export default function SchedulePage() {
-  const { slots, setSlots, deleteSlot } = useScheduleStore();
+  const { slots, setSlots, deleteSlot, pendientes, error: syncError, clearError } = useScheduleStore();
+  /* La rejilla representa una semana concreta y no "una semana cualquiera":
+     sin fechas, un evento puntual se pintaba todas las semanas para siempre. */
+  const hoy = fechaLocalIso();
+  const [semana, setSemana] = useState(() => inicioDeSemana(fechaLocalIso()));
+  const fechasSemana = useMemo(() => fechasDeSemana(semana), [semana]);
+  const esSemanaActual = semana === inicioDeSemana(hoy);
+  const bloquesDe = (fecha: string) =>
+    slots.filter((s) => ocupaFecha(s, fecha)).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const bloquesSemana = useMemo(
+    () => slots.filter((s) => fechasSemana.some(({ fecha }) => ocupaFecha(s, fecha))),
+    [slots, fechasSemana]
+  );
+  const rejilla = rangoRejilla(bloquesSemana);
   /* En el móvil la rejilla semanal obligaba a arrastrar 800 px a lo ancho para
      leer un solo día. La vista pequeña es una lista de un día a la vez. */
-  const [mobileDay, setMobileDay] = useState<DayOfWeek>(() => days[(new Date().getDay() + 6) % 7]);
+  const [mobileDay, setMobileDay] = useState<DayOfWeek>(() => diaDeFecha(fechaLocalIso()));
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
 
@@ -27,12 +59,24 @@ export default function SchedulePage() {
   const [newTitle, setNewTitle] = useState('');
   const [newTag, setNewTag] = useState('Clase');
   const [selectedDays, setSelectedDays] = useState<DayOfWeek[]>(['Lun']);
-  const [specificDate, setSpecificDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [specificDate, setSpecificDate] = useState(() => fechaLocalIso());
   const [specificEndDate, setSpecificEndDate] = useState('');
   const [isDateRange, setIsDateRange] = useState(false);
   const [newStartTime, setNewStartTime] = useState('08:00');
   const [newEndTime, setNewEndTime] = useState('10:00');
   const [selectedColor, setSelectedColor] = useState(DEFAULT_CATEGORY_COLOR);
+  const [isSaving, setIsSaving] = useState(false);
+
+  /* El error se retira en cuanto se toca el formulario: si sigue ahí después de
+     corregir la hora, parece que la corrección no ha servido. Se guarda junto a
+     una huella de los campos y solo se muestra mientras la huella coincide. */
+  const huellaFormulario = JSON.stringify([
+    blockType, newTitle, selectedDays, specificDate, specificEndDate, isDateRange, newStartTime, newEndTime,
+  ]);
+  const [errorGuardado, setErrorGuardado] = useState<{ mensaje: string; huella: string } | null>(null);
+  const formError = errorGuardado?.huella === huellaFormulario ? errorGuardado.mensaje : null;
+  const setFormError = (mensaje: string | null) =>
+    setErrorGuardado(mensaje ? { mensaje, huella: huellaFormulario } : null);
 
   // OCR Modal states
   const [isOcrUploadModalOpen, setIsOcrUploadModalOpen] = useState(false);
@@ -46,6 +90,9 @@ export default function SchedulePage() {
   const [isOcrDraftModalOpen, setIsOcrDraftModalOpen] = useState(false);
 
   const [ocrDraftSlots, setOcrDraftSlots] = useState<OcrExtractedSlot[]>([]);
+  /** Filas que el OCR leyó pero ya estaban en el horario (o repetidas en la foto). */
+  const [ocrDescartadas, setOcrDescartadas] = useState(0);
+  const [ocrDraftError, setOcrDraftError] = useState<string | null>(null);
 
   // Notification Toast
   const [toastMessage, showToast] = useAvisoEfimero<string>();
@@ -70,16 +117,21 @@ export default function SchedulePage() {
   useModalDismiss(isOcrDraftModalOpen, () => setIsOcrDraftModalOpen(false));
 
 
-  const timeLabels = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
+  /* Marcas cada dos horas dentro del rango que piden los bloques de la semana.
+     Con el rango fijo 08–20, un bloque a las 06:00 se pegaba arriba del todo y
+     uno a las 21:00 se salía de la rejilla. */
+  const totalHoras = rejilla.fin - rejilla.inicio;
+  const timeLabels = Array.from({ length: totalHoras / 2 + 1 }, (_, i) => {
+    const hora = rejilla.inicio + i * 2;
+    return `${hora.toString().padStart(2, '0')}:00`;
+  });
 
   const getPositionStyles = (startTime: string, endTime: string) => {
     const startHour = parseInt(startTime.split(':')[0], 10) + parseInt(startTime.split(':')[1], 10) / 60;
     const endHour = parseInt(endTime.split(':')[0], 10) + parseInt(endTime.split(':')[1], 10) / 60;
-    const minHour = 8;
-    const totalHours = 12;
 
-    const topPercent = Math.max(0, ((startHour - minHour) / totalHours) * 100);
-    const heightPercent = Math.min(100 - topPercent, Math.max(8, ((endHour - startHour) / totalHours) * 100));
+    const topPercent = Math.max(0, ((startHour - rejilla.inicio) / totalHoras) * 100);
+    const heightPercent = Math.min(100 - topPercent, Math.max(4, ((endHour - startHour) / totalHoras) * 100));
 
     return {
       top: `${topPercent}%`,
@@ -87,22 +139,8 @@ export default function SchedulePage() {
     };
   };
 
-  // Convert date string to DayOfWeek
-  const getDayFromDate = (dateStr: string): DayOfWeek => {
-    if (!dateStr) return 'Lun';
-    const d = new Date(dateStr + 'T12:00:00');
-    const dayIndex = d.getDay(); // 0 is Sun, 1 is Mon...
-    const map: Record<number, DayOfWeek> = {
-      0: 'Dom',
-      1: 'Lun',
-      2: 'Mar',
-      3: 'Mié',
-      4: 'Jue',
-      5: 'Vie',
-      6: 'Sáb',
-    };
-    return map[dayIndex] || 'Lun';
-  };
+  /** Un bloque con el POST en curso aún no tiene id del servidor: no se puede tocar. */
+  const estaGuardando = (slot: TimeSlot) => pendientes.includes(slot.id);
 
   const openCreateModal = () => {
     setEditingSlotId(null);
@@ -110,28 +148,34 @@ export default function SchedulePage() {
     setNewTitle('');
     setNewTag('Clase');
     setSelectedDays(['Lun']);
-    setSpecificDate(new Date().toISOString().split('T')[0]);
+    setSpecificDate(fechaLocalIso());
     setSpecificEndDate('');
     setIsDateRange(false);
     setNewStartTime('08:00');
     setNewEndTime('10:00');
     setSelectedColor(DEFAULT_CATEGORY_COLOR);
+    setFormError(null);
     setIsModalOpen(true);
   };
 
   const openEditModal = (slot: TimeSlot) => {
+    if (estaGuardando(slot)) {
+      showToast('Este bloque aún se está guardando. Espera un momento para editarlo.');
+      return;
+    }
     setEditingSlotId(slot.id);
     const type = slot.type || 'recurrente';
     setBlockType(type);
     setNewTitle(slot.title);
     setNewTag(slot.tag || (type === 'recurrente' ? 'Clase' : 'Cita Médica'));
     setSelectedDays([slot.day]);
-    setSpecificDate(slot.specificDate || new Date().toISOString().split('T')[0]);
+    setSpecificDate(slot.specificDate || fechaLocalIso());
     setSpecificEndDate(slot.specificEndDate || '');
     setIsDateRange(Boolean(slot.specificEndDate));
     setNewStartTime(slot.startTime);
     setNewEndTime(slot.endTime);
     setSelectedColor(slot.customColor || DEFAULT_CATEGORY_COLOR);
+    setFormError(null);
     setIsModalOpen(true);
   };
 
@@ -149,95 +193,92 @@ export default function SchedulePage() {
     }
   };
 
-  const handleSaveBlock = (e: React.FormEvent) => {
+  const handleSaveBlock = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle) return;
+    if (isSaving) return;
 
-    if (blockType === 'puntual') {
-      const assignedDay = getDayFromDate(specificDate);
-      if (editingSlotId) {
-        setSlots((prev) =>
-          prev.map((slot) =>
-            slot.id === editingSlotId
-              ? {
-                  ...slot,
-                  title: newTitle,
-                  tag: newTag,
-                  day: assignedDay,
-                  startTime: newStartTime,
-                  endTime: newEndTime,
-                  customColor: selectedColor,
-                  type: 'puntual',
-                  frequency: 'unica',
-                  specificDate,
-                  specificEndDate: isDateRange ? specificEndDate : undefined,
-                }
-              : slot
-          )
-        );
-        showToast('Bloque puntual actualizado correctamente.');
-      } else {
-        const newSlot: TimeSlot = {
-          id: `slot-puntual-${Date.now()}`,
-          title: newTitle,
-          tag: newTag,
-          day: assignedDay,
-          startTime: newStartTime,
-          endTime: newEndTime,
-          customColor: selectedColor,
-          type: 'puntual',
-          frequency: 'unica',
-          specificDate,
-          specificEndDate: isDateRange ? specificEndDate : undefined,
-        };
-        setSlots((prev) => [...prev, newSlot]);
-        showToast('Evento puntual registrado en tu horario.');
+    const title = newTitle.trim();
+    const comun = { title, tag: newTag, startTime: newStartTime, endTime: newEndTime, customColor: selectedColor };
+
+    // Uno por día elegido; al editar, o si es puntual, siempre es uno.
+    const candidatos: Omit<TimeSlot, 'id'>[] =
+      blockType === 'puntual'
+        ? [
+            {
+              ...comun,
+              day: diaDeFecha(specificDate),
+              type: 'puntual',
+              frequency: 'unica',
+              specificDate,
+              specificEndDate: isDateRange ? specificEndDate : undefined,
+            },
+          ]
+        : (editingSlotId ? selectedDays.slice(0, 1) : selectedDays).map((day) => ({
+            ...comun,
+            day,
+            type: 'recurrente',
+            frequency: 'semanal',
+            specificDate: undefined,
+            specificEndDate: undefined,
+          }));
+
+    if (candidatos.length === 0) {
+      setFormError('Elige al menos un día de la semana.');
+      return;
+    }
+
+    for (const candidato of candidatos) {
+      const invalido = validarBloque(candidato, { rangoActivo: blockType === 'puntual' && isDateRange });
+      if (invalido) {
+        setFormError(invalido);
+        return;
       }
-    } else {
-      // Bloque recurrente.
-      if (selectedDays.length === 0) return;
-      if (editingSlotId) {
-        setSlots((prev) =>
-          prev.map((slot) =>
-            slot.id === editingSlotId
-              ? {
-                  ...slot,
-                  title: newTitle,
-                  tag: newTag,
-                  day: selectedDays[0],
-                  startTime: newStartTime,
-                  endTime: newEndTime,
-                  customColor: selectedColor,
-                  type: 'recurrente',
-                  frequency: 'semanal',
-                }
-              : slot
-          )
-        );
-        showToast('Bloque recurrente semanal actualizado.');
-      } else {
-        const newSlots: TimeSlot[] = selectedDays.map((day, idx) => ({
-          id: `slot-rec-${Date.now()}-${idx}`,
-          title: newTitle,
-          tag: newTag,
-          day,
-          startTime: newStartTime,
-          endTime: newEndTime,
-          customColor: selectedColor,
-          type: 'recurrente',
-          frequency: 'semanal',
-        }));
-        setSlots((prev) => [...prev, ...newSlots]);
-        showToast(`${newSlots.length} bloque(s) recurrente(s) semanal(es) registrado(s).`);
+      // El bloque que se edita no puede chocar consigo mismo.
+      const conflicto = buscarSolape(candidato, slots, editingSlotId);
+      if (conflicto) {
+        setFormError(mensajeSolape(conflicto));
+        return;
       }
     }
 
+    setIsSaving(true);
+    const guardado = editingSlotId
+      ? await setSlots((prev) =>
+          prev.map((slot) => (slot.id === editingSlotId ? { ...slot, ...candidatos[0] } : slot))
+        )
+      : await setSlots((prev) => [
+          ...prev,
+          ...candidatos.map((candidato) => ({ ...candidato, id: provisionalId('slot-manual') })),
+        ]);
+    setIsSaving(false);
+
+    // Con backend, el éxito solo se anuncia cuando el servidor lo confirma.
+    if (!guardado) {
+      setFormError(useScheduleStore.getState().error ?? 'No se pudo guardar el bloque. Inténtalo de nuevo.');
+      return;
+    }
+
     setIsModalOpen(false);
+    if (blockType === 'puntual') {
+      showToast(editingSlotId ? 'Bloque puntual actualizado correctamente.' : 'Evento puntual registrado en tu horario.');
+    } else {
+      showToast(
+        editingSlotId
+          ? 'Bloque recurrente semanal actualizado.'
+          : `${candidatos.length} bloque(s) recurrente(s) semanal(es) registrado(s).`
+      );
+    }
   };
 
-  const handleDeleteSlot = () => {
-    if (!editingSlotId) return;
-    deleteSlot(editingSlotId);
+  const handleDeleteSlot = async () => {
+    if (!editingSlotId || isSaving) return;
+    setIsSaving(true);
+    const borrado = await deleteSlot(editingSlotId);
+    setIsSaving(false);
+    if (!borrado) {
+      setFormError(useScheduleStore.getState().error ?? 'No se pudo eliminar el bloque. Inténtalo de nuevo.');
+      return;
+    }
     setIsModalOpen(false);
     showToast('Bloque eliminado de tu horario.');
   };
@@ -320,9 +361,31 @@ export default function SchedulePage() {
         return;
       }
 
+      /* Importar dos veces la misma foto duplicaba todo el horario. Las filas
+         que ya están (o que se repiten dentro de la propia foto) se descartan
+         aquí. Las que hay que revisar se dejan: su día u hora son de relleno
+         y el choque no significaría nada hasta que el usuario las corrija. */
+      const { aceptados, descartados } = separarRepetidos(
+        extractedSlots.filter((fila) => !fila.revisar),
+        slots
+      );
+      const descartadosIds = new Set(descartados.map((fila) => fila.id));
+      const filas = extractedSlots.filter((fila) => !descartadosIds.has(fila.id));
+
       setIsOcrProcessing(false);
+      setOcrProgress(0);
+
+      if (aceptados.length === 0 && filas.length === 0) {
+        showToast(
+          `Las ${descartados.length} filas leídas ya estaban en tu horario (o se solapan con él). No hay nada nuevo que importar.`
+        );
+        return;
+      }
+
       setIsOcrUploadModalOpen(false);
-      setOcrDraftSlots(extractedSlots);
+      setOcrDraftSlots(filas);
+      setOcrDescartadas(descartados.length);
+      setOcrDraftError(null);
       setIsOcrDraftModalOpen(true);
       setOcrProgress(0);
       handleClearSelectedFile();
@@ -353,14 +416,54 @@ export default function SchedulePage() {
     setOcrDraftSlots((prev) => prev.filter((d) => d.id !== id));
   };
 
+  /* Qué impide importar cada fila marcada: datos inválidos o un choque con el
+     horario o con otra fila marcada anterior. Se calcula en cada render para
+     que el aviso desaparezca en cuanto el usuario corrige la fila. */
+  const draftErrors = useMemo(() => {
+    const errores: Record<string, string> = {};
+    const anteriores: (OcrExtractedSlot & BloqueRecurrente)[] = [];
+    for (const fila of ocrDraftSlots) {
+      if (!fila.selected) continue;
+      const bloque = { ...fila, type: 'recurrente', frequency: 'semanal' } as OcrExtractedSlot & BloqueRecurrente;
+      const invalido = validarBloque(bloque);
+      const conflicto = invalido ? null : buscarSolape(bloque, [...slots, ...anteriores]);
+      if (invalido) errores[fila.id] = invalido;
+      else if (conflicto) errores[fila.id] = mensajeSolape(conflicto);
+      else anteriores.push(bloque);
+    }
+    return errores;
+  }, [ocrDraftSlots, slots]);
+  const draftErrorCount = Object.keys(draftErrors).length;
+
+  const updateDraftRow = (id: string, cambios: Partial<OcrExtractedSlot>) => {
+    setOcrDraftError(null);
+    setOcrDraftSlots((prev) => prev.map((s) => (s.id === id ? { ...s, ...cambios } : s)));
+  };
+
+  /* Tocar el día o la hora de una fila "a revisar" es justo revisarla: el aviso
+     se retira y la fila pasa a contar como dato del usuario. */
+  const reviewDraftRow = (id: string, cambios: Partial<OcrExtractedSlot>) =>
+    updateDraftRow(id, { ...cambios, revisar: undefined });
+
   // Confirmar importación de borrador OCR.
-  const handleConfirmOcrDraft = () => {
+  const handleConfirmOcrDraft = async () => {
+    if (isSaving) return;
     const selectedDrafts = ocrDraftSlots.filter((d) => d.selected);
     if (selectedDrafts.length === 0) return;
+    if (draftErrorCount > 0) {
+      setOcrDraftError(
+        draftErrorCount === 1
+          ? 'Hay una fila marcada con problemas. Corrígela o desmárcala para continuar.'
+          : `Hay ${draftErrorCount} filas marcadas con problemas. Corrígelas o desmárcalas para continuar.`
+      );
+      return;
+    }
 
-    const importedSlots: TimeSlot[] = selectedDrafts.map((d, idx) => ({
-      id: `ocr-imported-${Date.now()}-${idx}`,
-      title: d.title,
+    /* `confirmado`: el usuario acaba de revisar el borrador. Sin esta marca el
+       backend guarda los bloques de OCR como BORRADOR y los grupos no los ven. */
+    const importedSlots: TimeSlot[] = selectedDrafts.map((d) => ({
+      id: provisionalId('ocr-imported'),
+      title: d.title.trim(),
       tag: d.tag || 'Clase',
       day: d.day,
       startTime: d.startTime,
@@ -369,9 +472,17 @@ export default function SchedulePage() {
       type: 'recurrente',
       frequency: 'semanal',
       isOcrImported: true,
+      confirmado: true,
     }));
 
-    setSlots((prev) => [...prev, ...importedSlots]);
+    setIsSaving(true);
+    const guardado = await setSlots((prev) => [...prev, ...importedSlots]);
+    setIsSaving(false);
+
+    if (!guardado) {
+      setOcrDraftError(useScheduleStore.getState().error ?? 'No se pudo importar el horario. Inténtalo de nuevo.');
+      return;
+    }
     setIsOcrDraftModalOpen(false);
     showToast(`¡Se confirmaron e importaron ${importedSlots.length} asignaturas desde el OCR!`);
   };
@@ -390,6 +501,10 @@ export default function SchedulePage() {
 
       {/* Main Content */}
       <main id="contenido" tabIndex={-1} className="flex-grow w-full max-w-[1200px] mx-auto px-6 md:px-10 pt-8 pb-24 md:pb-12">
+        {/* Lo que el servidor rechazó. Antes el bloque se quedaba pintado con un
+            aviso de éxito y desaparecía al recargar, sin explicación. */}
+        {syncError && <AvisoError mensaje={syncError} onCerrar={clearError} />}
+
         {/* Header Section */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
@@ -442,6 +557,48 @@ export default function SchedulePage() {
           </span>
         </div>
 
+        {/* Semana que se muestra. Los recurrentes salen en todas; los puntuales,
+            solo en los días de su fecha o rango. */}
+        {slots.length > 0 && (
+          <nav aria-label="Semana" className="flex items-center justify-between gap-3 mb-4">
+            <button
+              type="button"
+              onClick={() => setSemana((actual) => sumarDias(actual, -7))}
+              aria-label="Semana anterior"
+              className="w-9 h-9 shrink-0 rounded-xl border border-outline-variant flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container cursor-pointer"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">chevron_left</span>
+            </button>
+            <div className="text-center">
+              <p className="text-sm font-bold text-on-surface" aria-live="polite">
+                Semana del {etiquetaSemana(semana)}
+              </p>
+              {esSemanaActual ? (
+                <p className="text-2xs text-on-surface-variant">Semana actual</p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSemana(inicioDeSemana(hoy));
+                    setMobileDay(diaDeFecha(hoy));
+                  }}
+                  className="text-2xs font-semibold text-primary hover:underline cursor-pointer"
+                >
+                  Volver a esta semana
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setSemana((actual) => sumarDias(actual, 7))}
+              aria-label="Semana siguiente"
+              className="w-9 h-9 shrink-0 rounded-xl border border-outline-variant flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container cursor-pointer"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">chevron_right</span>
+            </button>
+          </nav>
+        )}
+
         {/* Weekly Grid */}
         {slots.length === 0 ? (
           <EmptyState
@@ -456,8 +613,8 @@ export default function SchedulePage() {
           {/* --- Vista móvil: un día a la vez, en lista --- */}
           <div className="md:hidden space-y-4">
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-              {days.map((day) => {
-                const total = slots.filter((s) => s.day === day).length;
+              {fechasSemana.map(({ day, fecha }) => {
+                const total = bloquesDe(fecha).length;
                 const activo = day === mobileDay;
 
                 return (
@@ -472,7 +629,9 @@ export default function SchedulePage() {
                         : 'bg-surface-container border-outline-variant text-on-surface-variant'
                     }`}
                   >
-                    <span className="block text-xs font-bold">{day}</span>
+                    <span className="block text-xs font-bold">
+                      {day} {Number(fecha.slice(8))}
+                    </span>
                     <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-on-surface-variant'}`}>
                       {total === 0 ? 'libre' : `${total} ${total === 1 ? 'bloque' : 'bloques'}`}
                     </span>
@@ -482,9 +641,8 @@ export default function SchedulePage() {
             </div>
 
             {(() => {
-              const bloquesDelDia = slots
-                .filter((s) => s.day === mobileDay)
-                .sort((a, b) => a.startTime.localeCompare(b.startTime));
+              const fechaMovil = fechasSemana.find(({ day }) => day === mobileDay)?.fecha ?? semana;
+              const bloquesDelDia = bloquesDe(fechaMovil);
 
               if (bloquesDelDia.length === 0) {
                 return (
@@ -510,17 +668,19 @@ export default function SchedulePage() {
               return (
                 <ul className="space-y-2.5">
                   {bloquesDelDia.map((slot) => {
-                    const isPuntual = slot.type === 'puntual';
+                    const isPuntual = esPuntual(slot);
+                    const guardando = estaGuardando(slot);
 
                     return (
                       <li key={slot.id}>
                         <button
                           type="button"
                           onClick={() => openEditModal(slot)}
-                          aria-label={`${slot.title}, de ${slot.startTime} a ${slot.endTime}. Editar o eliminar.`}
-                          className={`w-full text-left flex items-stretch gap-3 rounded-2xl border bg-surface-container-lowest p-3.5 cursor-pointer active:scale-[0.99] transition-transform ${
+                          aria-disabled={guardando}
+                          aria-label={`${slot.title}, de ${slot.startTime} a ${slot.endTime}. ${guardando ? 'Guardando…' : 'Editar o eliminar.'}`}
+                          className={`w-full text-left flex items-stretch gap-3 rounded-2xl border bg-surface-container-lowest p-3.5 active:scale-[0.99] transition-transform ${
                             isPuntual ? 'border-dashed border-2 border-outline-variant' : 'border-outline-variant'
-                          }`}
+                          } ${guardando ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
                         >
                           <span
                             aria-hidden="true"
@@ -545,8 +705,13 @@ export default function SchedulePage() {
                               )}
                               {isPuntual && (
                                 <span className="text-2xs px-1.5 rounded bg-surface-container-highest font-bold text-on-surface">
-                                  {slot.specificDate || 'Puntual'}
+                                  {slot.specificEndDate
+                                    ? `${slot.specificDate} al ${slot.specificEndDate}`
+                                    : slot.specificDate || 'Puntual'}
                                 </span>
+                              )}
+                              {guardando && (
+                                <span className="text-2xs font-semibold text-on-surface-variant">Guardando…</span>
                               )}
                               {slot.isOcrImported && (
                                 <span className="text-2xs uppercase tracking-wider font-bold text-primary bg-surface-container px-1.5 rounded">
@@ -570,46 +735,62 @@ export default function SchedulePage() {
               {/* Days Header */}
               <div className="grid grid-cols-8 gap-4 mb-4">
                 <div className="w-16 text-center text-xs font-bold text-on-surface-variant uppercase">Hora</div>
-                {days.map((day) => (
+                {fechasSemana.map(({ day, fecha }) => (
                   <div
                     key={day}
-                    className={`text-center text-sm font-bold text-on-surface-variant pb-3 border-b border-outline-variant ${
-                      day === 'Sáb' || day === 'Dom' ? 'opacity-70' : ''
-                    }`}
+                    className={`text-center text-sm font-bold pb-3 border-b ${
+                      fecha === hoy ? 'text-primary border-primary' : 'text-on-surface-variant border-outline-variant'
+                    } ${day === 'Sáb' || day === 'Dom' ? 'opacity-70' : ''}`}
                   >
                     {day}
+                    <span className="block text-2xs font-medium">{Number(fecha.slice(8))}</span>
                   </div>
                 ))}
               </div>
 
-              {/* Grid Body */}
-              <div className="relative h-[620px]">
+              {/* Grid Body: la altura crece con las horas que cubre (unos 52 px por hora). */}
+              <div className="relative" style={{ height: `${totalHoras * 52}px` }}>
                 {/* Background Lines */}
-                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-50">
-                  {[...Array(6)].map((_, i) => (
-                    <div key={i} className="border-b border-outline-variant/60 h-[100px]"></div>
+                <div className="absolute inset-0 pointer-events-none opacity-50">
+                  {timeLabels.slice(1, -1).map((time, i) => (
+                    <div
+                      key={time}
+                      className="absolute inset-x-0 border-b border-outline-variant/60"
+                      style={{ top: `${((i + 1) / (timeLabels.length - 1)) * 100}%` }}
+                    ></div>
                   ))}
                 </div>
 
                 {/* Grid Layout */}
                 <div className="grid grid-cols-8 gap-4 h-full relative">
                   {/* Time Column */}
-                  <div className="flex flex-col justify-between text-xs text-on-surface-variant font-mono font-medium h-full py-2">
-                    {timeLabels.map((time) => (
-                      <span key={time}>{time}</span>
+                  <div className="relative text-xs text-on-surface-variant font-mono font-medium h-full">
+                    {timeLabels.map((time, i) => (
+                      <span
+                        key={time}
+                        className="absolute left-0"
+                        style={{
+                          top: `${(i / (timeLabels.length - 1)) * 100}%`,
+                          // La primera y la última no se salen de la rejilla.
+                          transform: `translateY(${i === 0 ? '0' : i === timeLabels.length - 1 ? '-100%' : '-50%'})`,
+                        }}
+                      >
+                        {time}
+                      </span>
                     ))}
                   </div>
 
                   {/* Days Columns */}
-                  {days.map((day) => {
-                    const daySlots = slots.filter((s) => s.day === day);
+                  {fechasSemana.map(({ day, fecha }) => {
+                    const daySlots = bloquesDe(fecha);
 
                     return (
                       <div key={day} className="relative h-full">
                         {daySlots.map((slot) => {
                           const style = getPositionStyles(slot.startTime, slot.endTime);
                           const isCustom = Boolean(slot.customColor);
-                          const isPuntual = slot.type === 'puntual';
+                          const isPuntual = esPuntual(slot);
+                          const guardando = estaGuardando(slot);
                           /* El relleno estaba al 15 %: con la paleta apagada los
                              bloques se leían todos grises. Un tinte algo más
                              firme y una barra lateral sólida hacen visible la
@@ -626,11 +807,12 @@ export default function SchedulePage() {
                             <button type="button"
                               key={slot.id}
                               onClick={() => openEditModal(slot)}
-                              aria-label={`${slot.title}, ${slot.day} de ${slot.startTime} a ${slot.endTime}. Editar o eliminar.`}
+                              aria-disabled={guardando}
+                              aria-label={`${slot.title}, ${day} ${Number(fecha.slice(8))} de ${slot.startTime} a ${slot.endTime}. ${guardando ? 'Guardando…' : 'Editar o eliminar.'}`}
                               style={{ ...style, ...customStyle }}
-                              className={`absolute w-full text-left border rounded-xl p-2.5 flex flex-col justify-between overflow-hidden cursor-pointer hover:scale-[1.02] transition-all shadow-xs group ${
+                              className={`absolute w-full text-left border rounded-xl p-2.5 flex flex-col justify-between overflow-hidden transition-all shadow-xs group ${
                                 isPuntual ? 'border-dashed border-2' : ''
-                              }`}
+                              } ${guardando ? 'opacity-60 cursor-wait' : 'cursor-pointer hover:scale-[1.02]'}`}
                             >
                               <div>
                                 <div className="flex items-center justify-between gap-1 mb-0.5">
@@ -659,10 +841,14 @@ export default function SchedulePage() {
                                 <span style={isCustom ? { color: slot.customColor } : undefined}>
                                   {slot.startTime} - {slot.endTime}
                                 </span>
-                                {slot.isOcrImported && (
-                                  <span className="text-2xs uppercase tracking-wider font-bold text-primary bg-surface-container px-1 rounded">
-                                    OCR
-                                  </span>
+                                {guardando ? (
+                                  <span className="text-2xs font-semibold text-on-surface-variant">Guardando…</span>
+                                ) : (
+                                  slot.isOcrImported && (
+                                    <span className="text-2xs uppercase tracking-wider font-bold text-primary bg-surface-container px-1 rounded">
+                                      OCR
+                                    </span>
+                                  )
                                 )}
                               </div>
                             </button>
@@ -696,6 +882,7 @@ export default function SchedulePage() {
                 <button
                   type="button"
                   onClick={handleDeleteSlot}
+                  disabled={isSaving}
                   className="text-xs text-error hover:text-on-error-container bg-error-container border border-error/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all font-semibold"
                 >
                   <span aria-hidden="true" className="material-symbols-outlined text-[16px]">delete</span>
@@ -732,7 +919,7 @@ export default function SchedulePage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveBlock} className="flex flex-col gap-4">
+            <form onSubmit={handleSaveBlock} noValidate className="flex flex-col gap-4">
               {/* Etiqueta / Nombre */}
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1.5">
@@ -827,6 +1014,7 @@ export default function SchedulePage() {
                       <input
                         type="date"
                         required
+                        aria-label={isDateRange ? 'Fecha de inicio' : 'Fecha'}
                         value={specificDate}
                         onChange={(e) => setSpecificDate(e.target.value)}
                         className="w-full px-3 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-xs focus:outline-none focus:border-primary"
@@ -839,6 +1027,9 @@ export default function SchedulePage() {
                         </span>
                         <input
                           type="date"
+                          required
+                          aria-label="Fecha de fin"
+                          min={specificDate || undefined}
                           value={specificEndDate}
                           onChange={(e) => setSpecificEndDate(e.target.value)}
                           className="w-full px-3 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-xs focus:outline-none focus:border-primary"
@@ -847,7 +1038,24 @@ export default function SchedulePage() {
                     )}
                   </div>
                   <p className="text-2xs text-on-surface-variant">
-                    Columna en cuadrícula semanal: <strong className="text-primary">{getDayFromDate(specificDate)}</strong> (Ocurrencia única)
+                    {specificDate ? (
+                      <>
+                        Aparece solo{' '}
+                        {isDateRange && specificEndDate && specificEndDate > specificDate ? (
+                          <>
+                            del <strong className="text-primary">{diaDeFecha(specificDate)} {specificDate}</strong> al{' '}
+                            <strong className="text-primary">{diaDeFecha(specificEndDate)} {specificEndDate}</strong>, en cada día del rango
+                          </>
+                        ) : (
+                          <>
+                            el <strong className="text-primary">{diaDeFecha(specificDate)} {specificDate}</strong> (ocurrencia única)
+                          </>
+                        )}
+                        .
+                      </>
+                    ) : (
+                      'Elige la fecha del evento.'
+                    )}
                   </p>
                 </div>
               )}
@@ -909,6 +1117,16 @@ export default function SchedulePage() {
                 </div>
               </div>
 
+              {formError && (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-xl border border-error/30 bg-error-container px-3 py-2.5 text-xs font-semibold text-on-error-container"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[16px] shrink-0">error</span>
+                  <span>{formError}</span>
+                </p>
+              )}
+
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-outline-variant/60">
                 <button
                   type="button"
@@ -919,9 +1137,10 @@ export default function SchedulePage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary transition-all text-xs font-bold cursor-pointer shadow-md shadow-primary/20"
+                  disabled={isSaving}
+                  className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary transition-all text-xs font-bold cursor-pointer shadow-md shadow-primary/20 disabled:opacity-60 disabled:cursor-wait"
                 >
-                  {editingSlotId ? 'Guardar cambios' : 'Guardar bloque'}
+                  {isSaving ? 'Guardando…' : editingSlotId ? 'Guardar cambios' : 'Guardar bloque'}
                 </button>
               </div>
             </form>
@@ -1095,26 +1314,35 @@ export default function SchedulePage() {
               </button>
             </div>
 
+            {ocrDescartadas > 0 && (
+              <p className="text-xs rounded-xl bg-surface-container border border-outline-variant px-3 py-2 text-on-surface-variant">
+                {ocrDescartadas === 1
+                  ? 'Se descartó 1 fila que ya estaba en tu horario, se solapaba con él o se repetía en la imagen.'
+                  : `Se descartaron ${ocrDescartadas} filas que ya estaban en tu horario, se solapaban con él o se repetían en la imagen.`}
+              </p>
+            )}
+
             {/* List of draft items */}
             <div className="space-y-3 overflow-y-auto pr-1 my-4 flex-1">
-              {ocrDraftSlots.map((item) => (
+              {ocrDraftSlots.map((item) => {
+                const rowError = draftErrors[item.id];
+                return (
                 <div
                   key={item.id}
                   className={`p-4 rounded-2xl border transition-all ${
-                    item.selected
-                      ? 'bg-surface-container-lowest border-primary/60 shadow-xs'
-                      : 'bg-surface-container border-outline-variant/50 opacity-60'
+                    rowError
+                      ? 'bg-surface-container-lowest border-error border-2'
+                      : item.selected
+                        ? 'bg-surface-container-lowest border-primary/60 shadow-xs'
+                        : 'bg-surface-container border-outline-variant/50 opacity-60'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <input
                       type="checkbox"
                       checked={item.selected}
-                      onChange={(e) =>
-                        setOcrDraftSlots((prev) =>
-                          prev.map((s) => (s.id === item.id ? { ...s, selected: e.target.checked } : s))
-                        )
-                      }
+                      onChange={(e) => updateDraftRow(item.id, { selected: e.target.checked })}
+                      aria-label={`Importar ${item.title}`}
                       className="w-4 h-4 text-primary rounded focus:ring-0 cursor-pointer"
                     />
 
@@ -1124,11 +1352,7 @@ export default function SchedulePage() {
                         <input
                           type="text"
                           value={item.title}
-                          onChange={(e) =>
-                            setOcrDraftSlots((prev) =>
-                              prev.map((s) => (s.id === item.id ? { ...s, title: e.target.value } : s))
-                            )
-                          }
+                          onChange={(e) => updateDraftRow(item.id, { title: e.target.value })}
                           className="w-full text-xs font-bold px-2.5 py-1.5 border border-outline-variant rounded-lg bg-surface-container-lowest"
                         />
                       </div>
@@ -1137,11 +1361,7 @@ export default function SchedulePage() {
                         <label className="text-2xs font-bold text-on-surface-variant block mb-0.5">Día</label>
                         <select
                           value={item.day}
-                          onChange={(e) =>
-                            setOcrDraftSlots((prev) =>
-                              prev.map((s) => (s.id === item.id ? { ...s, day: e.target.value as DayOfWeek } : s))
-                            )
-                          }
+                          onChange={(e) => reviewDraftRow(item.id, { day: e.target.value as DayOfWeek })}
                           className="w-full text-xs font-semibold px-2 py-1.5 border border-outline-variant rounded-lg bg-surface-container-lowest"
                         >
                           {days.map((d) => (
@@ -1158,22 +1378,14 @@ export default function SchedulePage() {
                           <input
                             type="time"
                             value={item.startTime}
-                            onChange={(e) =>
-                              setOcrDraftSlots((prev) =>
-                                prev.map((s) => (s.id === item.id ? { ...s, startTime: e.target.value } : s))
-                              )
-                            }
+                            onChange={(e) => reviewDraftRow(item.id, { startTime: e.target.value })}
                             className="w-16 text-2xs px-1 py-1 border border-outline-variant rounded-lg bg-surface-container-lowest"
                           />
                           <span className="text-xs text-on-surface-variant">-</span>
                           <input
                             type="time"
                             value={item.endTime}
-                            onChange={(e) =>
-                              setOcrDraftSlots((prev) =>
-                                prev.map((s) => (s.id === item.id ? { ...s, endTime: e.target.value } : s))
-                              )
-                            }
+                            onChange={(e) => reviewDraftRow(item.id, { endTime: e.target.value })}
                             className="w-16 text-2xs px-1 py-1 border border-outline-variant rounded-lg bg-surface-container-lowest"
                           />
                         </div>
@@ -1189,8 +1401,19 @@ export default function SchedulePage() {
                       <span aria-hidden="true" className="material-symbols-outlined text-[18px]">delete</span>
                     </button>
                   </div>
+                  {(item.revisar || rowError) && (
+                    <div className="mt-2 pl-7 flex flex-wrap items-center gap-2 text-2xs font-semibold">
+                      {item.revisar && (
+                        <span className="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface">
+                          Revisar: {item.revisar}
+                        </span>
+                      )}
+                      {rowError && <span className="text-error">{rowError}</span>}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Agregar fila al borrador */}
@@ -1208,6 +1431,16 @@ export default function SchedulePage() {
             <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-4 border-t border-outline-variant/60">
               <span className="text-xs text-on-surface-variant">
                 {ocrDraftSlots.filter((d) => d.selected).length} de {ocrDraftSlots.length} bloques seleccionados
+                {draftErrorCount > 0 && (
+                  <strong className="block text-error">
+                    {draftErrorCount === 1 ? '1 fila marcada tiene problemas' : `${draftErrorCount} filas marcadas tienen problemas`}
+                  </strong>
+                )}
+                {ocrDraftError && (
+                  <strong role="alert" className="block text-error">
+                    {ocrDraftError}
+                  </strong>
+                )}
               </span>
 
               <div className="flex gap-2 w-full sm:w-auto">
@@ -1221,10 +1454,11 @@ export default function SchedulePage() {
                 <button
                   type="button"
                   onClick={handleConfirmOcrDraft}
-                  className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer flex items-center justify-center gap-1.5"
+                  disabled={isSaving || draftErrorCount > 0 || !ocrDraftSlots.some((d) => d.selected)}
+                  className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
-                  <span>Confirmar e Importar</span>
+                  <span>{isSaving ? 'Importando…' : 'Confirmar e Importar'}</span>
                 </button>
               </div>
             </div>
