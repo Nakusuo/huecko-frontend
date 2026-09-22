@@ -12,7 +12,7 @@ import type {
 import { DEFAULT_CATEGORY_COLOR } from '../theme/palette';
 import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useModalDismiss } from '../hooks/useModalDismiss';
-import { useIncidentsStore } from '../store/incidentsStore';
+import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
 import { ResumenPuntualidad } from '../components/ResumenPuntualidad';
 import { AccionesRapidas } from '../components/AccionesRapidas';
@@ -115,6 +115,8 @@ export default function DashboardPage() {
   // Modulos 4 y 5: estado real del evento, alimentado por REST y por WebSocket.
   const retrasosDelPlan = useIncidentsStore((s) => s.retrasos);
   const votaciones = useIncidentsStore((s) => s.votaciones);
+  const ausenciasPorPlan = useIncidentsStore((s) => s.ausencias);
+  const miId = miIdentificador();
   const cargarPlanIncidencias = useIncidentsStore((s) => s.cargarPlan);
   const votarExpres = useIncidentsStore((s) => s.votarExpres);
   const errorIncidencias = useIncidentsStore((s) => s.error);
@@ -137,7 +139,10 @@ export default function DashboardPage() {
     if (!proposal || !group || !window) {
       return null;
     }
-    const abiertas = (proposal.incidencias ?? []).filter((i) => !i.resuelta);
+    const retrasosDelEvento = retrasosDelPlan[proposal.id] ?? [];
+    const ausenciasDelEvento = ausenciasPorPlan[proposal.id] ?? [];
+    // Retrasos y ausencias identifican por UUID con backend y por correo en demo.
+    const idDe = (m: (typeof group.miembros)[number]) => (isApiEnabled ? m.userId ?? m.id : m.email);
 
     return {
       id: proposal.id,
@@ -151,17 +156,18 @@ export default function DashboardPage() {
       /* Un retraso es llegar tarde, no faltar: antes cualquier aviso, incluso
          uno ya resuelto, marcaba a la persona como «No asiste». */
       attendees: group.miembros.map((member) => {
-        const aviso = abiertas.find((i) => i.userEmail === member.email);
+        const ausente = ausenciasDelEvento.some((a) => a.usuarioId === idDe(member));
+        const retraso = retrasosDelEvento.find((r) => r.usuarioId === idDe(member));
         return {
           email: member.email,
           name: member.email === userEmail ? 'Tú' : member.nombre,
-          status: !aviso ? 'puntual' : aviso.tipo === 'tardanza' ? 'retrasado' : 'no_asiste',
-          delayMinutes: aviso?.tipo === 'tardanza' ? aviso.minutosTardanza : undefined,
+          status: ausente ? 'no_asiste' : retraso ? 'retrasado' : 'puntual',
+          delayMinutes: retraso?.minutosEstimados,
           isEssential: member.isEssential,
         };
       }),
     };
-  }, [groups, proposals, userEmail]);
+  }, [groups, proposals, userEmail, retrasosDelPlan, ausenciasPorPlan]);
 
   /* Módulos 4 y 5 del evento en curso. Se piden una vez al aparecer el evento;
      a partir de ahí el canal en tiempo real los mantiene al día sin volver a
@@ -173,13 +179,22 @@ export default function DashboardPage() {
      cambio en cualquier grupo relanzaba las dos peticiones — y como cada evento
      del canal llama a `fetchProposals`, el tiempo real se realimentaba a sí
      mismo. */
-  const upcomingEventId = upcomingEvent?.id;
+  /* Todos los confirmados, no solo el próximo: una votación exprés puede estar
+     abierta en cualquiera de ellos, y antes la de los demás no se veía en
+     ninguna parte. */
+  const idsConfirmados = proposals
+    .filter((p) => p.estado === 'confirmado' && groups.some((g) => g.id === p.groupId))
+    .map((p) => p.id)
+    .join(',');
   useEffect(() => {
-    if (upcomingEventId) void cargarPlanIncidencias(upcomingEventId);
-  }, [upcomingEventId, cargarPlanIncidencias]);
+    if (!idsConfirmados) return;
+    idsConfirmados.split(',').forEach((id) => void cargarPlanIncidencias(id));
+  }, [idsConfirmados, cargarPlanIncidencias]);
 
   const retrasos = upcomingEvent ? retrasosDelPlan[upcomingEvent.id] ?? [] : [];
-  const votacionExpres = upcomingEvent ? votaciones[upcomingEvent.id] ?? null : null;
+  const votacionesAbiertas = Object.values(votaciones).filter(
+    (v): v is NonNullable<typeof v> => v != null && idsConfirmados.split(',').includes(v.planId)
+  );
 
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isDelayModalOpen, setIsDelayModalOpen] = useState(false);
@@ -197,11 +212,13 @@ export default function DashboardPage() {
 
   /* Si ya avisé de algo sobre este plan, lo que toca es retirarlo, no mandar
      otro aviso encima: era lo que permitía avisar, votar y volver a avisar. */
-  const miAvisoAbierto = upcomingEvent
-    ? proposals
-        .find((p) => p.id === upcomingEvent.id)
-        ?.incidencias?.find((i) => i.userEmail === userEmail && !i.resuelta) ?? null
+  const miRetraso = upcomingEvent
+    ? (retrasosDelPlan[upcomingEvent.id] ?? []).find((r) => r.usuarioId === miId) ?? null
     : null;
+  const miAusencia = upcomingEvent
+    ? (ausenciasPorPlan[upcomingEvent.id] ?? []).find((a) => a.usuarioId === miId) ?? null
+    : null;
+  const miAvisoAbierto = miRetraso ?? miAusencia;
 
 
   const getGreeting = () => {
@@ -400,12 +417,24 @@ export default function DashboardPage() {
         {/* Votación exprés (RF-17). Va ANTES del próximo plan a propósito: es
             lo único de esta página con un plazo corriendo, y enterrarla bajo
             el evento haría que se venciera sin que nadie la viera. */}
-        {votacionExpres && (
+        {votacionesAbiertas.length > 0 && (
           <section className="space-y-3">
-            <VotacionExpresPanel
-              votacion={votacionExpres}
-              onVotar={(opcion) => votarExpres(votacionExpres.planId, opcion)}
-            />
+            {votacionesAbiertas.map((v) => {
+              const plan = proposals.find((p) => p.id === v.planId);
+              return (
+                <div key={v.planId} className="space-y-1.5">
+                  {plan && (
+                    <p className="rotulo text-2xs text-on-surface-variant">
+                      {plan.titulo} · {groups.find((g) => g.id === plan.groupId)?.nombre}
+                    </p>
+                  )}
+                  <VotacionExpresPanel
+                    votacion={v}
+                    onVotar={(opcion) => votarExpres(v.planId, opcion)}
+                  />
+                </div>
+              );
+            })}
           </section>
         )}
 
@@ -860,22 +889,27 @@ export default function DashboardPage() {
                 {miAvisoAbierto ? (
                   <div className="flex-1 flex flex-col sm:flex-row items-center gap-3">
                     <p className="flex-1 text-xs text-on-surface-variant">
-                      Ya avisaste: <strong className="text-on-surface">{miAvisoAbierto.motivo}</strong>
+                      Ya avisaste:{' '}
+                      <strong className="text-on-surface">
+                        {miRetraso
+                          ? `llegarás ${miRetraso.minutosEstimados} min tarde`
+                          : `no irás${miAusencia?.motivo ? ` (${miAusencia.motivo})` : ''}`}
+                      </strong>
                     </p>
-                    {/* Con backend solo una tardanza se puede retirar. */}
-                    {(!isApiEnabled || miAvisoAbierto.tipo === 'tardanza') && (
+                    {/* Solo un retraso se puede retirar: una ausencia ya avisó a todo el grupo. */}
+                    {miRetraso && (
                       <button
                         onClick={async () => {
                           const retirado = await withdrawIncident(upcomingEvent.id, userEmail);
                           setIsDetailModalOpen(false);
                           if (retirado) {
-                            showToast('Retiraste tu aviso. El plan vuelve a su estado anterior.', 'info');
+                            showToast('Retiraste tu aviso de retraso.', 'info');
                           }
                         }}
                         className="py-3 px-4 rounded-2xl bg-surface-container-lowest hover:bg-surface-container text-on-surface border border-outline-variant text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
                       >
                         <span aria-hidden="true" className="material-symbols-outlined text-[18px]">undo</span>
-                        <span>Retirar mi aviso</span>
+                        <span>Retirar mi retraso</span>
                       </button>
                     )}
                   </div>

@@ -36,7 +36,7 @@ interface Props {
 
 export function VotacionExpresPanel({
   votacion,
-  resultadoPorDefecto = 'MANTENER',
+  resultadoPorDefecto = votacion.resultadoPorDefectoOpcion ?? 'MANTENER',
   onVotar,
 }: Props) {
   const restante = useCuentaAtras(votacion.expiraEn);
@@ -221,7 +221,7 @@ export function VotacionExpresPanel({
             {!vencida && totalVotos < 2 && (
               <span className="text-2xs text-on-surface-variant">
                 Si no vota suficiente gente, el plan se{' '}
-                {resultadoPorDefecto === 'MANTENER' ? 'mantiene' : 'reagenda'}.
+                {{ MANTENER: 'mantiene', REAGENDAR: 'reagenda', CANCELAR: 'cancela' }[resultadoPorDefecto]}.
               </span>
             )}
 
