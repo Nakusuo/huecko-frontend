@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useModalDismiss } from '../hooks/useModalDismiss';
+import { validarCorreoNuevo } from '../lib/grupos';
 
 /**
  * Crear un grupo, con sus integrantes iniciales.
@@ -24,13 +25,15 @@ export interface DatosGrupoNuevo {
 
 interface Props {
   title: string;
+  /** Correo de quien crea el grupo: ya entra como organizador, no hace falta añadirlo. */
+  correoPropio?: string;
   onClose: () => void;
   onSubmit: (datos: DatosGrupoNuevo) => Promise<void>;
 }
 
 const UMBRAL_POR_DEFECTO = 80;
 
-export function CrearGrupoModal({ title, onClose, onSubmit }: Props) {
+export function CrearGrupoModal({ title, correoPropio, onClose, onSubmit }: Props) {
   const [nombre, setNombre] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [umbral, setUmbral] = useState(UMBRAL_POR_DEFECTO);
@@ -41,32 +44,39 @@ export function CrearGrupoModal({ title, onClose, onSubmit }: Props) {
 
   useModalDismiss(true, onClose);
 
-  function agregarCorreo() {
-    const limpio = correoNuevo.trim().toLowerCase();
-    if (!limpio) return;
+  /**
+   * Pasa el correo escrito a la lista. Devuelve la lista resultante, o `null`
+   * si el correo no valía (y deja dicho por qué).
+   */
+  function agregarCorreo(): string[] | null {
+    if (!correoNuevo.trim()) return correos;
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(limpio)) {
-      setError('Ese correo no tiene un formato válido.');
-      return;
-    }
-    if (correos.includes(limpio)) {
-      setError('Ese correo ya está en la lista.');
-      return;
+    const resultado = validarCorreoNuevo(correoNuevo, correos, correoPropio);
+    if ('error' in resultado) {
+      setError(resultado.error);
+      return null;
     }
 
-    setCorreos([...correos, limpio]);
+    const lista = [...correos, resultado.correo];
+    setCorreos(lista);
     setCorreoNuevo('');
     setError(null);
+    return lista;
   }
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
     if (!nombre.trim() || enviando) return;
 
+    /* Un correo escrito sin pulsar «Añadir» antes se descartaba en silencio
+       al crear. Ahora entra si es válido, y si no, se dice y no se crea nada. */
+    const lista = agregarCorreo();
+    if (!lista) return;
+
     setEnviando(true);
     setError(null);
     try {
-      await onSubmit({ nombre: nombre.trim(), descripcion: descripcion.trim(), umbral, correos });
+      await onSubmit({ nombre: nombre.trim(), descripcion: descripcion.trim(), umbral, correos: lista });
     } catch (err) {
       // El motivo del servidor (p. ej. un nombre repetido) dice más que un genérico.
       setError(
@@ -169,7 +179,10 @@ export function CrearGrupoModal({ title, onClose, onSubmit }: Props) {
                 type="email"
                 placeholder="correo@huecko.com"
                 value={correoNuevo}
-                onChange={(e) => setCorreoNuevo(e.target.value)}
+                onChange={(e) => {
+                  setCorreoNuevo(e.target.value);
+                  setError(null);
+                }}
                 onKeyDown={(e) => {
                   // Enter añade a la lista, no envía el formulario: si no,
                   // escribir un correo y pulsar Enter crearía el grupo sin él.
