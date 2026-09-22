@@ -37,14 +37,19 @@ const ESTADOS: Record<EstadoPlan, PlanProposal['estado']> = {
  * pero la ventana es del martes), se salta a la semana siguiente: el backend
  * rechaza proponer una ventana en una fecha pasada, y con razón.
  */
-export function fechaParaDia(lunesISO: string, dia: DayOfWeek): string {
+export function fechaParaDia(lunesISO: string, dia: DayOfWeek, horaInicio?: string): string {
   const indice = Math.max(DAY_ORDER.indexOf(dia), 0);
   const [anio, mes, diaDelMes] = lunesISO.split('-').map(Number);
   const fecha = new Date(anio, mes - 1, diaDelMes + indice);
 
+  /* Con la hora, «hoy a las 11:00» a las 15:00 también cuenta como pasado:
+     el backend la rechazaría con «ya empezó». */
+  const [h, m] = (horaInicio ?? '00:00').split(':').map(Number);
+  const inicio = new Date(fecha);
+  inicio.setHours(h, m, 0, 0);
   const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  if (fecha < hoy) fecha.setDate(fecha.getDate() + 7);
+  if (!horaInicio) hoy.setHours(0, 0, 0, 0);
+  if (horaInicio ? inicio <= hoy : fecha < hoy) fecha.setDate(fecha.getDate() + 7);
 
   const dosDigitos = (n: number) => String(n).padStart(2, '0');
   return `${fecha.getFullYear()}-${dosDigitos(fecha.getMonth() + 1)}-${dosDigitos(fecha.getDate())}`;
@@ -88,11 +93,14 @@ function toProposal(plan: PlanResponse, miembros: GroupMember[]): PlanProposal {
     titulo: plan.titulo,
     lugar: plan.lugar ?? undefined,
     creadoPor: creador?.nombre ?? plan.creadoPor,
+    creadoPorId: plan.creadoPor,
     // La votación cerrada se marca con el texto que la UI ya sabe pintar; si
     // sigue abierta viaja el instante ISO y lo formatea la página.
     plazoVotacion: plan.votacionAbierta ? plan.plazoVotacion : 'Finalizada',
     estado: ESTADOS[plan.estado] ?? 'propuesto',
     ventanasSugeridas: plan.ventanas.map((v) => toWindow(v, miembros)),
+    ventanaConfirmadaId: plan.ventanaConfirmadaId,
+    votacionAbierta: plan.votacionAbierta,
   };
 }
 
@@ -141,6 +149,21 @@ export const plansService = {
     if (!isApiEnabled) throw new Error('API no habilitada.');
 
     const { data } = await apiClient.delete<PlanResponse>(endpoints.plans.vote(planId, windowId));
+    return toProposal(data, miembros);
+  },
+
+  /**
+   * Tras una votación exprés que decide reprogramar, el plan vuelve a votarse
+   * con opciones nuevas. Sin esto se quedaba en re-coordinación para siempre.
+   */
+  async reschedule(
+    planId: string,
+    payload: Pick<CrearPlanPayload, 'plazoVotacion' | 'ventanas'>,
+    miembros: GroupMember[]
+  ): Promise<PlanProposal> {
+    if (!isApiEnabled) throw new Error('API no habilitada.');
+
+    const { data } = await apiClient.post<PlanResponse>(endpoints.plans.reschedule(planId), payload);
     return toProposal(data, miembros);
   },
 

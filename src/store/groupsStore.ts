@@ -5,6 +5,7 @@ import { groupsService } from '../services/groupsService';
 import { eventsService } from '../services/eventsService';
 import { useIncidentsStore } from './incidentsStore';
 import { plansService, type CrearPlanPayload } from '../services/plansService';
+import { elegirGanadora, votacionAbierta } from '../lib/planes';
 import type {
   Group,
   GroupAvailability,
@@ -97,6 +98,13 @@ interface GroupsState {
   voteProposalWindow: (proposalId: string, windowId: string, userEmail: string) => Promise<boolean>;
   /** Devuelve el estado en que quedó el plan, o `null` si no se pudo cerrar. */
   closeVotingManually: (proposalId: string) => Promise<PlanProposal['estado'] | null>;
+  /** Vuelve a votar con opciones nuevas un plan que la votación exprés mandó reprogramar. */
+  rescheduleProposal: (
+    proposalId: string,
+    ventanas: TimeWindowProposal[],
+    backendPayload: Pick<CrearPlanPayload, 'plazoVotacion' | 'ventanas'>,
+    plazoTexto: string
+  ) => Promise<void>;
   /**
    * Con backend, si el servidor rechaza el aviso el error sube: la página
    * tiene que decírselo a quien reporta, no fingir que se envió.
@@ -335,8 +343,12 @@ export const useGroupsStore = create<GroupsState>()(
                   ]
                 : serverGroups;
 
+              /* Los planes persistidos de un grupo del que ya no formo parte
+                 aparecían en el inicio como «Grupo» y votarlos daba 404. */
+              const vigentes = new Set(groups.map((g) => g.id));
               return {
                 groups,
+                groupProposals: state.groupProposals.filter((p) => vigentes.has(p.groupId)),
                 selectedGroupId: groups.some((g) => g.id === state.selectedGroupId)
                   ? state.selectedGroupId
                   : groups[0]?.id ?? null,
@@ -636,7 +648,8 @@ export const useGroupsStore = create<GroupsState>()(
 
         set((state) => ({
           groupProposals: state.groupProposals.map((p) => {
-            if (p.id !== proposalId || p.estado === 'confirmado') return p;
+            // Cancelados, en re-coordinación o confirmados ya no admiten votos.
+            if (p.id !== proposalId || !votacionAbierta(p)) return p;
             const updatedWindows = p.ventanasSugeridas.map((w) => {
               if (w.id === windowId) {
                 const newVotes = yaVotada
@@ -674,12 +687,52 @@ export const useGroupsStore = create<GroupsState>()(
           }
         }
 
+        /* La misma regla que el backend: gana la más votada (en empate, la
+           más temprana) y, si nadie votó, el plan se cancela. Antes el demo
+           confirmaba siempre, incluso sin un solo voto. */
+        const plan = get().groupProposals.find((p) => p.id === proposalId);
+        if (!plan || !votacionAbierta(plan)) return null;
+        const ganadora = elegirGanadora(plan.ventanasSugeridas);
+        const estado: PlanProposal['estado'] = ganadora ? 'confirmado' : 'cancelado';
         set((state) => ({
           groupProposals: state.groupProposals.map((p) =>
-            p.id === proposalId ? { ...p, estado: 'confirmado' } : p
+            p.id === proposalId
+              ? { ...p, estado, ventanaConfirmadaId: ganadora?.id ?? null, plazoVotacion: 'Finalizada' }
+              : p
           ),
         }));
-        return 'confirmado';
+        return estado;
+      },
+
+      rescheduleProposal: async (proposalId, ventanas, backendPayload, plazoTexto) => {
+        if (isApiEnabled) {
+          const plan = get().groupProposals.find((p) => p.id === proposalId);
+          const miembros = get().groups.find((g) => g.id === plan?.groupId)?.miembros ?? [];
+          // Sin capturar: el motivo del rechazo tiene que verse en el formulario.
+          const actualizado = await plansService.reschedule(proposalId, backendPayload, miembros);
+          set((state) => ({
+            groupProposals: state.groupProposals.map((p) =>
+              p.id === proposalId ? { ...p, ...actualizado, incidencias: [] } : p
+            ),
+          }));
+          return;
+        }
+
+        set((state) => ({
+          groupProposals: state.groupProposals.map((p) =>
+            p.id === proposalId
+              ? {
+                  ...p,
+                  estado: 'propuesto',
+                  plazoVotacion: plazoTexto,
+                  ventanasSugeridas: ventanas.map((v) => ({ ...v, votosUsuarios: [] })),
+                  ventanaConfirmadaId: null,
+                  votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
+                  incidencias: [],
+                }
+              : p
+          ),
+        }));
       },
 
       reportIncident: async (proposalId, incidenceData) => {
