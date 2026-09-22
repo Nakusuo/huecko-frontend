@@ -47,6 +47,18 @@ describe('AuthPage', () => {
     expect(html).toContain('aria-hidden="true"');
   });
 
+  it('los dos formularios montados a la vez no repiten ids', () => {
+    /* Con `id="email"` en los dos, las etiquetas del registro apuntaban al campo
+       del login. */
+    const html = pintar('/login');
+    const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ['login-email', 'login-password', 'reg-nombre', 'reg-email', 'reg-password', 'reg-confirm-password']) {
+      expect(ids).toContain(id);
+      expect(html).toContain(`for="${id}"`);
+    }
+  });
+
   it('hay UN solo panel de marca, y cambia de lado segun la ruta', () => {
     const login = pintar('/login');
     const registro = pintar('/register');
