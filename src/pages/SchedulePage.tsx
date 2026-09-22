@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import type { OcrExtractedSlot } from '../services/ocrService';
 import { useScheduleStore } from '../store/scheduleStore';
 import type { DayOfWeek, TimeSlot } from '../store/scheduleStore';
 import { CATEGORY_COLORS, DEFAULT_CATEGORY_COLOR } from '../theme/palette';
+import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -46,17 +47,27 @@ export default function SchedulePage() {
   const [ocrDraftSlots, setOcrDraftSlots] = useState<OcrExtractedSlot[]>([]);
 
   // Notification Toast
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, showToast] = useAvisoEfimero<string>();
+
+  /* El preview también se revoca al salir de la pantalla: sin esto, el último
+     quedaba retenido aunque nadie fuera a mirarlo. La ref evita que el efecto se
+     rearme con cada archivo elegido. */
+  const previewVigente = useRef<string | null>(null);
+  useEffect(() => {
+    previewVigente.current = filePreviewUrl;
+  }, [filePreviewUrl]);
+  useEffect(
+    () => () => {
+      if (previewVigente.current) URL.revokeObjectURL(previewVigente.current);
+    },
+    [],
+  );
 
   // Escape cierra el diálogo y el fondo deja de desplazarse mientras está abierto.
   useModalDismiss(isModalOpen, () => setIsModalOpen(false));
   useModalDismiss(isOcrUploadModalOpen, () => setIsOcrUploadModalOpen(false));
   useModalDismiss(isOcrDraftModalOpen, () => setIsOcrDraftModalOpen(false));
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
 
   const timeLabels = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
 
@@ -233,12 +244,13 @@ export default function SchedulePage() {
   // File Handlers for Real Upload
   const handleFileSelect = (file: File) => {
     setSelectedOcrFile(file);
-    if (file.type.startsWith('image/')) {
-      const preview = URL.createObjectURL(file);
-      setFilePreviewUrl(preview);
-    } else {
-      setFilePreviewUrl(null);
-    }
+    /* Se revoca el anterior antes de pisarlo. Elegir una segunda imagen sin
+       pasar por «quitar» dejaba el primer blob retenido por el navegador hasta
+       recargar la página, y un horario escaneado no es un archivo pequeño. */
+    setFilePreviewUrl((anterior) => {
+      if (anterior) URL.revokeObjectURL(anterior);
+      return file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    });
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -364,7 +376,7 @@ export default function SchedulePage() {
   };
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
+    <div className="bg-surface text-on-surface min-h-dvh flex flex-col">
       <Navbar currentTab="schedule" />
 
       {/* Toast Notification */}
@@ -394,7 +406,7 @@ export default function SchedulePage() {
             {/* Importar OCR */}
             <button
               onClick={() => setIsOcrUploadModalOpen(true)}
-              className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-all text-xs sm:text-sm font-semibold cursor-pointer shadow-xs active:scale-95"
+              className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-all text-xs sm:text-sm font-semibold cursor-pointer elev-0 active:scale-95"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[20px] text-primary">document_scanner</span>
               <span>Importar OCR</span>
@@ -460,7 +472,7 @@ export default function SchedulePage() {
                     }`}
                   >
                     <span className="block text-xs font-bold">{day}</span>
-                    <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-outline'}`}>
+                    <span className={`block text-2xs ${activo ? 'opacity-80' : 'text-on-surface-variant'}`}>
                       {total === 0 ? 'libre' : `${total} ${total === 1 ? 'bloque' : 'bloques'}`}
                     </span>
                   </button>
@@ -552,7 +564,7 @@ export default function SchedulePage() {
           </div>
 
           {/* --- Vista de escritorio: rejilla semanal --- */}
-          <div className="hidden md:block bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 md:p-8 overflow-x-auto shadow-sm">
+          <div className="hidden md:block bg-surface-container-lowest rounded-2xl p-6 md:p-8 overflow-x-auto elev-1">
             <div className="min-w-[800px]">
               {/* Days Header */}
               <div className="grid grid-cols-8 gap-4 mb-4">
@@ -669,7 +681,7 @@ export default function SchedulePage() {
       {/* Modal para agregar o editar un bloque */}
       {isModalOpen && (
         <div role="dialog" aria-modal="true" aria-label="Bloque de horario" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-outline-variant rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl animate-modal-in max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface rounded-3xl p-6 sm:p-8 w-full max-w-lg elev-3 animate-modal-in max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-5">
               <div>
                 <span className="text-2xs font-bold uppercase tracking-wider text-primary">
@@ -919,7 +931,7 @@ export default function SchedulePage() {
       {/* Modal de carga por OCR */}
       {isOcrUploadModalOpen && (
         <div role="dialog" aria-modal="true" aria-label="Autocompletar horario por OCR" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-outline-variant rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl animate-modal-in text-center">
+          <div className="bg-surface rounded-3xl p-6 sm:p-8 w-full max-w-md elev-3 animate-modal-in text-center">
             <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 shadow-xs">
               <span aria-hidden="true" className="material-symbols-outlined text-3xl">document_scanner</span>
             </div>
@@ -1060,7 +1072,7 @@ export default function SchedulePage() {
       {/* Modal de revisión del borrador OCR */}
       {isOcrDraftModalOpen && (
         <div role="dialog" aria-modal="true" aria-label="Revisar bloques extraídos" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-outline-variant rounded-3xl p-6 sm:p-8 w-full max-w-2xl shadow-2xl animate-modal-in flex flex-col max-h-[90vh]">
+          <div className="bg-surface rounded-3xl p-6 sm:p-8 w-full max-w-2xl elev-3 animate-modal-in flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <span className="text-2xs font-bold uppercase tracking-wider text-primary">

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { isApiEnabled } from '../lib/apiClient';
 
 export interface AppNotification {
   id: string;
@@ -17,6 +18,8 @@ interface NotificationState {
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   clearNotification: (id: string) => void;
+  /** Vacía la bandeja. Se llama al cerrar sesión: los avisos son de quien los recibió. */
+  reset: () => void;
 }
 
 const INITIAL_NOTIFICATIONS: AppNotification[] = [
@@ -43,7 +46,8 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
 export const useNotificationStore = create<NotificationState>()(
   persist(
     (set) => ({
-      notifications: INITIAL_NOTIFICATIONS,
+      // Los avisos de ejemplo solo tienen sentido en modo demo.
+      notifications: isApiEnabled ? [] : INITIAL_NOTIFICATIONS,
 
       addNotification: (notif) =>
         set((state) => ({
@@ -72,6 +76,8 @@ export const useNotificationStore = create<NotificationState>()(
         set((state) => ({
           notifications: state.notifications.filter((n) => n.id !== id),
         })),
+
+      reset: () => set({ notifications: isApiEnabled ? [] : INITIAL_NOTIFICATIONS }),
     }),
     {
       name: 'huecko-notifications',
