@@ -56,6 +56,8 @@ export const endpoints = {
     detail: (planId: string) => `/planes/${planId}`,
     vote: (planId: string, ventanaId: string) => `/planes/${planId}/ventanas/${ventanaId}/voto`,
     close: (planId: string) => `/planes/${planId}/cerrar`,
+    /** Vuelve a votar con opciones nuevas un plan en re-coordinación. */
+    reschedule: (planId: string) => `/planes/${planId}/reagendar`,
   },
 
   /**
