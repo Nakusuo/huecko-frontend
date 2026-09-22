@@ -18,6 +18,7 @@ import { ResumenPuntualidad } from '../components/ResumenPuntualidad';
 import { AccionesRapidas } from '../components/AccionesRapidas';
 import { AvisoError } from '../components/AvisoError';
 import { isApiEnabled } from '../lib/apiClient';
+import { formatearPlazo, formatearVentana, proximoPlanConfirmado, votacionAbierta } from '../lib/planes';
 
 interface TodayScheduleBlock {
   id: string;
@@ -54,7 +55,9 @@ export default function DashboardPage() {
 
   const pendingVotes: DashboardPendingVote[] = useMemo(
     () => proposals
-      .filter((proposal) => proposal.estado === 'propuesto')
+      /* Solo las que aún aceptan votos y de grupos a los que sigo
+         perteneciendo: un propuesto con el plazo vencido ya no se puede votar. */
+      .filter((proposal) => votacionAbierta(proposal) && groups.some((g) => g.id === proposal.groupId))
       .map((proposal) => {
         const group = groups.find((item) => item.id === proposal.groupId);
         return {
@@ -63,10 +66,10 @@ export default function DashboardPage() {
           groupName: group?.nombre || 'Grupo',
           title: proposal.titulo,
           location: proposal.lugar,
-          deadline: proposal.plazoVotacion,
+          deadline: formatearPlazo(proposal.plazoVotacion),
           suggestedWindows: proposal.ventanasSugeridas.map((window) => ({
             id: window.id,
-            day: window.dia,
+            day: formatearVentana(window).split(' · ')[0],
             timeRange: `${window.horaInicio} - ${window.horaFin}`,
             freePercentage: window.disponibilidadPorcentaje,
             votesCount: window.votosUsuarios.length,
@@ -79,13 +82,14 @@ export default function DashboardPage() {
 
   const metrics = useMemo(() => ({
     activeGroupsCount: groups.length,
-    pendingVotesCount: pendingVotes.length,
+    // «Por votar» son las que aún no he votado, no todas las abiertas.
+    pendingVotesCount: pendingVotes.filter((v) => !v.suggestedWindows.some((w) => w.hasVoted)).length,
     freeMatchHoursThisWeek: proposals
       .flatMap((proposal) => proposal.ventanasSugeridas)
       .filter((window) => window.disponibilidadPorcentaje >= 80)
       .reduce((total, window) => total + Number(window.horaFin.slice(0, 2)) - Number(window.horaInicio.slice(0, 2)), 0),
     connectedMembersCount: new Set(groups.flatMap((group) => group.miembros.map((member) => member.email))).size,
-  }), [groups, pendingVotes.length, proposals]);
+  }), [groups, pendingVotes, proposals]);
 
   const groupSummaries = useMemo(
     () => groups.map((group) => {
@@ -117,29 +121,42 @@ export default function DashboardPage() {
   const clearSyncError = useGroupsStore((s) => s.clearSyncError);
   const [enviandoAviso, setEnviandoAviso] = useState(false);
 
+  /* El confirmado que viene antes y en la ventana que ganó. Antes era el
+     primero de la lista, con su primera ventana: podía ser un plan de la semana
+     pasada, a una hora que nadie votó. */
   const upcomingEvent = useMemo<UpcomingEventDetail | null>(() => {
-    const proposal = proposals.find((item) => item.estado === 'confirmado');
+    const proximo = proximoPlanConfirmado(
+      proposals.filter((p) => groups.some((g) => g.id === p.groupId))
+    );
+    const proposal = proximo?.plan;
     const group = proposal ? groups.find((item) => item.id === proposal.groupId) : undefined;
-    const window = proposal?.ventanasSugeridas[0];
+    const window = proximo?.ventana;
     if (!proposal || !group || !window) {
       return null;
     }
+    const abiertas = (proposal.incidencias ?? []).filter((i) => !i.resuelta);
 
     return {
       id: proposal.id,
       groupId: group.id,
       groupName: group.nombre,
       title: proposal.titulo,
-      dayLabel: window.dia,
+      dayLabel: formatearVentana(window).split(' · ')[0],
       timeRange: `${window.horaInicio} - ${window.horaFin}`,
       locationName: proposal.lugar || 'Lugar por definir',
       status: (proposal.estado === 'propuesto' ? 'confirmado' : proposal.estado) as 'confirmado' | 'en_recoordinacion' | 'cancelado',
-      attendees: group.miembros.map((member) => ({
-        email: member.email,
-        name: member.email === userEmail ? 'Tú' : member.nombre,
-        status: proposal.incidencias?.some((incident) => incident.userEmail === member.email) ? 'no_asiste' : 'puntual',
-        isEssential: member.isEssential,
-      })),
+      /* Un retraso es llegar tarde, no faltar: antes cualquier aviso, incluso
+         uno ya resuelto, marcaba a la persona como «No asiste». */
+      attendees: group.miembros.map((member) => {
+        const aviso = abiertas.find((i) => i.userEmail === member.email);
+        return {
+          email: member.email,
+          name: member.email === userEmail ? 'Tú' : member.nombre,
+          status: !aviso ? 'puntual' : aviso.tipo === 'tardanza' ? 'retrasado' : 'no_asiste',
+          delayMinutes: aviso?.tipo === 'tardanza' ? aviso.minutosTardanza : undefined,
+          isEssential: member.isEssential,
+        };
+      }),
     };
   }, [groups, proposals, userEmail]);
 
@@ -462,12 +479,15 @@ export default function DashboardPage() {
                     Ver detalles
                   </button>
 
-                  <button
-                    onClick={() => setIsDelayModalOpen(true)}
-                    className="px-6 py-3 rounded-2xl bg-surface-container-lowest hover:bg-warning-container text-on-warning-container border border-warning/40 text-xs font-semibold transition-all cursor-pointer text-center active:scale-95"
-                  >
-                    Avisar retraso
-                  </button>
+                  {/* Misma guarda que en el detalle: quien ya avisó no manda otro. */}
+                  {!miAvisoAbierto && (
+                    <button
+                      onClick={() => setIsDelayModalOpen(true)}
+                      className="px-6 py-3 rounded-2xl bg-surface-container-lowest hover:bg-warning-container text-on-warning-container border border-warning/40 text-xs font-semibold transition-all cursor-pointer text-center active:scale-95"
+                    >
+                      Avisar retraso
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

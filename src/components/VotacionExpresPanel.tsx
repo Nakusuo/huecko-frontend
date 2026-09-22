@@ -49,6 +49,7 @@ export function VotacionExpresPanel({
   const apremia = !vencida && restante.totalSegundos <= 600;
 
   const totalVotos = votacion.votosEmitidos;
+  const noPuedoVotar = votacion.puedoVotar === false;
   const maximo = useMemo(
     () => Math.max(1, ...ORDEN_OPCIONES.map((o) => votacion.recuento[o] ?? 0)),
     [votacion.recuento],
@@ -138,7 +139,7 @@ export function VotacionExpresPanel({
               key={opcion}
               type="button"
               onClick={() => elegir(opcion)}
-              disabled={vencida || enviando !== null}
+              disabled={vencida || noPuedoVotar || enviando !== null}
               aria-pressed={elegida}
               className={[
                 'group relative w-full overflow-hidden rounded-xl px-3 py-2.5 text-left',
@@ -212,12 +213,14 @@ export function VotacionExpresPanel({
                 {totalVotos}
               </strong>{' '}
               de {votacion.miembrosDelGrupo} han votado
-              {votacion.miVoto && ' · puedes cambiar tu voto'}
+              {noPuedoVotar
+                ? ' · reportaste tú el imprevisto: decide el resto del grupo'
+                : votacion.miVoto && ' · puedes cambiar tu voto'}
             </span>
 
-            {!vencida && totalVotos === 0 && (
+            {!vencida && totalVotos < 2 && (
               <span className="text-2xs text-on-surface-variant">
-                Si nadie vota, el plan se{' '}
+                Si no vota suficiente gente, el plan se{' '}
                 {resultadoPorDefecto === 'MANTENER' ? 'mantiene' : 'reagenda'}.
               </span>
             )}
