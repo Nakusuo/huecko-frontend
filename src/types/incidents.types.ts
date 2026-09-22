@@ -60,6 +60,11 @@ export interface VotacionExpres {
   resultado: OpcionExpres | null;
   /** `true` si el resultado salió de RF-18 y no de los votos. */
   resultadoPorDefecto: boolean;
+  /**
+   * Si yo puedo votar. Quien reporta el imprevisto no vota: antes podía
+   * decidir sola, con un único voto, qué hacía el resto del grupo.
+   */
+  puedoVotar?: boolean;
 }
 
 /** Qué pasó al reportar una ausencia: con votación (crítica) o sin ella. */
