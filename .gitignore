@@ -25,3 +25,7 @@ dist-ssr
 
 # Parches y volcados sueltos: artefactos de revisión, no del proyecto
 *.patch
+
+# Copias de trabajo de agentes y caché de vitest
+.claude/worktrees/
+.vitest/
