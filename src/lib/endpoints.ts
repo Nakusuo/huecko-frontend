@@ -73,6 +73,8 @@ export const endpoints = {
     miRetraso: (planId: string) => `/planes/${planId}/retrasos/mio`,
     /** RF-15: reportar que no podré ir. */
     imprevistos: (planId: string) => `/planes/${planId}/imprevistos`,
+    /** Quién avisó de que no irá, crítico o no. */
+    ausencias: (planId: string) => `/planes/${planId}/ausencias`,
     /** RF-17: la votación exprés abierta. Devuelve 204 si no hay ninguna. */
     votacionExpres: (planId: string) => `/planes/${planId}/votacion-expres`,
     votoExpres: (planId: string) => `/planes/${planId}/votacion-expres/voto`,
