@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import type { OcrExtractedSlot } from '../services/ocrService';
@@ -79,7 +80,17 @@ export default function SchedulePage() {
     setErrorGuardado(mensaje ? { mensaje, huella: huellaFormulario } : null);
 
   // OCR Modal states
-  const [isOcrUploadModalOpen, setIsOcrUploadModalOpen] = useState(false);
+  /* «Importar horario» desde el inicio llega como `?importar=1` y abre
+     directamente la subida del OCR. El parámetro se quita al montar para que
+     recargar o volver atrás no reabra el diálogo. */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [isOcrUploadModalOpen, setIsOcrUploadModalOpen] = useState(() => searchParams.get('importar') === '1');
+  useEffect(() => {
+    if (!searchParams.has('importar')) return;
+    const resto = new URLSearchParams(searchParams);
+    resto.delete('importar');
+    setSearchParams(resto, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [selectedOcrFile, setSelectedOcrFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -1472,11 +1483,13 @@ export default function SchedulePage() {
           <HueckoMark size={28} />
           <span className="font-headline text-lg text-on-surface">Huecko</span>
         </div>
-        <div className="flex gap-6">
-          <a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Sincronización activa</a>
-          <a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Ajustes de privacidad</a>
-          <a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Soporte</a>
-        </div>
+        {/* Solo enlaces que llevan a algún sitio. Antes había tres `href="#"`
+            («Sincronización activa», «Ajustes de privacidad», «Soporte») que
+            no abrían nada y el primero, además, afirmaba un estado inventado. */}
+        <nav aria-label="Enlaces del pie" className="flex gap-6">
+          <Link className="text-xs text-on-surface-variant hover:text-primary transition-colors" to="/groups">Mis grupos</Link>
+          <Link className="text-xs text-on-surface-variant hover:text-primary transition-colors" to="/profile">Mi perfil y cuenta</Link>
+        </nav>
         <span className="text-xs text-on-surface-variant">© 2026 Huecko • Coordinación Social</span>
       </footer>
     </div>
