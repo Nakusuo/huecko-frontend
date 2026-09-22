@@ -1,6 +1,7 @@
 import type { PlanProposal, TimeWindowProposal } from '../types/groups.types';
 import type { DayOfWeek } from '../types/schedule.types';
 import { DAY_ORDER } from './formatoBackend';
+import { fechaLocalIso } from './horario';
 
 /**
  * Reglas de los planes que la interfaz necesita saber sin preguntar al
@@ -16,12 +17,6 @@ import { DAY_ORDER } from './formatoBackend';
 /** Antelación mínima del plazo de votación. La misma que exige el backend. */
 export const MINUTOS_MINIMOS_DE_PLAZO = 5;
 
-const dosDigitos = (n: number) => String(n).padStart(2, '0');
-
-export function fechaLocalISO(fecha: Date): string {
-  return `${fecha.getFullYear()}-${dosDigitos(fecha.getMonth() + 1)}-${dosDigitos(fecha.getDate())}`;
-}
-
 /**
  * Fecha de una ventana. Las del servidor la traen; las del modo demo solo
  * dicen «Mié», y se toma el próximo miércoles contando hoy.
@@ -31,7 +26,7 @@ export function fechaDeVentana(ventana: Pick<TimeWindowProposal, 'dia' | 'fecha'
   const hoy = (ahora.getDay() + 6) % 7;
   const objetivo = Math.max(DAY_ORDER.indexOf(ventana.dia), 0);
   const fecha = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + ((objetivo - hoy + 7) % 7));
-  return fechaLocalISO(fecha);
+  return fechaLocalIso(fecha);
 }
 
 function instante(fechaISO: string, hora: string): Date {
