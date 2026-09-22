@@ -23,6 +23,12 @@ export interface TimeSlot {
   specificDate?: string;
   specificEndDate?: string;
   isOcrImported?: boolean;
+  /**
+   * El usuario revisó el bloque y lo confirmó. Solo importa para los que vienen
+   * del OCR: sin esta marca el backend los guarda como BORRADOR y no cuentan
+   * al buscar huecos en los grupos.
+   */
+  confirmado?: boolean;
 }
 
 /* ------------------------------------------------------------------ *
@@ -68,4 +74,10 @@ export interface BloqueHorarioRequest {
   color?: string | null;
   /** Si se manda OCR, el backend crea el bloque como BORRADOR (RF-03). */
   fuente?: BloqueFuente;
+  /**
+   * Con `fuente: 'OCR'`, indica que el usuario ya revisó y confirmó el bloque en
+   * el borrador, así que el backend lo guarda CONFIRMADO en vez de BORRADOR.
+   * Solo se manda al crear.
+   */
+  confirmado?: boolean;
 }
