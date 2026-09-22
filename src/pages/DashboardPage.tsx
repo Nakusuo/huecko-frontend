@@ -18,6 +18,7 @@ import { ResumenPuntualidad } from '../components/ResumenPuntualidad';
 import { AccionesRapidas } from '../components/AccionesRapidas';
 import { AvisoError } from '../components/AvisoError';
 import { isApiEnabled } from '../lib/apiClient';
+import { fechaLocalIso, ocupaFecha } from '../lib/horario';
 
 interface TodayScheduleBlock {
   id: string;
@@ -39,9 +40,11 @@ export default function DashboardPage() {
   const userEmail = user?.email || (isApiEnabled ? '' : 'alex.rodriguez@huecko.com');
 
   const today = (['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'] as DayOfWeek[])[new Date().getDay()];
+  // Por fecha y no por día de la semana: un puntual solo cuenta el día (o rango) que dura.
+  const hoyIso = fechaLocalIso();
   const todayBlocks: TodayScheduleBlock[] = useMemo(
     () => scheduleSlots
-      .filter((slot) => slot.day === today)
+      .filter((slot) => ocupaFecha(slot, hoyIso))
       .map((slot) => ({
         id: slot.id,
         title: slot.title,
@@ -49,7 +52,7 @@ export default function DashboardPage() {
         type: slot.type === 'puntual' ? 'puntual' : slot.tag === 'Trabajo' ? 'trabajo' : 'clase',
         customColor: slot.customColor || DEFAULT_CATEGORY_COLOR,
       })),
-    [scheduleSlots, today]
+    [scheduleSlots, hoyIso]
   );
 
   const pendingVotes: DashboardPendingVote[] = useMemo(
