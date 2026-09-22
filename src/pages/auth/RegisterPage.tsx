@@ -3,18 +3,23 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { registerUser } from '../../services/authService';
 
 const registerSchema = z
   .object({
+    // Con `trim` dos espacios ya no cuentan como un nombre de 2 caracteres.
     nombre: z
       .string()
+      .trim()
       .min(1, 'El nombre es requerido')
-      .min(2, 'Mínimo 2 caracteres'),
+      .min(2, 'Mínimo 2 caracteres')
+      .max(120, 'Máximo 120 caracteres'),
     email: z
       .string()
+      .trim()
+      .toLowerCase()
       .min(1, 'El correo es requerido')
       .email('Ingresa un correo válido'),
     password: z
@@ -42,8 +47,9 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const { login } = useAuthStore();
+  const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const {
     register,
@@ -94,7 +100,7 @@ export default function RegisterPage() {
                     golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
                     ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
                 <div className="flex items-baseline justify-between gap-3">
-                  <label htmlFor="nombre" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  <label htmlFor="reg-nombre" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                     Nombre completo
                   </label>
                   {errors.nombre && (
@@ -110,7 +116,7 @@ export default function RegisterPage() {
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">person</span>
                   </span>
                   <input
-                    id="nombre"
+                    id="reg-nombre"
                     type="text"
                     autoComplete="name"
                     placeholder="Alex Rodríguez"
@@ -131,7 +137,7 @@ export default function RegisterPage() {
                     golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
                     ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
                 <div className="flex items-baseline justify-between gap-3">
-                  <label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  <label htmlFor="reg-email" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                     Correo electrónico
                   </label>
                   {errors.email && (
@@ -147,7 +153,7 @@ export default function RegisterPage() {
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">mail</span>
                   </span>
                   <input
-                    id="email"
+                    id="reg-email"
                     type="email"
                     autoComplete="email"
                     placeholder="tu@correo.com"
@@ -168,7 +174,7 @@ export default function RegisterPage() {
                     golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
                     ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
                 <div className="flex items-baseline justify-between gap-3">
-                  <label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  <label htmlFor="reg-password" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                     Contraseña
                   </label>
                   {errors.password && (
@@ -184,7 +190,7 @@ export default function RegisterPage() {
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">lock</span>
                   </span>
                   <input
-                    id="password"
+                    id="reg-password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="new-password"
                     placeholder="••••••••"
@@ -215,7 +221,7 @@ export default function RegisterPage() {
                     golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
                     ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
                 <div className="flex items-baseline justify-between gap-3">
-                  <label htmlFor="confirmPassword" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  <label htmlFor="reg-confirm-password" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                     Confirmar Contraseña
                   </label>
                   {errors.confirmPassword && (
@@ -231,7 +237,7 @@ export default function RegisterPage() {
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">lock_reset</span>
                   </span>
                   <input
-                    id="confirmPassword"
+                    id="reg-confirm-password"
                     type={showConfirmPassword ? 'text' : 'password'}
                     autoComplete="new-password"
                     placeholder="••••••••"
@@ -307,6 +313,7 @@ export default function RegisterPage() {
               ¿Ya tienes una cuenta?{' '}
               <Link
                 to="/login"
+                state={location.state}
                 className="text-primary hover:text-primary-hover font-bold underline transition-colors"
               >
                 Inicia sesión aquí
