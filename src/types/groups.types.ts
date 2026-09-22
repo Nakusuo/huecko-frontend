@@ -9,7 +9,6 @@ export interface GroupMember {
   color: string;
   /** `ADMIN` es el valor histórico del modo demo; el backend dice `ORGANIZADOR`. */
   rol?: 'ADMIN' | 'ORGANIZADOR' | 'MIEMBRO';
-  status: 'confirmado' | 'pendiente';
 }
 
 export interface Group {

@@ -17,6 +17,10 @@ import { instalarAlmacenamientoEnMemoria } from '../test/almacenamientoEnMemoria
 vi.stubEnv('VITE_API_URL', '');
 instalarAlmacenamientoEnMemoria();
 const { useGroupsStore } = await import('./groupsStore');
+const { useAuthStore } = await import('./authStore');
+useAuthStore.setState({
+  user: { id: '1', nombre: 'Alex R.', email: 'alex.rodriguez@huecko.com', creado_en: '2026-01-01T00:00:00Z' },
+});
 
 const PLAN_CONFIRMADO: PlanProposal = {
   id: 'plan-test',
@@ -115,6 +119,48 @@ describe('groupsStore (demo)', () => {
     expect(ok.sinCuenta).toEqual([]);
     const grupo = useGroupsStore.getState().groups.find((g) => g.id === '1');
     expect(grupo?.miembros.some((m) => m.email === 'nuevo@huecko.com')).toBe(true);
+  });
+
+  it('los grupos de ejemplo y los creados tienen organizador', async () => {
+    const [uni, amigos] = useGroupsStore.getState().groups;
+    expect(uni.miembros.find((m) => m.email === 'alex.rodriguez@huecko.com')?.rol).toBe('ORGANIZADOR');
+    expect(amigos.miembros.find((m) => m.email === 'alex.rodriguez@huecko.com')?.rol).toBe('MIEMBRO');
+
+    const nuevo = await useGroupsStore.getState().createGroup('Nuevo', '', 80, 'yo@huecko.com', 'Yo');
+    expect(nuevo.miembros[0].rol).toBe('ORGANIZADOR');
+  });
+
+  it('quitar, cambiar rol e imprescindible se guardan', async () => {
+    const store = useGroupsStore.getState();
+    await store.updateMember('1', 'sam.p@huecko.com', { rol: 'ORGANIZADOR', isEssential: true });
+    await store.removeMember('1', 'diego.r@huecko.com');
+    await store.updateGroup('1', { nombre: 'Renombrado', umbralDisponibilidad: 60 });
+
+    const grupo = useGroupsStore.getState().groups.find((g) => g.id === '1');
+    expect(grupo?.nombre).toBe('Renombrado');
+    expect(grupo?.umbralDisponibilidad).toBe(60);
+    expect(grupo?.miembros.find((m) => m.email === 'sam.p@huecko.com')).toMatchObject({
+      rol: 'ORGANIZADOR',
+      isEssential: true,
+    });
+    expect(grupo?.miembros.some((m) => m.email === 'diego.r@huecko.com')).toBe(false);
+  });
+
+  it('como en el backend, el grupo no se queda sin organizador', async () => {
+    const store = useGroupsStore.getState();
+    await expect(store.updateMember('1', 'alex.rodriguez@huecko.com', { rol: 'MIEMBRO' })).rejects.toThrow(
+      /sin organizador/
+    );
+    await expect(store.removeMember('1', 'alex.rodriguez@huecko.com')).rejects.toThrow(/único organizador/);
+  });
+
+  it('salir del grupo lo quita junto con sus planes', async () => {
+    useGroupsStore.setState({ groupProposals: [{ ...PLAN_CONFIRMADO, groupId: '2' }] });
+    // Alex es integrante normal del grupo 2: puede salir sin más.
+    await useGroupsStore.getState().leaveGroup('2');
+    const estado = useGroupsStore.getState();
+    expect(estado.groups.some((g) => g.id === '2')).toBe(false);
+    expect(estado.groupProposals).toEqual([]);
   });
 
   it('reset vuelve a los datos de ejemplo', () => {
