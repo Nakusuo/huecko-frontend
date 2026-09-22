@@ -61,6 +61,13 @@ export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
         description: `${d.nombreReporta} no podrá ir a "${d.tituloPlan}". Vota antes de que venza el plazo.`,
       };
 
+    /* Cada voto mueve el panel, pero NO manda un aviso a la campana: en una
+       votación de ocho personas serían ocho notificaciones para decir lo que
+       el propio panel ya está enseñando en vivo. El caso va explícito, y no
+       apoyado en el `default`, para que se lea como una decisión. */
+    case 'VOTO_EXPRES_ACTUALIZADO':
+      return null;
+
     case 'VOTACION_EXPRES_CERRADA':
       return {
         type: 'confirmation',

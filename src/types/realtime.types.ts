@@ -16,6 +16,8 @@ export type RealtimeEventType =
   | 'AUSENCIA_REPORTADA'
   /** RF-17: baja crítica, se abre votación exprés. */
   | 'VOTACION_EXPRES_ABIERTA'
+  /** RF-17: alguien votó y el recuento cambió. No dice quién ni qué. */
+  | 'VOTO_EXPRES_ACTUALIZADO'
   /** RF-17 y RF-18: la votación exprés terminó. */
   | 'VOTACION_EXPRES_CERRADA';
 
