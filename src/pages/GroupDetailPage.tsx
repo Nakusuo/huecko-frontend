@@ -21,6 +21,8 @@ import { isApiEnabled } from '../lib/apiClient';
 import { AvisoError } from '../components/AvisoError';
 import { avisarAltasPendientes } from '../lib/avisosAltas';
 import { describirAviso } from '../lib/avisosIncidencia';
+import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
+import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
 import {
   estadoVisible,
   formatearPlazo,
@@ -75,17 +77,6 @@ function plazoAInstante(plazo: string): string {
   return new Date(Date.now() + 24 * 3_600_000).toISOString();
 }
 
-/** Qué opción votó esta persona en la re-coordinación, o `null` si no votó. */
-function votoDeReplanificacion(
-  proposal: PlanProposal,
-  email: string
-): 'cancel' | 'reschedule' | 'keep' | null {
-  const votos = proposal.votosReplanificacion;
-  if (!votos) return null;
-  const opciones = ['cancel', 'reschedule', 'keep'] as const;
-  return opciones.find((opcion) => votos[opcion].includes(email)) ?? null;
-}
-
 /** Porcentaje desconocido: todavía no llegó el cruce del servidor. */
 const SIN_DATO = -1;
 
@@ -108,7 +99,6 @@ export default function GroupDetailPage() {
     closeVotingManually,
     rescheduleProposal,
     reportIncident,
-    voteReplanification,
     withdrawIncident,
     syncError,
     clearSyncError,
@@ -132,7 +122,6 @@ export default function GroupDetailPage() {
       closeVotingManually: s.closeVotingManually,
       rescheduleProposal: s.rescheduleProposal,
       reportIncident: s.reportIncident,
-      voteReplanification: s.voteReplanification,
       withdrawIncident: s.withdrawIncident,
       syncError: s.syncError,
       clearSyncError: s.clearSyncError,
@@ -141,6 +130,16 @@ export default function GroupDetailPage() {
   );
 
   const addNotification = useNotificationStore((s) => s.addNotification);
+
+  /* Retrasos, ausencias y votación exprés de cada plan confirmado. Antes la
+     votación exprés solo se podía votar desde el inicio, y solo la del primer
+     plan confirmado: la de cualquier otro plan no tenía pantalla. */
+  const retrasosPorPlan = useIncidentsStore((s) => s.retrasos);
+  const ausenciasPorPlan = useIncidentsStore((s) => s.ausencias);
+  const votacionesPorPlan = useIncidentsStore((s) => s.votaciones);
+  const cargarPlanIncidencias = useIncidentsStore((s) => s.cargarPlan);
+  const votarExpres = useIncidentsStore((s) => s.votarExpres);
+  const miId = miIdentificador();
 
   /* Identidad real de quien usa la app. Antes estaba escrita a mano en cinco
      sitios como 'alex.rodriguez@huecko.com', asi que con backend real todo el
@@ -180,6 +179,17 @@ export default function GroupDetailPage() {
     fetchAvailability(activeGroupId);
     fetchProposals(activeGroupId);
   }, [activeGroupId, fetchAvailability, fetchProposals]);
+
+  /* Por ids y no por el array: cada recarga de planes crea uno nuevo aunque
+     sean los mismos, y relanzaría las peticiones en bucle. */
+  const idsConfirmados = groupProposals
+    .filter((p) => p.groupId === activeGroupId && p.estado === 'confirmado')
+    .map((p) => p.id)
+    .join(',');
+  useEffect(() => {
+    if (!idsConfirmados) return;
+    idsConfirmados.split(',').forEach((id) => void cargarPlanIncidencias(id));
+  }, [idsConfirmados, cargarPlanIncidencias]);
 
   // Proposal Modal State
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
@@ -476,6 +486,9 @@ export default function GroupDetailPage() {
     const estado = await closeVotingManually(proposalId);
     // Si no se pudo cerrar, el error ya se muestra arriba; no se anuncia nada.
     if (estado === null) return;
+    /* Con backend el cierre llega por el canal en tiempo real a todo el grupo,
+       también a quien cerró: avisar aquí además lo duplicaba. */
+    if (isApiEnabled) return;
 
     /* El servidor decide cómo queda: sin votos el plan se cancela (RF-10), así
        que anunciar siempre «confirmado» mentía en ese caso. */
@@ -560,9 +573,6 @@ export default function GroupDetailPage() {
     }
   };
 
-  const handleReplanVote = (proposalId: string, action: 'cancel' | 'reschedule' | 'keep') => {
-    void voteReplanification(proposalId, action, userEmail);
-  };
 
   /**
    * Coincidencias y espacios libres de una franja de una hora.
@@ -713,22 +723,14 @@ export default function GroupDetailPage() {
                     /* En demo la votación exprés corre mientras el plan está en
                        re-coordinación; con backend, ese estado significa que ya
                        se decidió reprogramar y faltan las fechas nuevas. */
-                    const porReprogramar = isInReplan && isApiEnabled;
-                    const userReplanVote = votoDeReplanificacion(proposal, userEmail);
-                    const avisosAbiertos = (proposal.incidencias || []).filter((i) => !i.resuelta);
-                    const miAvisoAbierto = avisosAbiertos.find((i) => i.userEmail === userEmail);
-                    const planCancelado = proposal.estado === 'cancelado';
-                    const miembrosDelGrupo = grp.miembros.length;
-                    const votosEmitidos = proposal.votosReplanificacion
-                      ? proposal.votosReplanificacion.cancel.length +
-                        proposal.votosReplanificacion.reschedule.length +
-                        proposal.votosReplanificacion.keep.length
-                      : 0;
-                    const votosParaCerrar = Math.min(
-                      Math.floor(miembrosDelGrupo / 2) + 1,
-                      miembrosDelGrupo
-                    );
-
+                    /* Con la votación exprés decidida a favor de reprogramar,
+                       el plan espera fechas nuevas. */
+                    const porReprogramar = isInReplan;
+                    const retrasos = retrasosPorPlan[proposal.id] ?? [];
+                    const ausencias = ausenciasPorPlan[proposal.id] ?? [];
+                    const votacion = votacionesPorPlan[proposal.id] ?? null;
+                    const miRetraso = retrasos.find((r) => r.usuarioId === miId);
+                    const miAusencia = ausencias.find((a) => a.usuarioId === miId);
                     return (
                       <div
                         key={proposal.id}
@@ -773,66 +775,34 @@ export default function GroupDetailPage() {
                             </span>
                           </div>
 
-                          {/* ALERTA COMPACTA DE INCIDENCIAS */}
-                          {avisosAbiertos.length > 0 && (
-                            <div className="mb-3 p-3 rounded-xl bg-warning-container border border-warning/30 space-y-2">
-                              {avisosAbiertos.map((inc) => (
-                                <div key={inc.id} className="text-xs flex justify-between items-center text-on-warning-container">
+                          {/* Quién llega tarde y quién no va: lo que ya sabe el
+                              servidor, no solo lo que avisé yo desde aquí. */}
+                          {isClosed && (retrasos.length > 0 || ausencias.length > 0) && (
+                            <ul className="mb-3 p-3 rounded-xl bg-warning-container border border-warning/30 space-y-1.5 text-xs text-on-warning-container">
+                              {ausencias.map((a) => (
+                                <li key={`aus-${a.usuarioId}`} className="flex justify-between gap-2">
                                   <span>
-                                    <span aria-hidden="true" className="material-symbols-outlined text-[14px] align-[-2px] mr-1">
-                                      warning
-                                    </span>
-                                    <strong>{inc.userName}</strong>: {inc.motivo}
+                                    <strong>{a.usuarioId === miId ? 'Tú' : a.nombreUsuario}</strong> no irá
+                                    {a.motivo ? `: ${a.motivo}` : ''}
                                   </span>
-                                  <span className="text-2xs text-on-warning-container font-bold uppercase">
-                                    {inc.tipo}
-                                  </span>
-                                </div>
+                                  {a.critica && <span className="rotulo text-2xs shrink-0">crítica</span>}
+                                </li>
                               ))}
+                              {retrasos.map((r) => (
+                                <li key={`ret-${r.usuarioId}`}>
+                                  <strong>{r.usuarioId === miId ? 'Tú' : r.nombreUsuario}</strong> llegará{' '}
+                                  {r.minutosEstimados} min tarde{r.corregido ? ' (corregido)' : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
 
-                              {/* Votación exprés: solo mientras el plan está en re-coordinación. */}
-                              {isInReplan && !isApiEnabled && (
-                              <div className="pt-2 border-t border-warning/30 flex flex-wrap items-center justify-between gap-2 text-xs">
-                                <span className="text-2xs text-on-warning-container font-semibold shrink-0">
-                                  ¿Qué hacemos?
-                                  <span className="block font-normal opacity-80">
-                                    {votosEmitidos}/{votosParaCerrar} votos para decidir
-                                  </span>
-                                </span>
-                                <div className="flex flex-wrap gap-1.5 w-full justify-end">
-                                  <button
-                                    onClick={() => handleReplanVote(proposal.id, 'reschedule')}
-                                    className={`px-2.5 py-1 rounded-md text-2xs font-medium border transition-colors cursor-pointer ${
-                                      userReplanVote === 'reschedule'
-                                        ? 'bg-secondary text-on-secondary border-primary'
-                                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container'
-                                    }`}
-                                  >
-                                    Re-agendar ({proposal.votosReplanificacion?.reschedule.length || 0})
-                                  </button>
-                                  <button
-                                    onClick={() => handleReplanVote(proposal.id, 'keep')}
-                                    className={`px-2.5 py-1 rounded-md text-2xs font-medium border transition-colors cursor-pointer ${
-                                      userReplanVote === 'keep'
-                                        ? 'bg-primary text-on-primary border-primary-hover'
-                                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container'
-                                    }`}
-                                  >
-                                    Mantener ({proposal.votosReplanificacion?.keep.length || 0})
-                                  </button>
-                                  <button
-                                    onClick={() => handleReplanVote(proposal.id, 'cancel')}
-                                    className={`px-2.5 py-1 rounded-md text-2xs font-medium border transition-colors cursor-pointer ${
-                                      userReplanVote === 'cancel'
-                                        ? 'bg-error text-on-error border-error'
-                                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container'
-                                    }`}
-                                  >
-                                    Cancelar ({proposal.votosReplanificacion?.cancel.length || 0})
-                                  </button>
-                                </div>
-                              </div>
-                              )}
+                          {votacion && (
+                            <div className="mb-3">
+                              <VotacionExpresPanel
+                                votacion={votacion}
+                                onVotar={(opcion) => votarExpres(proposal.id, opcion)}
+                              />
                             </div>
                           )}
 
@@ -903,24 +873,20 @@ export default function GroupDetailPage() {
                               </button>
                             )}
 
-                            {!planCancelado &&
-                              (miAvisoAbierto ? (
-                                /* Con backend solo una tardanza se puede
-                                   retirar: una ausencia ya abrió la votación
-                                   para todo el grupo. */
-                                !isApiEnabled || miAvisoAbierto.tipo === 'tardanza' ? (
-                                  <button
-                                    onClick={() => void withdrawIncident(proposal.id, userEmail)}
-                                    className="text-2xs text-on-surface-variant hover:text-on-surface font-semibold cursor-pointer underline"
-                                  >
-                                    Retirar mi aviso
-                                  </button>
-                                ) : (
-                                  <span className="text-2xs text-on-surface-variant">Ya avisaste</span>
-                                )
-                              ) : isClosed && (
-                                /* Solo hay algo a lo que faltar o llegar tarde
-                                   cuando el plan está confirmado. */
+                            {/* Solo hay algo a lo que faltar o llegar tarde cuando el
+                                plan está confirmado. Un retraso se puede retirar;
+                                una ausencia no, porque ya avisó a todo el grupo. */}
+                            {isClosed &&
+                              (miRetraso ? (
+                                <button
+                                  onClick={() => void withdrawIncident(proposal.id, userEmail)}
+                                  className="text-2xs text-on-surface-variant hover:text-on-surface font-semibold cursor-pointer underline"
+                                >
+                                  Retirar mi retraso
+                                </button>
+                              ) : miAusencia ? (
+                                <span className="text-2xs text-on-surface-variant">Avisaste que no irás</span>
+                              ) : (
                                 <button
                                   onClick={() => openReportIncidentModal(proposal)}
                                   className="text-2xs text-on-warning-container hover:text-on-warning-container font-semibold cursor-pointer"
