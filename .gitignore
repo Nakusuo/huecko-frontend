@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Parches y volcados sueltos: artefactos de revisión, no del proyecto
+*.patch
