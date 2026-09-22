@@ -16,11 +16,21 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
     ],
+    /* sockjs-client espera la variable `global` de Node, que en el navegador
+       no existe. Sin esto revienta al importarlo, no al conectar, así que el
+       fallo aparecería como una pantalla en blanco. */
+    define: {
+      global: 'globalThis',
+    },
     server: {
       proxy: {
         '/api': {
           target: backendTarget,
           changeOrigin: true,
+          /* RNF-05: sin `ws` el proxy no reenvía el upgrade y SockJS se queda
+             cayendo a sondeo largo, que sí funciona pero enmascara si el
+             WebSocket real está roto. */
+          ws: true,
         },
       },
     },

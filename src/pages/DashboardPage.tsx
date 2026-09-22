@@ -1,9 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import { useAuthStore } from '../store/authStore';
-import { dashboardService } from '../services/dashboardService';
 import { useGroupsStore } from '../store/groupsStore';
 import { useScheduleStore, type DayOfWeek } from '../store/scheduleStore';
 import type {
@@ -11,7 +10,14 @@ import type {
   DashboardPendingVote,
 } from '../types/dashboard.types';
 import { DEFAULT_CATEGORY_COLOR } from '../theme/palette';
+import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useModalDismiss } from '../hooks/useModalDismiss';
+import { useIncidentsStore } from '../store/incidentsStore';
+import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
+import { ResumenPuntualidad } from '../components/ResumenPuntualidad';
+import { AccionesRapidas } from '../components/AccionesRapidas';
+import { AvisoError } from '../components/AvisoError';
+import { isApiEnabled } from '../lib/apiClient';
 
 interface TodayScheduleBlock {
   id: string;
@@ -28,7 +34,9 @@ export default function DashboardPage() {
   const proposals = useGroupsStore((s) => s.groupProposals);
   const voteProposalWindow = useGroupsStore((s) => s.voteProposalWindow);
   const scheduleSlots = useScheduleStore((s) => s.slots);
-  const userEmail = user?.email || 'alex.rodriguez@huecko.com';
+  // El usuario de ejemplo solo existe en modo demo: con backend, votar o avisar
+  // en su nombre sería actuar como otra persona.
+  const userEmail = user?.email || (isApiEnabled ? '' : 'alex.rodriguez@huecko.com');
 
   const today = (['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'] as DayOfWeek[])[new Date().getDay()];
   const todayBlocks: TodayScheduleBlock[] = useMemo(
@@ -97,8 +105,17 @@ export default function DashboardPage() {
   );
 
   const reportIncident = useGroupsStore((s) => s.reportIncident);
-  const voteReplanification = useGroupsStore((s) => s.voteReplanification);
+  // Modulos 4 y 5: estado real del evento, alimentado por REST y por WebSocket.
+  const retrasosDelPlan = useIncidentsStore((s) => s.retrasos);
+  const votaciones = useIncidentsStore((s) => s.votaciones);
+  const cargarPlanIncidencias = useIncidentsStore((s) => s.cargarPlan);
+  const votarExpres = useIncidentsStore((s) => s.votarExpres);
+  const errorIncidencias = useIncidentsStore((s) => s.error);
+  const limpiarErrorIncidencias = useIncidentsStore((s) => s.limpiarError);
   const withdrawIncident = useGroupsStore((s) => s.withdrawIncident);
+  const syncError = useGroupsStore((s) => s.syncError);
+  const clearSyncError = useGroupsStore((s) => s.clearSyncError);
+  const [enviandoAviso, setEnviandoAviso] = useState(false);
 
   const upcomingEvent = useMemo<UpcomingEventDetail | null>(() => {
     const proposal = proposals.find((item) => item.estado === 'confirmado');
@@ -126,6 +143,24 @@ export default function DashboardPage() {
     };
   }, [groups, proposals, userEmail]);
 
+  /* Módulos 4 y 5 del evento en curso. Se piden una vez al aparecer el evento;
+     a partir de ahí el canal en tiempo real los mantiene al día sin volver a
+     preguntar (ver `useTiempoReal`).
+
+     La dependencia es el ID y no el objeto `upcomingEvent`: ese objeto sale de
+     un `useMemo` sobre `groups` y `proposals`, y el store reemplaza esos arrays
+     enteros en cada refresco. Con el objeto en las dependencias, cualquier
+     cambio en cualquier grupo relanzaba las dos peticiones — y como cada evento
+     del canal llama a `fetchProposals`, el tiempo real se realimentaba a sí
+     mismo. */
+  const upcomingEventId = upcomingEvent?.id;
+  useEffect(() => {
+    if (upcomingEventId) void cargarPlanIncidencias(upcomingEventId);
+  }, [upcomingEventId, cargarPlanIncidencias]);
+
+  const retrasos = upcomingEvent ? retrasosDelPlan[upcomingEvent.id] ?? [] : [];
+  const votacionExpres = upcomingEvent ? votaciones[upcomingEvent.id] ?? null : null;
+
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isDelayModalOpen, setIsDelayModalOpen] = useState(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
@@ -135,10 +170,11 @@ export default function DashboardPage() {
   useModalDismiss(isDelayModalOpen, () => setIsDelayModalOpen(false));
   useModalDismiss(isIncidentModalOpen, () => setIsIncidentModalOpen(false));
   const [incidentReason, setIncidentReason] = useState('');
-  const [notificationToast, setNotificationToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
+  type Aviso = { message: string; type: 'success' | 'info' | 'warning' };
+  const [notificationToast, mostrarAviso] = useAvisoEfimero<Aviso>();
+  const showToast = (message: string, type: Aviso['type'] = 'success') =>
+    mostrarAviso({ message, type });
 
-  // Estado de la votación exprés ante una ausencia importante
-  const [hasExpressVoteAlert, setHasExpressVoteAlert] = useState(true);
   /* Si ya avisé de algo sobre este plan, lo que toca es retirarlo, no mandar
      otro aviso encima: era lo que permitía avisar, votar y volver a avisar. */
   const miAvisoAbierto = upcomingEvent
@@ -147,14 +183,6 @@ export default function DashboardPage() {
         ?.incidencias?.find((i) => i.userEmail === userEmail && !i.resuelta) ?? null
     : null;
 
-  const [expressVoteChoice, setExpressVoteChoice] = useState<'reprogramar' | 'cancelar' | 'mantener' | null>(null);
-
-  const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
-    setNotificationToast({ message, type });
-    setTimeout(() => {
-      setNotificationToast(null);
-    }, 3500);
-  };
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -163,56 +191,74 @@ export default function DashboardPage() {
     return 'Buenas noches';
   };
 
-  const displayName = user?.nombre || 'Alejandro';
+  const displayName = user?.nombre || (isApiEnabled ? '' : 'Alejandro');
 
-  const handleVote = (voteId: string, windowId: string) => {
-    voteProposalWindow(voteId, windowId, userEmail);
-    showToast('Tu voto ha sido registrado correctamente.', 'success');
+  const handleVote = async (voteId: string, windowId: string) => {
+    const guardado = await voteProposalWindow(voteId, windowId, userEmail);
+    // Si el servidor rechazó el voto, el motivo ya se muestra arriba.
+    if (guardado) showToast('Tu voto ha sido registrado correctamente.', 'success');
   };
 
+  /* Un solo camino para avisar, con o sin servidor: `reportIncident` manda el
+     aviso al backend (RF-12 / RF-15), actualiza el panel del evento y el plan
+     local. Antes el retraso se enviaba dos veces, y el imprevisto usaba un
+     servicio simulado que respondía «notificado» sin enviar nada. */
   const handleSendDelay = async () => {
-    if (!upcomingEvent) return;
-    const res = await dashboardService.reportDelay(upcomingEvent.id, customDelayMinutes, userEmail);
-    
-    reportIncident(upcomingEvent.id, {
-      userEmail,
-      userName: user?.nombre || 'Tú',
-      tipo: 'tardanza',
-      motivo: `Llegará con ${customDelayMinutes} minutos de retraso.`,
-      minutosTardanza: customDelayMinutes,
-    });
-
-    setIsDelayModalOpen(false);
-    showToast(res.message, 'warning');
+    if (!upcomingEvent || enviandoAviso) return;
+    setEnviandoAviso(true);
+    try {
+      await reportIncident(upcomingEvent.id, {
+        userEmail,
+        userName: user?.nombre || 'Tú',
+        tipo: 'tardanza',
+        motivo: `Llegará con ${customDelayMinutes} minutos de retraso.`,
+        minutosTardanza: customDelayMinutes,
+      });
+      setIsDelayModalOpen(false);
+      showToast(
+        `Avisaste que llegarás ${customDelayMinutes} min tarde. El grupo ya lo ve.`,
+        'warning',
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : 'No se pudo avisar del retraso. Vuelve a intentarlo.',
+        'warning',
+      );
+    } finally {
+      setEnviandoAviso(false);
+    }
   };
 
   const handleSendIncident = async () => {
-    if (!upcomingEvent) return;
-    const res = await dashboardService.cancelAttendance(upcomingEvent.id, incidentReason, userEmail);
-    
-    reportIncident(upcomingEvent.id, {
-      userEmail,
-      userName: user?.nombre || 'Tú',
-      tipo: 'imprevisto',
-      motivo: incidentReason || 'Imprevisto de última hora',
-    });
-
-    setIsIncidentModalOpen(false);
-    showToast(res.message, 'info');
-  };
-
-  const handleExpressVoteSubmit = (choice: 'reprogramar' | 'cancelar' | 'mantener') => {
-    setExpressVoteChoice(choice);
-    const action = choice === 'reprogramar' ? 'reschedule' : choice === 'cancelar' ? 'cancel' : 'keep';
-    if (upcomingEvent) {
-      voteReplanification(upcomingEvent.id, action, userEmail);
+    if (!upcomingEvent || enviandoAviso) return;
+    setEnviandoAviso(true);
+    try {
+      const resultado = await reportIncident(upcomingEvent.id, {
+        userEmail,
+        userName: user?.nombre || 'Tú',
+        tipo: 'imprevisto',
+        motivo: incidentReason || 'Imprevisto de última hora',
+      });
+      setIsIncidentModalOpen(false);
+      showToast(
+        resultado.replantea
+          ? 'Tu ausencia es crítica: se abrió una votación para decidir qué hacer.'
+          : 'Tu imprevisto se notificó al grupo. El plan sigue en pie.',
+        'info',
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : 'No se pudo enviar el reporte. Vuelve a intentarlo.',
+        'warning',
+      );
+    } finally {
+      setEnviandoAviso(false);
     }
-    showToast(`Votación exprés registrada: "${choice.toUpperCase()}". Notificando al grupo...`, 'warning');
-    setTimeout(() => setHasExpressVoteAlert(false), 3000);
   };
+
 
   return (
-    <div className="min-h-screen bg-surface text-on-surface pb-28 md:pb-12">
+    <div className="min-h-dvh bg-surface text-on-surface pb-28 md:pb-12">
       <Navbar currentTab="dashboard" />
 
       {/* Notificación Flotante (Toast) */}
@@ -226,6 +272,11 @@ export default function DashboardPage() {
       )}
 
       <main id="contenido" tabIndex={-1} className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 pt-8">
+        {syncError && <AvisoError mensaje={syncError} onCerrar={clearSyncError} />}
+        {errorIncidencias && (
+          <AvisoError mensaje={errorIncidencias} onCerrar={limpiarErrorIncidencias} />
+        )}
+
         {/* Cabecera de la página */}
         <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-2 border-b border-outline-variant/40">
           <div>
@@ -233,101 +284,31 @@ export default function DashboardPage() {
               {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             <h1 className="text-3xl sm:text-4xl font-headline font-bold text-on-surface mt-1">
-              {getGreeting()}, <span className="text-primary">{displayName}.</span>
+              {getGreeting()}
+              {displayName ? (
+                <>
+                  , <span className="text-primary">{displayName}.</span>
+                </>
+              ) : (
+                '.'
+              )}
             </h1>
             <p className="text-sm md:text-base text-on-surface-variant mt-1">
               Esto es lo que está pasando en tus grupos, horarios y planes el día de hoy.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => navigate('/schedule')}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-surface-container hover:bg-surface-variant text-primary-hover text-xs font-bold border border-outline-variant transition-all cursor-pointer shadow-xs active:scale-95"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-[18px]">document_scanner</span>
-              <span>Importar OCR</span>
-            </button>
-
-            <button
-              onClick={() => navigate('/groups')}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer active:scale-95"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
-              <span>Proponer plan</span>
-            </button>
-          </div>
         </section>
 
-        {/* Alerta de votación exprés ante una baja crítica */}
-        {hasExpressVoteAlert && (
-          <section className="p-5 rounded-3xl bg-warning/10 border-2 border-warning/60/40 text-on-surface shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fade-in">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-2xl bg-warning text-on-warning flex items-center justify-center shrink-0 shadow-xs">
-                <span aria-hidden="true" className="material-symbols-outlined text-[24px]">crisis_alert</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-lg bg-warning-container text-on-warning-container text-2xs font-bold uppercase">
-                    Votación exprés en curso
-                  </span>
-                  <span className="text-xs font-bold text-on-warning-container">Tiempo restante: 14:20 min</span>
-                </div>
-                <h3 className="text-base font-bold text-on-surface mt-1">
-                  María C. (Rol crítico) reportó imprevisto para la reunión del grupo
-                </h3>
-                <p className="text-xs text-on-surface-variant">
-                  Motivo: "Cruce con examen sorpresa". ¿Qué prefieres que haga el grupo?
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              <button
-                type="button"
-                onClick={() => handleExpressVoteSubmit('reprogramar')}
-                className={`flex-1 md:flex-initial min-w-24 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
-                  expressVoteChoice === 'reprogramar'
-                    ? 'bg-primary text-on-primary shadow-xs'
-                    : 'bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container'
-                }`}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">event_repeat</span>
-                Reprogramar
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExpressVoteSubmit('cancelar')}
-                className={`flex-1 md:flex-initial min-w-24 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
-                  expressVoteChoice === 'cancelar'
-                    ? 'bg-error text-on-error shadow-xs'
-                    : 'bg-surface-container-lowest border border-outline-variant text-error hover:bg-error-container'
-                }`}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">close</span>
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExpressVoteSubmit('mantener')}
-                className={`flex-1 md:flex-initial min-w-24 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap inline-flex items-center justify-center gap-1.5 ${
-                  expressVoteChoice === 'mantener'
-                    ? 'bg-primary text-on-primary shadow-xs'
-                    : 'bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container'
-                }`}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
-                Mantener
-              </button>
-            </div>
-          </section>
-        )}
+        {/* Las acciones viven aquí, no al final de la página: es donde el ojo
+            ya está después de leer el saludo. */}
+        <AccionesRapidas />
 
         {/* Tarjetas de Métricas Resumen */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <button type="button"
             onClick={() => navigate('/groups')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-on-surface-variant">Grupos activos</span>
@@ -344,7 +325,7 @@ export default function DashboardPage() {
 
           <button type="button"
             onClick={() => navigate('/groups')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-on-surface-variant">Votaciones activas</span>
@@ -363,7 +344,7 @@ export default function DashboardPage() {
 
           <button type="button"
             onClick={() => navigate('/schedule')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-on-surface-variant">Huecos coincidentes</span>
@@ -380,7 +361,7 @@ export default function DashboardPage() {
 
           <button type="button"
             onClick={() => navigate('/schedule')}
-            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary transition-all cursor-pointer group shadow-xs"
+            className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-on-surface-variant">Mi horario</span>
@@ -396,6 +377,18 @@ export default function DashboardPage() {
           </button>
         </section>
 
+        {/* Votación exprés (RF-17). Va ANTES del próximo plan a propósito: es
+            lo único de esta página con un plazo corriendo, y enterrarla bajo
+            el evento haría que se venciera sin que nadie la viera. */}
+        {votacionExpres && (
+          <section className="space-y-3">
+            <VotacionExpresPanel
+              votacion={votacionExpres}
+              onVotar={(opcion) => votarExpres(votacionExpres.planId, opcion)}
+            />
+          </section>
+        )}
+
         {/* Próximo plan confirmado */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
@@ -404,7 +397,7 @@ export default function DashboardPage() {
           </div>
 
           {upcomingEvent ? (
-            <div className="bg-surface-container border border-outline-variant rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-sm">
+            <div className="bg-surface-container rounded-3xl p-6 md:p-8 relative overflow-hidden elev-1">
               <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
                 <div className="space-y-3 max-w-2xl">
                   <div className="flex items-center gap-2">
@@ -492,7 +485,7 @@ export default function DashboardPage() {
         {/* SECCIÓN DOBLE: MI HORARIO DE HOY (IZQUIERDA) Y MIS GRUPOS ACTIVOS (DERECHA) */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Mi horario de Hoy */}
-          <div className="p-6 rounded-3xl bg-surface-container-lowest border border-outline-variant/70 shadow-sm space-y-4">
+          <div className="p-6 rounded-3xl bg-surface-container-lowest elev-1 space-y-4">
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-semibold text-on-surface">Mi horario de hoy</h3>
@@ -556,7 +549,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Mis grupos activos */}
-          <div className="p-6 rounded-3xl bg-surface-container-lowest border border-outline-variant/70 shadow-sm space-y-4">
+          <div className="p-6 rounded-3xl bg-surface-container-lowest elev-1 space-y-4">
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-semibold text-on-surface">Mis grupos activos</h3>
@@ -645,7 +638,7 @@ export default function DashboardPage() {
               {pendingVotes.map((vote) => (
                 <div
                   key={vote.id}
-                  className="p-6 rounded-3xl bg-surface-container-lowest border border-outline-variant/70 shadow-sm space-y-4"
+                  className="p-6 rounded-3xl bg-surface-container-lowest elev-1 space-y-4"
                 >
                   <div className="flex justify-between items-start">
                     <div>
@@ -672,7 +665,7 @@ export default function DashboardPage() {
                     {vote.suggestedWindows.map((win) => (
                       <button type="button"
                         key={win.id}
-                        onClick={() => handleVote(vote.id, win.id)}
+                        onClick={() => void handleVote(vote.id, win.id)}
                         aria-pressed={win.hasVoted}
                         className={`w-full text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
                           win.hasVoted
@@ -720,48 +713,12 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* Accesos Rápidos (Quick Hub) */}
-        <section className="p-6 rounded-3xl bg-surface-container border border-outline-variant/50">
-          <h3 className="text-sm font-bold text-on-surface mb-3">Acciones rápidas</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <button
-              onClick={() => navigate('/groups')}
-              className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary hover:bg-surface-container flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-primary mb-1 group-hover:scale-110 transition-transform">
-                group_add
-              </span>
-              <span className="text-xs font-bold text-on-surface">Crear grupo</span>
-            </button>
-
-            <button
-              onClick={() => navigate('/schedule')}
-              className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary hover:bg-surface-container flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-primary mb-1 group-hover:scale-110 transition-transform">
-                edit_calendar
-              </span>
-              <span className="text-xs font-bold text-on-surface">Ajustar horario</span>
-            </button>
-
-
-            <button
-              onClick={() => navigate('/onboarding')}
-              className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary hover:bg-surface-container flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-primary mb-1 group-hover:scale-110 transition-transform">
-                school
-              </span>
-              <span className="text-xs font-bold text-on-surface">Tutorial de Huecko</span>
-            </button>
-          </div>
-        </section>
       </main>
 
       {/* Modal de detalle del evento */}
       {isDetailModalOpen && upcomingEvent && (
         <div role="dialog" aria-modal="true" aria-label="Detalles del evento" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-xs">
-          <div className="bg-surface border border-outline-variant rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl animate-modal-in">
+          <div className="bg-surface rounded-3xl max-w-2xl w-full overflow-hidden elev-3 animate-modal-in">
             {/* Banner de Imagen Superior */}
             <div className="relative h-48 sm:h-60 w-full overflow-hidden">
               <img
@@ -824,6 +781,12 @@ export default function DashboardPage() {
                   <span className="text-2xs text-on-surface-variant">Monitoreo de puntualidad</span>
                 </div>
 
+                {/* RF-14: quién llega tarde y cuánto, con datos del servidor.
+                    Va sobre la rejilla de asistentes porque es lo que se mira
+                    con prisa: la rejilla dice quién viene, esto dice si hay
+                    que esperar. */}
+                <ResumenPuntualidad retrasos={retrasos} usuarioId={user?.id} />
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                   {upcomingEvent.attendees.map((att, idx) => (
                     <div
@@ -876,17 +839,22 @@ export default function DashboardPage() {
                     <p className="flex-1 text-xs text-on-surface-variant">
                       Ya avisaste: <strong className="text-on-surface">{miAvisoAbierto.motivo}</strong>
                     </p>
-                    <button
-                      onClick={() => {
-                        withdrawIncident(upcomingEvent.id, userEmail);
-                        setIsDetailModalOpen(false);
-                        showToast('Retiraste tu aviso. El plan vuelve a su estado anterior.', 'info');
-                      }}
-                      className="py-3 px-4 rounded-2xl bg-surface-container-lowest hover:bg-surface-container text-on-surface border border-outline-variant text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
-                    >
-                      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">undo</span>
-                      <span>Retirar mi aviso</span>
-                    </button>
+                    {/* Con backend solo una tardanza se puede retirar. */}
+                    {(!isApiEnabled || miAvisoAbierto.tipo === 'tardanza') && (
+                      <button
+                        onClick={async () => {
+                          const retirado = await withdrawIncident(upcomingEvent.id, userEmail);
+                          setIsDetailModalOpen(false);
+                          if (retirado) {
+                            showToast('Retiraste tu aviso. El plan vuelve a su estado anterior.', 'info');
+                          }
+                        }}
+                        className="py-3 px-4 rounded-2xl bg-surface-container-lowest hover:bg-surface-container text-on-surface border border-outline-variant text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
+                      >
+                        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">undo</span>
+                        <span>Retirar mi aviso</span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -922,7 +890,7 @@ export default function DashboardPage() {
       {/* Modal para avisar retraso */}
       {isDelayModalOpen && (
         <div role="dialog" aria-modal="true" aria-label="Avisar retraso" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-xs">
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-modal-in">
+          <div className="bg-surface-container-lowest rounded-3xl max-w-md w-full p-6 space-y-5 elev-3 animate-modal-in">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-on-surface flex items-center gap-2">
                 <span aria-hidden="true" className="material-symbols-outlined text-on-warning-container">timer</span>
@@ -972,10 +940,11 @@ export default function DashboardPage() {
               </button>
               <button
                 type="button"
-                onClick={handleSendDelay}
-                className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold cursor-pointer transition-all shadow-xs"
+                onClick={() => void handleSendDelay()}
+                disabled={enviandoAviso}
+                className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold cursor-pointer transition-all shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Confirmar Aviso
+                {enviandoAviso ? 'Enviando…' : 'Confirmar Aviso'}
               </button>
             </div>
           </div>
@@ -985,7 +954,7 @@ export default function DashboardPage() {
       {/* Modal para reportar imprevisto */}
       {isIncidentModalOpen && (
         <div role="dialog" aria-modal="true" aria-label="Reportar imprevisto" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-xs">
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-modal-in">
+          <div className="bg-surface-container-lowest rounded-3xl max-w-md w-full p-6 space-y-5 elev-3 animate-modal-in">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-on-error-container flex items-center gap-2">
                 <span aria-hidden="true" className="material-symbols-outlined text-error">report</span>
@@ -1026,10 +995,11 @@ export default function DashboardPage() {
               </button>
               <button
                 type="button"
-                onClick={handleSendIncident}
-                className="flex-1 py-2.5 rounded-xl bg-error hover:bg-error text-on-error text-xs font-bold cursor-pointer transition-all shadow-xs"
+                onClick={() => void handleSendIncident()}
+                disabled={enviandoAviso}
+                className="flex-1 py-2.5 rounded-xl bg-error hover:bg-error text-on-error text-xs font-bold cursor-pointer transition-all shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Enviar Reporte
+                {enviandoAviso ? 'Enviando…' : 'Enviar Reporte'}
               </button>
             </div>
           </div>
