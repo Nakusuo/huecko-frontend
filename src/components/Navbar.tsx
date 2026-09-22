@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { isApiEnabled } from '../lib/apiClient';
+import { HueckoMark } from './Pixel';
 
 export type NavTab = 'dashboard' | 'schedule' | 'groups' | 'profile';
 
@@ -102,14 +103,9 @@ export default function Navbar({ currentTab }: NavbarProps) {
         className="hidden md:block sticky top-0 z-50 w-full border-b border-outline-variant bg-surface/90 backdrop-blur-sm"
       >
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-8 px-6 lg:px-8">
-        <Link to="/dashboard" className="flex items-center gap-3 rounded-full">
-          <span
-            aria-hidden="true"
-            className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center font-black text-on-primary text-lg"
-          >
-            H
-          </span>
-          <span className="text-xl font-bold text-on-surface tracking-tight">Huecko</span>
+        <Link to="/dashboard" className="flex items-center gap-3">
+          <HueckoMark size={36} />
+          <span className="font-headline text-xl text-on-surface">Huecko</span>
         </Link>
 
         {/* Distingue de un vistazo si la app habla con el backend o corre en
