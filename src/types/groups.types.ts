@@ -90,8 +90,6 @@ export interface PlanProposal {
   ventanaConfirmadaId?: string | null;
   /** Si acepta votos ahora, según el reloj del servidor. En demo no viene. */
   votacionAbierta?: boolean;
-  incidencias?: PlanIncidence[];
-  votosReplanificacion?: { cancel: string[]; reschedule: string[]; keep: string[] };
 }
 
 /* ------------------------------------------------------------------ *
