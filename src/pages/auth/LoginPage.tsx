@@ -3,13 +3,16 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { loginUser } from '../../services/authService';
+import { DEMO_CREDENTIALS, loginUser } from '../../services/authService';
+import { isApiEnabled } from '../../lib/apiClient';
+import { destinoTrasLogin } from '../../routes/destino';
 
 const loginSchema = z.object({
   email: z
     .string()
+    .trim()
     .min(1, 'El correo es requerido')
     .email('Ingresa un correo válido'),
   password: z
@@ -23,8 +26,10 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const { login } = useAuthStore();
+  const login = useAuthStore((s) => s.login);
+  const sesionExpirada = useAuthStore((s) => s.sesionExpirada);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const {
     register,
@@ -40,7 +45,8 @@ export default function LoginPage() {
     try {
       const res = await loginUser(data);
       login(res.user, res.token);
-      navigate('/dashboard', { replace: true });
+      // De vuelta a la página donde estaba (p. ej. si la sesión expiró ahí).
+      navigate(destinoTrasLogin(location.state), { replace: true });
     } catch (err) {
       const msg =
         err instanceof Error
@@ -51,10 +57,10 @@ export default function LoginPage() {
   };
 
   const fillDemoCredentials = () => {
-    setValue('email', 'alex.rodriguez@huecko.com', {
+    setValue('email', DEMO_CREDENTIALS.email, {
       shouldValidate: true,
     });
-    setValue('password', 'demo1234', {
+    setValue('password', DEMO_CREDENTIALS.password, {
       shouldValidate: true,
     });
   };
@@ -73,6 +79,15 @@ export default function LoginPage() {
               </p>
             </div>
 
+            {/* Tras un 401 la sesión se cierra sola: sin esto el usuario aparecía
+                en el login sin saber por qué. */}
+            {sesionExpirada && (
+              <div role="status" className="mb-4 px-3 py-2 rounded-xl bg-warning-container border border-warning/30 text-xs text-on-warning-container flex items-start gap-2">
+                <span aria-hidden="true" className="material-symbols-outlined text-[16px] shrink-0">schedule</span>
+                <span>Tu sesión expiró, vuelve a entrar.</span>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
               {/* Campo Email */}
               <div className="space-y-1.5">
@@ -81,7 +96,7 @@ export default function LoginPage() {
                     golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
                     ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
                 <div className="flex items-baseline justify-between gap-3">
-                  <label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  <label htmlFor="login-email" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                     Correo electrónico
                   </label>
                   {errors.email && (
@@ -97,7 +112,7 @@ export default function LoginPage() {
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">mail</span>
                   </span>
                   <input
-                    id="email"
+                    id="login-email"
                     type="email"
                     autoComplete="email"
                     placeholder="alex.rodriguez@huecko.com"
@@ -118,7 +133,7 @@ export default function LoginPage() {
                     golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
                     ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
                 <div className="flex items-baseline justify-between gap-3">
-                  <label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  <label htmlFor="login-password" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                     Contraseña
                   </label>
                   {errors.password && (
@@ -134,7 +149,7 @@ export default function LoginPage() {
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">lock</span>
                   </span>
                   <input
-                    id="password"
+                    id="login-password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
                     placeholder="••••••••"
@@ -210,13 +225,16 @@ export default function LoginPage() {
               ¿No tienes cuenta?{' '}
               <Link
                 to="/register"
+                state={location.state}
                 className="text-primary hover:text-primary-hover font-bold underline transition-colors"
               >
                 Regístrate gratis
               </Link>
             </p>
 
-            {/* Tarjeta de Credenciales Demo */}
+            {/* Tarjeta de Credenciales Demo. Solo en modo demo: con backend esa
+                cuenta no existe (el seed está desactivado). */}
+            {!isApiEnabled && (
             <div className="mt-5 p-3.5 rounded-2xl border border-dashed border-secondary bg-surface-container-low flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-primary flex items-center gap-1">
@@ -232,9 +250,10 @@ export default function LoginPage() {
                 </button>
               </div>
               <p className="text-xs text-on-surface-variant font-mono bg-surface-container-lowest px-2 py-1 rounded-lg border border-outline-variant/40">
-                alex.rodriguez@huecko.com / demo1234
+                {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}
               </p>
             </div>
+            )}
       </div>
     </div>
   );

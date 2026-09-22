@@ -34,7 +34,12 @@ export class ApiError extends Error {
   }
 }
 
-/** Se emite cuando el backend responde 401: la UI puede mandar al login. */
+/**
+ * Se emite cuando el backend responde 401 con una sesión abierta. La sesión ya
+ * se cierra aquí (`expirarSesion`), `ProtectedRoute` manda al login recordando
+ * la página y el login explica el motivo; el evento queda para quien quiera
+ * reaccionar además (p. ej. cerrar un modal).
+ */
 export const UNAUTHORIZED_EVENT = 'huecko:unauthorized';
 
 export const apiClient = axios.create({
@@ -81,8 +86,10 @@ apiClient.interceptors.response.use(
 
     const { status, data } = error.response;
 
-    if (status === 401) {
-      useAuthStore.getState().logout();
+    /* Solo es «sesión expirada» si había una sesión. Un 401 sin token (p. ej.
+       una petición pública) no debe decir al usuario que su sesión caducó. */
+    if (status === 401 && useAuthStore.getState().isAuthenticated) {
+      useAuthStore.getState().expirarSesion();
       window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
       return Promise.reject(new ApiError('Tu sesión expiró. Inicia sesión de nuevo.', status));
     }
