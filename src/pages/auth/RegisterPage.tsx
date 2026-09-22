@@ -20,7 +20,10 @@ const registerSchema = z
     password: z
       .string()
       .min(1, 'La contraseña es requerida')
-      .min(6, 'Mínimo 6 caracteres'),
+      // Los mismos límites que el backend: con 6 el formulario dejaba pasar
+      // contraseñas que el servidor rechazaba después.
+      .min(8, 'Mínimo 8 caracteres')
+      .max(72, 'Máximo 72 caracteres'),
     confirmPassword: z
       .string()
       .min(1, 'Confirma tu contraseña'),
