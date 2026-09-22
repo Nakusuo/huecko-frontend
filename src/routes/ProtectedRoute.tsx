@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useScheduleStore } from '../store/scheduleStore';
 import { useGroupsStore } from '../store/groupsStore';
@@ -7,6 +7,7 @@ import { useTiempoReal } from '../hooks/useTiempoReal';
 
 export function ProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const location = useLocation();
   const hydrateSchedule = useScheduleStore((s) => s.hydrate);
   const fetchGroups = useGroupsStore((s) => s.fetchGroupsFromServer);
 
@@ -24,5 +25,7 @@ export function ProtectedRoute() {
      privada, que se cierra al salir. */
   useTiempoReal();
 
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+  /* Se recuerda de dónde venía para volver ahí tras entrar (sesión expirada,
+     enlace directo a un grupo…). */
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace state={{ from: location }} />;
 }

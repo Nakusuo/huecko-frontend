@@ -3,15 +3,32 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useAuthStore } from '../store/authStore';
-import { useProfileStore, type UserProfileData } from '../store/profileStore';
+import { useProfileStore, usePreferenciasLocales } from '../store/profileStore';
 import Toggle from '../components/Toggle';
 import { useGroupsStore } from '../store/groupsStore';
+import { isApiEnabled } from '../lib/apiClient';
+
+/** Lo que se edita en «Datos personales»: lo único que guarda el servidor. */
+interface DatosCuenta {
+  nombre: string;
+  email: string;
+}
 
 export default function ProfilePage() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
-  const { profile, updateProfile, fetchProfile } = useProfileStore();
+  const user = useAuthStore((s) => s.user);
+  const fetchProfile = useProfileStore((s) => s.fetchProfile);
+  const guardarPerfil = useProfileStore((s) => s.guardarPerfil);
+  const isSaving = useProfileStore((s) => s.isSaving);
+  const syncError = useProfileStore((s) => s.syncError);
+  const setPreferencias = useProfileStore((s) => s.setPreferencias);
+  const { avatarUrl, alertasRetrasos } = usePreferenciasLocales();
   const activeGroupsCount = useGroupsStore((s) => s.groups.length);
+
+  /* Nombre y correo salen de la sesión: es lo mismo que pintan la barra y el
+     saludo, así que tras guardar todo muestra el dato nuevo a la vez. */
+  const datos: DatosCuenta = { nombre: user?.nombre ?? '', email: user?.email ?? '' };
 
   /* Trae el perfil del backend al abrir la página. En modo demo `fetchProfile`
      no hace nada, así que el efecto es inofensivo sin servidor. */
@@ -25,7 +42,8 @@ export default function ProfilePage() {
   };
 
   const [isEditing, setIsEditing] = useState(false);
-  const [tempProfile, setTempProfile] = useState<UserProfileData>(profile);
+  const [tempProfile, setTempProfile] = useState<DatosCuenta>(datos);
+  const [saveError, setSaveError] = useState('');
   /* El aviso de «guardado» comparte el problema de los demás: dos guardados
      seguidos y el temporizador del primero apagaba el segundo antes de tiempo. */
   const [saveSuccess, marcarGuardado] = useAvisoEfimero<true>(3000);
@@ -36,8 +54,8 @@ export default function ProfilePage() {
   /**
    * Reduce la imagen elegida a un cuadrado de 256 px antes de guardarla.
    *
-   * La foto se persiste como data URL dentro del perfil, y el perfil vive en
-   * `localStorage`: una foto de cámara sin reescalar (varios MB en base64)
+   * La foto se persiste como data URL en las preferencias locales, que viven en
+   * `localStorage` (el servidor no guarda fotos): una foto de cámara sin reescalar (varios MB en base64)
    * revienta la cuota del navegador. Recortar al centro además evita que las
    * fotos verticales salgan deformadas en el círculo del avatar.
    */
@@ -100,27 +118,37 @@ export default function ProfilePage() {
     }
 
     try {
-      const avatarUrl = await shrinkToDataUrl(file);
-      await updateProfile({ avatarUrl });
+      setPreferencias({ avatarUrl: await shrinkToDataUrl(file) });
     } catch (error) {
       setAvatarError(error instanceof Error ? error.message : 'No se pudo cargar la imagen.');
     }
   };
 
   const startEdit = () => {
-    setTempProfile(profile);
+    setTempProfile(datos);
+    setSaveError('');
     setIsEditing(true);
   };
 
+  /* Antes el correo se podía editar pero no se enviaba, y el aviso de éxito
+     salía siempre, fallara o no el guardado. Ahora se espera la respuesta: si
+     el servidor lo rechaza (p. ej. correo en uso) se muestra su mensaje y el
+     formulario sigue abierto con lo escrito. */
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateProfile(tempProfile);
-    setIsEditing(false);
-    marcarGuardado(true);
+    setSaveError('');
+    try {
+      await guardarPerfil(tempProfile);
+      setIsEditing(false);
+      marcarGuardado(true);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'No se pudo guardar el perfil. Inténtalo de nuevo.');
+    }
   };
 
   const handleCancel = () => {
-    setTempProfile(profile);
+    setTempProfile(datos);
+    setSaveError('');
     setIsEditing(false);
   };
 
@@ -133,9 +161,16 @@ export default function ProfilePage() {
         <header className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold text-on-surface mb-2 font-headline">Perfil de usuario</h1>
           <p className="text-on-surface-variant text-sm md:text-base">
-            Administra tu información personal, privacidad de agendas y preferencias.
+            Administra los datos de tu cuenta y las preferencias de este dispositivo.
           </p>
         </header>
+
+        {syncError && !isEditing && (
+          <div role="status" className="mb-6 p-4 rounded-xl bg-warning-container border border-warning/30 text-on-warning-container text-sm flex items-center gap-2">
+            <span aria-hidden="true" className="material-symbols-outlined text-[20px]">cloud_off</span>
+            <span>No se pudieron traer tus datos del servidor: {syncError}</span>
+          </div>
+        )}
 
         {saveSuccess && (
           <div className="mb-6 p-4 rounded-xl bg-success-container border border-success/40 text-on-success-container text-sm flex items-center gap-2 animate-fade-in">
@@ -148,15 +183,15 @@ export default function ProfilePage() {
           {/* Card: Avatar e Información básica */}
           <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6 flex flex-col items-center text-center">
             <div className="relative mb-4">
-              {profile.avatarUrl ? (
+              {avatarUrl ? (
                 <img
-                  src={profile.avatarUrl}
-                  alt={`Foto de perfil de ${profile.nombre}`}
+                  src={avatarUrl}
+                  alt={`Foto de perfil de ${datos.nombre}`}
                   className="w-24 h-24 rounded-full object-cover shadow-md shadow-secondary/20"
                 />
               ) : (
                 <div className="w-24 h-24 rounded-full bg-olive flex items-center justify-center text-ink font-headline text-3xl shadow-md">
-                  {profile.nombre.charAt(0)}
+                  {datos.nombre.charAt(0).toUpperCase()}
                 </div>
               )}
               <input
@@ -170,23 +205,30 @@ export default function ProfilePage() {
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
                 className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-surface-container-lowest flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface transition-all cursor-pointer elev-0"
-                aria-label={profile.avatarUrl ? 'Cambiar foto de perfil' : 'Subir foto de perfil'}
-                title={profile.avatarUrl ? 'Cambiar foto' : 'Subir foto'}
+                aria-label={avatarUrl ? 'Cambiar foto de perfil' : 'Subir foto de perfil'}
+                title={avatarUrl ? 'Cambiar foto' : 'Subir foto'}
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[16px]">photo_camera</span>
               </button>
             </div>
-            <h2 className="text-xl font-bold text-on-surface">{profile.nombre}</h2>
-            <p className="text-xs text-on-surface-variant">{profile.email}</p>
+            <h2 className="text-xl font-bold text-on-surface">{datos.nombre}</h2>
+            <p className="text-xs text-on-surface-variant">{datos.email}</p>
+
+            {/* El servidor no guarda fotos: decirlo evita que alguien crea que su
+                grupo la ve o que la encontrará en otro dispositivo. */}
+            <p className="mt-2 text-2xs text-on-surface-variant flex items-center gap-1">
+              <span aria-hidden="true" className="material-symbols-outlined text-[14px]">devices</span>
+              La foto se guarda solo en este dispositivo.
+            </p>
 
             {avatarError && <p className="mt-2 text-xs text-error font-medium">{avatarError}</p>}
 
-            {profile.avatarUrl && (
+            {avatarUrl && (
               <button
                 type="button"
                 onClick={() => {
                   setAvatarError('');
-                  void updateProfile({ avatarUrl: undefined });
+                  setPreferencias({ avatarUrl: undefined });
                 }}
                 className="mt-2 text-2xs text-on-surface-variant hover:text-error underline cursor-pointer"
               >
@@ -245,111 +287,94 @@ export default function ProfilePage() {
               <form onSubmit={handleSave} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre completo</label>
+                    <label htmlFor={isEditing ? 'perfil-nombre' : undefined} className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre completo</label>
                     {isEditing ? (
                       <input
+                        id="perfil-nombre"
                         type="text"
                         required
+                        maxLength={120}
+                        autoComplete="name"
                         value={tempProfile.nombre}
                         onChange={(e) => setTempProfile({ ...tempProfile, nombre: e.target.value })}
                         className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
                       />
                     ) : (
                       <div className="px-3.5 py-2.5 bg-surface-container-lowest rounded-xl border border-outline-variant/60 text-sm text-on-surface">
-                        {profile.nombre}
+                        {datos.nombre}
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Correo electrónico</label>
+                    <label htmlFor={isEditing ? 'perfil-email' : undefined} className="block text-xs font-medium text-on-surface-variant mb-1.5">Correo electrónico</label>
                     {isEditing ? (
                       <input
+                        id="perfil-email"
                         type="email"
                         required
+                        maxLength={180}
+                        autoComplete="email"
                         value={tempProfile.email}
                         onChange={(e) => setTempProfile({ ...tempProfile, email: e.target.value })}
                         className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
                       />
                     ) : (
-                      <div className="px-3.5 py-2.5 bg-surface-container-lowest rounded-xl border border-outline-variant/60 text-sm text-on-surface">
-                        {profile.email}
+                      <div className="px-3.5 py-2.5 bg-surface-container-lowest rounded-xl border border-outline-variant/60 text-sm text-on-surface break-all">
+                        {datos.email}
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Zona horaria</label>
-                  {isEditing ? (
-                    <select
-                      value={tempProfile.timezone}
-                      onChange={(e) => setTempProfile({ ...tempProfile, timezone: e.target.value })}
-                      className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
-                    >
-                      <option value="America/Lima (GMT-5)">America/Lima (GMT-5)</option>
-                      <option value="America/Mexico_City (GMT-6)">America/Mexico_City (GMT-6)</option>
-                      <option value="America/Bogota (GMT-5)">America/Bogota (GMT-5)</option>
-                      <option value="America/Santiago (GMT-3)">America/Santiago (GMT-3)</option>
-                      <option value="Europe/Madrid (GMT+1)">Europe/Madrid (GMT+1)</option>
-                    </select>
-                  ) : (
-                    <div className="px-3.5 py-2.5 bg-surface-container-lowest rounded-xl border border-outline-variant/60 text-sm text-on-surface">
-                      {profile.timezone}
-                    </div>
-                  )}
-                </div>
+                {isEditing && saveError && (
+                  <div role="alert" className="px-3 py-2 rounded-xl bg-error-container border border-error/30 text-xs text-error flex items-start gap-2">
+                    <span aria-hidden="true" className="material-symbols-outlined text-[16px] shrink-0">cancel</span>
+                    <span>{saveError}</span>
+                  </div>
+                )}
 
                 {isEditing && (
                   <div className="flex justify-end gap-3 pt-3">
                     <button
                       type="button"
                       onClick={handleCancel}
+                      disabled={isSaving}
                       className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container-lowest text-xs font-medium cursor-pointer"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
+                      disabled={isSaving}
+                      className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      Guardar cambios
+                      {isSaving ? 'Guardando…' : 'Guardar cambios'}
                     </button>
                   </div>
                 )}
               </form>
             </div>
 
-            {/* Sección de privacidad y visibilidad */}
-            <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6">
-              <h3 className="text-lg font-bold text-on-surface flex items-center gap-2 mb-4 pb-3 border-b border-outline-variant/60">
-                <span aria-hidden="true" className="material-symbols-outlined text-primary">lock</span>
-                Privacidad de horarios
-              </h3>
-
-              <div className="space-y-4">
-                <Toggle
-                  checked={profile.compartirDetallesHorario}
-                  onChange={(checked) => updateProfile({ compartirDetallesHorario: checked })}
-                  label="Compartir detalles de bloques"
-                  description="Si está desactivado, tus amigos en el grupo solo verán si estás «Ocupado» o «Libre», pero no los nombres de tus clases o actividades."
-                />
-              </div>
-            </div>
-
             {/* Sección: Notificaciones */}
             <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6">
               <h3 className="text-lg font-bold text-on-surface flex items-center gap-2 mb-4 pb-3 border-b border-outline-variant/60">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">notifications</span>
-                Notificaciones y alertas
+                Notificaciones
               </h3>
 
+              {/* Solo silencia esos avisos en la campana. Antes desconectaba todo
+                  el tiempo real y los votos y planes dejaban de actualizarse. */}
               <div className="space-y-3">
                 <Toggle
-                  checked={profile.notificacionesWebSockets}
-                  onChange={(checked) => updateProfile({ notificacionesWebSockets: checked })}
-                  label="Alertas de retrasos e imprevistos"
-                  description="Recibe notificaciones inmediatas cuando alguien de tu grupo avisa de un cambio."
+                  checked={alertasRetrasos}
+                  onChange={(checked) => setPreferencias({ alertasRetrasos: checked })}
+                  label="Avisos de retrasos e imprevistos"
+                  description={
+                    'Muestra en la campana cuando alguien de tu grupo avisa de un retraso, una baja o abre una votación exprés. ' +
+                    'Apagado, los planes y las votaciones se siguen actualizando en vivo. Solo en este dispositivo.' +
+                    (isApiEnabled ? '' : ' En modo demo no llegan avisos de otras personas.')
+                  }
                 />
               </div>
             </div>
