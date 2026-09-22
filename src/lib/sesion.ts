@@ -40,12 +40,12 @@ function guardarDueno(id: string | null): void {
 }
 
 function vaciarDatosDeCuenta(): void {
-  const user = useAuthStore.getState().user;
   useGroupsStore.getState().reset();
   useIncidentsStore.getState().reset();
   useNotificationStore.getState().reset();
   useScheduleStore.getState().reset();
-  useProfileStore.getState().reset(user ? { nombre: user.nombre, email: user.email } : undefined);
+  // Nombre y correo salen de la sesión; las preferencias locales son por cuenta y se quedan.
+  useProfileStore.getState().reset();
 }
 
 /** Si los datos guardados son de otra cuenta, se descartan. */
