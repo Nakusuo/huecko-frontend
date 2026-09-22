@@ -1,21 +1,44 @@
 # Huecko — Frontend
 
-SPA React + TypeScript para coordinar disponibilidad, planes, votaciones e imprevistos entre amigos.
+SPA en React + TypeScript para coordinar disponibilidad, planes, votaciones e
+imprevistos entre amigos. Es el cliente de [`huecko-backend`](https://github.com/Nakusuo/huecko-backend)
+y funciona también sin él, en modo demostración.
 
-## Desarrollo
+El problema que resuelve: cuadrar una quedada entre varias personas se atasca en
+horarios incompatibles, respuestas tardías y bajas de último minuto. Huecko cruza
+las agendas, propone las ventanas donde cabe todo el mundo y, cuando alguien se
+cae, abre una votación exprés con plazo en vez de dejar el plan en el aire.
+
+## Instalación
+
+Requiere **Node.js 20+** y npm.
 
 ```bash
+git clone https://github.com/Nakusuo/huecko-frontend.git
+cd huecko-frontend
 npm install
 npm run dev
 ```
 
-Sin variables de entorno la app opera en **modo demostración**: datos simulados y
-login con `alex.rodriguez@huecko.com` / `demo1234`, sin necesidad de servidor.
+La app queda en `http://localhost:5173`.
 
-Para conectarla a `huecko-backend`, copia `.env.example` a `.env.local` y define
-`VITE_API_URL=/api` (el proxy de Vite reenvía a `VITE_BACKEND_PROXY`, así no hace
-falta configurar CORS en desarrollo). El cliente agrega automáticamente
-`Authorization: Bearer <JWT>`.
+### Modo demostración (sin servidor)
+
+Sin variables de entorno arranca con datos simulados. Entra con
+`alex.rodriguez@huecko.com` / `demo1234`. No hace falta levantar nada más.
+
+### Modo conectado
+
+Copia `.env.example` a `.env.local` y define:
+
+```bash
+VITE_API_URL=/api                          # activa el modo conectado
+VITE_BACKEND_PROXY=http://localhost:8080   # a dónde reenvía el proxy de Vite
+```
+
+Con `VITE_API_URL=/api` el navegador pide al mismo origen y Vite reenvía a Spring
+Boot, así que no hace falta configurar CORS en desarrollo. El cliente añade solo
+la cabecera `Authorization: Bearer <JWT>`.
 
 Para probar el modo conectado sin levantar Spring Boot hay un backend de mentira:
 
@@ -23,8 +46,49 @@ Para probar el modo conectado sin levantar Spring Boot hay un backend de mentira
 npm run dev:stub
 ```
 
-Guía completa de la integración, con lo que falta del lado del backend, en
-[`docs/INTEGRACION_BACKEND.md`](docs/INTEGRACION_BACKEND.md).
+## Scripts
+
+| Script | Qué hace |
+|---|---|
+| `npm run dev` | Servidor de desarrollo con recarga en caliente. |
+| `npm run build` | Comprueba tipos (`tsc -b`) y compila a `dist/`. |
+| `npm run preview` | Sirve lo compilado, para revisar el build de producción. |
+| `npm run test` | Pasa la batería de pruebas una vez. |
+| `npm run test:watch` | Las pruebas en modo vigilancia. |
+| `npm run lint` | Analiza el código con Oxlint. |
+| `npm run dev:stub` | Backend simulado para probar el modo conectado. |
+
+## Tecnologías usadas
+
+| Área | Herramienta | Por qué |
+|---|---|---|
+| Lenguaje | **TypeScript** | Los contratos con el backend se comprueban al compilar, no en ejecución. |
+| Framework | **React 19** | Componentes y reactividad. |
+| Empaquetador | **Vite 8** | Arranque y recarga rápidos; el proxy evita configurar CORS. |
+| Rutas | **React Router 7** | Rutas anidadas y protegidas. |
+| Estado global | **Zustand 5** | Stores pequeños e independientes, con persistencia en `localStorage`. |
+| Estilos | **Tailwind CSS 4** | Diseño responsivo *mobile-first* sobre una paleta propia. |
+| Peticiones HTTP | **Axios** | Interceptores para el JWT y para traducir los errores del servidor. |
+| Formularios | **React Hook Form + Zod** | Validación declarativa, con el mismo esquema para tipos y reglas. |
+| Tiempo real | **STOMP sobre SockJS** | Avisos del servidor sin sondeo, con reserva a *long polling*. |
+| OCR | **Tesseract.js + pdf.js** | Importar el horario desde una captura o un PDF. |
+| Pruebas | **Vitest** | Mismo motor que Vite, sin configuración aparte. |
+| Análisis estático | **Oxlint** | Reglas de React y TypeScript. |
+
+## Estructura
+
+```
+src/
+├── components/   Piezas reutilizables (Navbar, modales, avisos…)
+├── pages/        Una por vista; `auth/` agrupa login y registro
+├── routes/       Definición de rutas y guardia de sesión
+├── store/        Estado global con Zustand
+├── services/     Llamadas al backend, una por módulo
+├── hooks/        Lógica reutilizable (tiempo real, avisos, modales)
+├── lib/          Cliente HTTP, endpoints, sesión, utilidades
+├── types/        Tipos compartidos
+└── theme/        Paleta y escala tipográfica
+```
 
 ## Alcance implementado
 
@@ -32,40 +96,14 @@ Guía completa de la integración, con lo que falta del lado del backend, en
 - Bloques recurrentes y puntuales, edición, eliminación e importación OCR en borrador.
 - Grupos, código de invitación, umbral de disponibilidad y heatmap semanal.
 - Propuestas con 2–5 ventanas, votación, confirmación, retrasos e imprevistos/votación exprés.
-- Notificaciones y UI responsive para móvil y escritorio.
+- Notificaciones y UI responsiva para móvil y escritorio.
 
-El contrato objetivo que debe implementar Spring Boot está en [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md);
-el estado real de la integración, en [`docs/INTEGRACION_BACKEND.md`](docs/INTEGRACION_BACKEND.md).
+## Documentación
 
-## Nota de plantilla
+- [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — contrato que implementa Spring Boot.
+- [`docs/INTEGRACION_BACKEND.md`](docs/INTEGRACION_BACKEND.md) — estado real de la integración.
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+## Flujo de trabajo
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+`main` (estable) ← `develop` (integración) ← `feat/*`, `fix/*`, `docs/*`.
+Los commits siguen [Conventional Commits](https://www.conventionalcommits.org/es/).
