@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
@@ -20,6 +20,17 @@ import { useModalDismiss } from '../hooks/useModalDismiss';
 import { isApiEnabled } from '../lib/apiClient';
 import { AvisoError } from '../components/AvisoError';
 import { avisarAltasPendientes } from '../lib/avisosAltas';
+import {
+  calcularCambios,
+  esOrganizador,
+  hayCambios,
+  miembroActual,
+  rolDe,
+  validarCorreoNuevo,
+} from '../lib/grupos';
+import { calcularCelda, type BloqueDePersona } from '../lib/disponibilidad';
+import { fechaLocalIso, fechasDeSemana, inicioDeSemana, ocupaFecha } from '../lib/horario';
+import { useScheduleStore } from '../store/scheduleStore';
 import { describirAviso } from '../lib/avisosIncidencia';
 import {
   estadoVisible,
@@ -100,9 +111,12 @@ export default function GroupDetailPage() {
     availability,
     fetchAvailability,
     fetchProposals,
-    updateGroupThreshold,
+    availabilityEstado,
+    updateGroup,
     addMembersByEmail,
-    toggleMemberEssential,
+    updateMember,
+    removeMember,
+    leaveGroup,
     addProposal,
     voteProposalWindow,
     closeVotingManually,
@@ -124,9 +138,12 @@ export default function GroupDetailPage() {
       availability: s.availability,
       fetchAvailability: s.fetchAvailability,
       fetchProposals: s.fetchProposals,
-      updateGroupThreshold: s.updateGroupThreshold,
+      availabilityEstado: s.availabilityEstado,
+      updateGroup: s.updateGroup,
       addMembersByEmail: s.addMembersByEmail,
-      toggleMemberEssential: s.toggleMemberEssential,
+      updateMember: s.updateMember,
+      removeMember: s.removeMember,
+      leaveGroup: s.leaveGroup,
       addProposal: s.addProposal,
       voteProposalWindow: s.voteProposalWindow,
       closeVotingManually: s.closeVotingManually,
@@ -149,13 +166,38 @@ export default function GroupDetailPage() {
   const userEmail = authUser?.email ?? (isApiEnabled ? '' : USUARIO_DEMO.email);
   const userName = authUser?.nombre ?? (isApiEnabled ? '' : USUARIO_DEMO.nombre);
 
-  /** Si quien usa la app organiza este grupo. `ADMIN` es el nombre del demo. */
+  /**
+   * Si quien usa la app organiza este grupo: por id con backend y por correo
+   * en demo. `ADMIN` es el nombre antiguo del demo (ver `rolDe`).
+   */
   const soyOrganizador = (group: Group) => {
-    const yo = group.miembros.find(
-      (m) => (authUser?.id && (m.userId ?? m.id) === authUser.id) || m.email === userEmail
-    );
-    return yo?.rol === 'ORGANIZADOR' || yo?.rol === 'ADMIN';
+    const yo = miembroActual(group, { id: authUser?.id, email: userEmail });
+    return yo ? esOrganizador(group, yo) : false;
   };
+
+  /* Horario propio para el cruce del modo demo: el de «Mi horario», no solo
+     los bloques de ejemplo. Solo cuenta lo que ocupa ESTA semana (un puntual
+     del mes que viene no quita huecos hoy) y, como en el backend, un
+     borrador de OCR sin revisar no bloquea a nadie. */
+  const misBloques = useScheduleStore((s) => s.slots);
+  const bloquesDemoPorDia = useMemo(() => {
+    const porDia = new Map<DayOfWeek, BloqueDePersona[]>();
+    if (isApiEnabled) return porDia;
+
+    const yo = userEmail.toLowerCase();
+    for (const s of occupiedSlots) {
+      if (s.userEmail.toLowerCase() === yo) continue;
+      porDia.set(s.day, [...(porDia.get(s.day) ?? []), { persona: s.userEmail, startTime: s.startTime, endTime: s.endTime }]);
+    }
+    for (const { day, fecha } of fechasDeSemana(inicioDeSemana(fechaLocalIso()))) {
+      for (const b of misBloques) {
+        if (b.isOcrImported && !b.confirmado) continue;
+        if (!ocupaFecha(b, fecha)) continue;
+        porDia.set(day, [...(porDia.get(day) ?? []), { persona: userEmail, startTime: b.startTime, endTime: b.endTime }]);
+      }
+    }
+    return porDia;
+  }, [occupiedSlots, misBloques, userEmail]);
 
   /* El grupo lo manda la URL, no el estado. Asi un enlace a /groups/:id abre
      siempre el mismo grupo, y volver atras en el navegador funciona. */
@@ -205,21 +247,23 @@ export default function GroupDetailPage() {
   const [umbral, setUmbral] = useState(100);
   const [membersList, setMembersList] = useState<GroupMember[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [newMemberName, setNewMemberName] = useState('');
   const [isEssentialNewMember, setIsEssentialNewMember] = useState(false);
+  /** Por qué no se pudo añadir el correo escrito (formato, repetido, el propio). */
+  const [avisoCorreo, setAvisoCorreo] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  /** Lo que el servidor rechazó al guardar, una línea por cambio. */
+  const [erroresGuardado, setErroresGuardado] = useState<string[]>([]);
+  const [confirmandoSalida, setConfirmandoSalida] = useState(false);
+  const [saliendo, setSaliendo] = useState(false);
 
 
   // Join Group Modal State
 
   useModalDismiss(isProposeModalOpen, () => setIsProposeModalOpen(false));
-  useModalDismiss(isEditGroupModalOpen, () => setIsEditGroupModalOpen(false));
-  /* Se guarda la referencia (grupo + correo) y no el objeto: así la ficha
-     refleja los cambios del store en vez de quedarse con una copia vieja. */
-  const [memberRef, setMemberRef] = useState<{ groupId: string; email: string } | null>(null);
-  const memberGroup = memberRef ? groups.find((g) => g.id === memberRef.groupId) ?? null : null;
-  const memberDetail = memberGroup?.miembros.find((m) => m.email === memberRef?.email) ?? null;
-
-  useModalDismiss(Boolean(memberDetail), () => setMemberRef(null));
+  // Mientras se guarda no se cierra: el resultado tiene que verse.
+  useModalDismiss(isEditGroupModalOpen, () => {
+    if (!guardando && !saliendo) setIsEditGroupModalOpen(false);
+  });
 
   /* Mismo criterio que en «Mi horario»: en el móvil se elige un día y se ve ese
      día, en vez de arrastrar siete columnas a lo ancho. */
@@ -230,35 +274,54 @@ export default function GroupDetailPage() {
     setNombre(group.nombre);
     setDescripcion(group.descripcion);
     setUmbral(group.umbralDisponibilidad);
-    setMembersList(group.miembros);
+    // El rol se resuelve aquí (demo antiguo sin rol) para comparar al guardar con lo mismo que se ve.
+    setMembersList(group.miembros.map((m) => ({ ...m, rol: rolDe(group, m) })));
     setNewMemberEmail('');
-    setNewMemberName('');
     setIsEssentialNewMember(false);
+    setAvisoCorreo(null);
+    setErroresGuardado([]);
+    setConfirmandoSalida(false);
     setIsEditGroupModalOpen(true);
   };
 
-  const handleAddMemberToForm = () => {
-    if (!newMemberEmail || !newMemberEmail.includes('@')) return;
-    if (membersList.some((m) => m.email.toLowerCase() === newMemberEmail.toLowerCase())) return;
+  /**
+   * Integrante recién añadido al formulario. El nombre es provisional: el
+   * backend usa el de la cuenta, por eso el formulario ya no lo pide.
+   */
+  const miembroNuevo = (correo: string, lista: GroupMember[]): GroupMember => ({
+    email: correo,
+    nombre: correo.split('@')[0],
+    isEssential: isEssentialNewMember,
+    color: colorByIndex(lista.length),
+    rol: 'MIEMBRO',
+  });
 
-    const assignedColor = colorByIndex(membersList.length);
+  /**
+   * Pasa el correo escrito a la lista, con las mismas reglas que al crear el
+   * grupo. Devuelve la lista resultante, o `null` si el correo no valía (y
+   * deja dicho por qué). Un correo mal escrito ya no llega al servidor para
+   * acabar contado como «fallido».
+   */
+  const agregarCorreoAlFormulario = (): GroupMember[] | null => {
+    const resultado = validarCorreoNuevo(
+      newMemberEmail,
+      membersList.map((m) => m.email),
+      userEmail
+    );
+    if ('error' in resultado) {
+      setAvisoCorreo(resultado.error);
+      return null;
+    }
 
-    const newM: GroupMember = {
-      email: newMemberEmail,
-      nombre: newMemberName || newMemberEmail.split('@')[0],
-      isEssential: isEssentialNewMember,
-      color: assignedColor,
-      status: 'pendiente',
-    };
-
-    setMembersList([...membersList, newM]);
+    const lista = [...membersList, miembroNuevo(resultado.correo, membersList)];
+    setMembersList(lista);
     setNewMemberEmail('');
-    setNewMemberName('');
     setIsEssentialNewMember(false);
+    setAvisoCorreo(null);
+    return lista;
   };
 
   const handleRemoveMemberFromForm = (email: string) => {
-    if (membersList.length <= 1) return; // Mínimo 1 integrante
     setMembersList(membersList.filter((m) => m.email !== email));
   };
 
@@ -268,32 +331,134 @@ export default function GroupDetailPage() {
     );
   };
 
+  const handleToggleOrganizer = (email: string) => {
+    setMembersList(
+      membersList.map((m) =>
+        m.email === email ? { ...m, rol: m.rol === 'ORGANIZADOR' ? 'MIEMBRO' : 'ORGANIZADOR' } : m
+      )
+    );
+  };
+
+  const motivoDe = (error: unknown) =>
+    error instanceof Error && error.message ? error.message : 'Vuelve a intentarlo.';
+
   /**
-   * Guarda el umbral y da de alta a quien se haya añadido a la lista.
+   * Guarda todo lo que cambió en el formulario, comparado con el grupo
+   * guardado: datos del grupo, roles e imprescindibles, bajas y altas.
    *
-   * Es la segunda mitad del modelo que sustituyó al código de invitación: la
-   * gente entra al crear el grupo o desde aquí. Las altas van una a una porque
-   * el servidor puede rechazar un correo sin cuenta, y hay que poder decir
-   * cuál falló.
+   * Antes solo se guardaban el umbral y las altas; quitar a alguien,
+   * renombrar o marcar imprescindible se perdía al cerrar sin decir nada.
+   * Cada cambio va por separado para poder decir cuál falló; si alguno falla
+   * el formulario sigue abierto y, al volver a guardar, solo se reintenta lo
+   * que falta (lo demás ya coincide con el grupo guardado).
    */
   const handleUpdateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedGroup || !nombre) return;
+    if (!selectedGroup || !nombre.trim() || guardando) return;
 
-    if (umbral !== selectedGroup.umbralDisponibilidad) {
-      // Si falla, el store deshace el cambio y deja el motivo en `syncError`.
-      await updateGroupThreshold(selectedGroup.id, umbral);
+    // Un correo escrito sin pulsar «Añadir» también cuenta, si es válido.
+    let miembros = membersList;
+    if (newMemberEmail.trim()) {
+      const lista = agregarCorreoAlFormulario();
+      if (!lista) return;
+      miembros = lista;
     }
 
-    const yaEstaban = new Set(selectedGroup.miembros.map((m) => m.email.toLowerCase()));
-    const nuevos = membersList
-      .filter((m) => !yaEstaban.has(m.email.toLowerCase()))
-      .map((m) => m.email);
+    const grupo = selectedGroup;
+    const cambios = calcularCambios(grupo, { nombre, descripcion, umbral, miembros });
+    if (!hayCambios(cambios)) {
+      setIsEditGroupModalOpen(false);
+      return;
+    }
 
-    const { sinCuenta, fallidos } = await addMembersByEmail(selectedGroup.id, nuevos);
-    avisarAltasPendientes(addNotification, sinCuenta, fallidos, selectedGroup.id);
+    setGuardando(true);
+    setErroresGuardado([]);
+    const errores: string[] = [];
 
+    if (cambios.datos) {
+      try {
+        await updateGroup(grupo.id, cambios.datos);
+      } catch (error) {
+        errores.push(`No se guardaron el nombre, la descripción o el umbral: ${motivoDe(error)}`);
+      }
+    }
+
+    // Ascensos primero (ya vienen ordenados): el grupo nunca se queda sin organizador a medias.
+    for (const cambio of cambios.cambios) {
+      try {
+        await updateMember(grupo.id, cambio.email, { rol: cambio.rol, isEssential: cambio.isEssential });
+      } catch (error) {
+        errores.push(`${cambio.nombre}: ${motivoDe(error)}`);
+      }
+    }
+
+    for (const baja of cambios.bajas) {
+      try {
+        await removeMember(grupo.id, baja.email);
+      } catch (error) {
+        errores.push(`No se pudo quitar a ${baja.nombre}: ${motivoDe(error)}`);
+      }
+    }
+
+    let sinCuenta: string[] = [];
+    if (cambios.altas.length > 0) {
+      const resultado = await addMembersByEmail(grupo.id, cambios.altas.map((m) => m.email));
+      sinCuenta = resultado.sinCuenta;
+      for (const correo of resultado.fallidos) errores.push(`No se pudo añadir a ${correo}.`);
+
+      // Quien entra lo hace como integrante normal: el imprescindible va después.
+      const fallaron = new Set([...resultado.sinCuenta, ...resultado.fallidos]);
+      for (const alta of cambios.altas) {
+        if (!alta.isEssential || fallaron.has(alta.email)) continue;
+        try {
+          await updateMember(grupo.id, alta.email, { isEssential: true });
+        } catch (error) {
+          errores.push(`${alta.email} ya está en el grupo, pero no se pudo marcar como imprescindible: ${motivoDe(error)}`);
+        }
+      }
+    }
+
+    setGuardando(false);
+
+    if (errores.length === 0) {
+      avisarAltasPendientes(addNotification, sinCuenta, [], grupo.id, true);
+      setIsEditGroupModalOpen(false);
+      return;
+    }
+
+    /* Sin cuenta no hay nada que reintentar: se sacan de la lista y se dice.
+       El resto del borrador se conserva tal cual. */
+    if (sinCuenta.length > 0) {
+      errores.push(`Sin cuenta en Huecko: ${sinCuenta.join(', ')}. Pídeles que se registren.`);
+      setMembersList(miembros.filter((m) => !sinCuenta.includes(m.email)));
+    }
+    setErroresGuardado(errores);
+  };
+
+  /** Salir del grupo. Si el servidor lo impide (único organizador), se dice por qué. */
+  const handleLeaveGroup = async () => {
+    if (!selectedGroup || saliendo) return;
+    const { id, nombre: nombreGrupo } = selectedGroup;
+
+    setSaliendo(true);
+    setErroresGuardado([]);
+    try {
+      await leaveGroup(id);
+    } catch (error) {
+      setErroresGuardado([motivoDe(error)]);
+      setConfirmandoSalida(false);
+      setSaliendo(false);
+      return;
+    }
+
+    setSaliendo(false);
     setIsEditGroupModalOpen(false);
+    addNotification({
+      title: 'Saliste del grupo',
+      description: `Ya no formas parte de «${nombreGrupo}».`,
+      type: 'system',
+    });
+    navigate('/groups');
   };
 
   /**
@@ -567,59 +732,44 @@ export default function GroupDetailPage() {
   /**
    * Coincidencias y espacios libres de una franja de una hora.
    *
-   * Con el backend conectado manda su cruce (RF-05): es la única versión que
-   * ve los horarios reales de todo el grupo, y además mide el solape en
-   * minutos, así que un bloque que acaba a las 10:30 deja ocupada la franja de
-   * las 10. El cálculo local de abajo solo entra en modo demo, donde
-   * `occupiedSlots` son datos de ejemplo del propio cliente.
+   * Con el backend conectado manda SIEMPRE su cruce (RF-05): es la única
+   * versión que ve los horarios reales de todo el grupo. Si aún no llegó o
+   * falló, la casilla no cumple nada y la sección lo dice («Calculando…» o el
+   * error); antes caía al cálculo local con `occupiedSlots` vacío y pintaba
+   * todo «100% libre».
    *
-   * `occupiedMembers` se queda vacío en modo conectado a propósito: el backend
-   * devuelve recuentos, nunca quién está ocupado ni con qué (RNF-02).
+   * En modo demo se calcula en el cliente con `calcularCelda`, que sigue las
+   * mismas reglas que el backend (personas y no bloques, minutos, umbral
+   * exacto), sobre los datos de ejemplo más el horario real de quien usa la app.
    */
   const getCellAvailability = (
     group: Group,
     day: DayOfWeek,
     hour: number
   ) => {
-    const serverCell = availability[group.id]?.cells[availabilityKey(day, hour)];
-    if (serverCell) {
+    if (isApiEnabled) {
+      const cruce = availability[group.id];
+      const serverCell = cruce?.cells[availabilityKey(day, hour)];
       return {
-        freeCount: serverCell.freeCount,
-        totalMembers: availability[group.id].membersCount,
-        freePercentage: serverCell.freePercentage,
-        meetsThreshold: serverCell.meetsThreshold,
-        occupiedMembers: [] as typeof occupiedSlots,
+        freeCount: serverCell?.freeCount ?? 0,
+        // El denominador es el del servidor, no la lista local de integrantes.
+        totalMembers: cruce?.membersCount ?? 0,
+        freePercentage: serverCell?.freePercentage ?? 0,
+        meetsThreshold: serverCell?.meetsThreshold ?? false,
       };
     }
 
-    // Miembros ocupados en esta franja de 1 hora
-    const occupiedInCell = occupiedSlots.filter((s) => {
-      if (s.day !== day) return false;
-      if (!group.miembros.some((m) => m.email === s.userEmail)) {
-        return false;
-      }
-
-      const startH = parseInt(s.startTime.split(':')[0], 10);
-      const endH = parseInt(s.endTime.split(':')[0], 10);
-      return hour >= startH && hour < endH;
-    });
-
-    const totalMembers = group.miembros.length;
-    const occupiedCount = occupiedInCell.length;
-    const freeCount = totalMembers - occupiedCount;
-    const freePercentage = Math.round(
-      (freeCount / totalMembers) * 100
+    const celda = calcularCelda(
+      group.miembros.map((m) => m.email),
+      bloquesDemoPorDia.get(day) ?? [],
+      hour,
+      group.umbralDisponibilidad
     );
-
-    const meetsThreshold =
-      freePercentage >= group.umbralDisponibilidad;
-
     return {
-      freeCount,
-      totalMembers,
-      freePercentage,
-      meetsThreshold,
-      occupiedMembers: occupiedInCell,
+      freeCount: celda.libres,
+      totalMembers: celda.total,
+      freePercentage: celda.porcentaje,
+      meetsThreshold: celda.cumpleUmbral,
     };
   };
 
@@ -633,6 +783,7 @@ export default function GroupDetailPage() {
       end: number;
       minimumAvailability: number;
       freeCount: number;
+      totalMembers: number;
     };
 
     const windows: FreeWindow[] = [];
@@ -657,11 +808,22 @@ export default function GroupDetailPage() {
           end: hour + 1,
           minimumAvailability: cell.freePercentage,
           freeCount: cell.freeCount,
+          totalMembers: cell.totalMembers,
         });
       }
     });
 
     return windows;
+  };
+
+  /**
+   * En qué punto está el cruce de un grupo. En demo se calcula al momento y
+   * siempre está al día; con backend, «Actualizado» solo cuando llegó bien.
+   */
+  const estadoDelCruce = (group: Group): { estado: 'cargando' | 'ok' | 'error'; mensaje?: string; hayDatos: boolean } => {
+    if (!isApiEnabled) return { estado: 'ok', hayDatos: true };
+    const estado = availabilityEstado[group.id] ?? { estado: 'cargando' as const };
+    return { ...estado, hayDatos: Boolean(availability[group.id]) };
   };
 
   /**
@@ -957,14 +1119,30 @@ export default function GroupDetailPage() {
               </div>
             )}
           </section>
+          {(() => {
+            const cruce = estadoDelCruce(grp);
+            return (
           <section className="bg-surface-container-low rounded-2xl p-6 md:p-8 elev-1 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-outline-variant/60 pb-4">
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <h2 className="text-2xl font-bold text-on-surface font-headline">Horario en común: {grp.nombre}</h2>
-                  <span className="px-3 py-1 rounded-lg bg-primary-container border border-inverse-primary text-primary text-xs font-bold">
-                    Actualizado
-                  </span>
+                  {cruce.estado === 'ok' ? (
+                    <span className="px-3 py-1 rounded-lg bg-primary-container border border-inverse-primary text-primary text-xs font-bold">
+                      Actualizado
+                    </span>
+                  ) : (
+                    <span
+                      role="status"
+                      className={`px-3 py-1 rounded-lg border text-xs font-bold ${
+                        cruce.estado === 'error'
+                          ? 'bg-error-container border-error/40 text-on-error-container'
+                          : 'bg-surface-container border-outline-variant text-on-surface-variant'
+                      }`}
+                    >
+                      {cruce.estado === 'error' ? 'Sin actualizar' : 'Calculando…'}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -973,8 +1151,39 @@ export default function GroupDetailPage() {
               </div>
             </div>
 
-            {/* Agenda de coincidencias: una lectura rápida, sin 84 casillas. */}
-            <div>
+            {/* Con backend no se enseña nada que no venga del servidor: ni un
+                cruce que falló ni, la primera vez, uno que aún no llegó. */}
+            {cruce.estado === 'error' ? (
+              <div role="alert" className="rounded-xl border border-error/40 bg-error-container p-6 text-center">
+                <span aria-hidden="true" className="material-symbols-outlined text-[32px] text-on-error-container">
+                  cloud_off
+                </span>
+                <p className="mt-1 text-sm font-semibold text-on-error-container">
+                  No se pudo calcular el horario en común
+                </p>
+                {cruce.mensaje && (
+                  <p className="mt-1 text-xs text-on-error-container">{cruce.mensaje}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fetchAvailability(grp.id)}
+                  className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-surface px-4 py-2 text-xs font-semibold text-on-surface transition-colors hover:bg-surface-container active:scale-95"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[16px]">refresh</span>
+                  Reintentar
+                </button>
+              </div>
+            ) : !cruce.hayDatos ? (
+              <p role="status" className="rounded-xl border border-dashed border-outline-variant bg-surface-container/60 p-8 text-center text-sm text-on-surface-variant">
+                Calculando el horario en común…
+              </p>
+            ) : (
+            /* Agenda de coincidencias: una lectura rápida, sin 84 casillas.
+               Mientras se recalcula (tras un cambio de integrantes) se atenúa. */
+            <div
+              aria-busy={cruce.estado === 'cargando'}
+              className={`transition-opacity ${cruce.estado === 'cargando' ? 'opacity-50' : ''}`}
+            >
               <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-7 gap-3">
                 {days.map((day) => {
                   const windows = getRecommendedWindows(grp, day);
@@ -993,7 +1202,7 @@ export default function GroupDetailPage() {
                               {window.start.toString().padStart(2, '0')}:00 - {window.end.toString().padStart(2, '0')}:00
                             </p>
                             <p className="mt-0.5 text-2xs text-on-surface-variant">
-                              {window.minimumAvailability}% libre · {window.freeCount}/{grp.miembros.length}
+                              {window.minimumAvailability}% libre · {window.freeCount}/{window.totalMembers}
                             </p>
                           </div>
                         )) : (
@@ -1062,7 +1271,7 @@ export default function GroupDetailPage() {
                           </span>
                           <span className="text-2xs text-on-surface-variant text-right shrink-0">
                             {window.minimumAvailability}% libre
-                            <span className="block">{window.freeCount}/{grp.miembros.length} personas</span>
+                            <span className="block">{window.freeCount}/{window.totalMembers} personas</span>
                           </span>
                         </li>
                       ))}
@@ -1071,7 +1280,10 @@ export default function GroupDetailPage() {
                 })()}
               </div>
             </div>
+            )}
           </section>
+            );
+          })()}
     </div>
   );
 
@@ -1125,7 +1337,8 @@ export default function GroupDetailPage() {
                 className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-surface-container px-4 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high active:scale-95 md:w-auto"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[20px]">group</span>
-                Integrantes y ajustes
+                {/* Quien no organiza ve la lista en solo lectura (y puede salir). */}
+                {soyOrganizador(selectedGroup) ? 'Integrantes y ajustes' : 'Integrantes'}
               </button>
             )}
           </div>
@@ -1150,10 +1363,13 @@ export default function GroupDetailPage() {
         )}
       </main>
 
-      {/* Modal: Editar Grupo / Integrantes */}
+      {/* Modal: integrantes y ajustes del grupo */}
       {isEditGroupModalOpen && selectedGroup && (
         <GroupFormModal
-          title={`Editar Grupo: ${selectedGroup.nombre}`}
+          grupo={selectedGroup}
+          puedeEditar={soyOrganizador(selectedGroup)}
+          miCorreo={userEmail}
+          miId={authUser?.id}
           nombre={nombre}
           setNombre={setNombre}
           descripcion={descripcion}
@@ -1162,17 +1378,27 @@ export default function GroupDetailPage() {
           setUmbral={setUmbral}
           membersList={membersList}
           newMemberEmail={newMemberEmail}
-          setNewMemberEmail={setNewMemberEmail}
-          newMemberName={newMemberName}
-          setNewMemberName={setNewMemberName}
+          setNewMemberEmail={(valor) => {
+            setNewMemberEmail(valor);
+            setAvisoCorreo(null);
+          }}
+          avisoCorreo={avisoCorreo}
           isEssentialNewMember={isEssentialNewMember}
           setIsEssentialNewMember={setIsEssentialNewMember}
-          onAddMember={handleAddMemberToForm}
+          onAddMember={() => {
+            agregarCorreoAlFormulario();
+          }}
           onRemoveMember={handleRemoveMemberFromForm}
           onToggleEssential={handleToggleEssential}
+          onToggleOrganizer={handleToggleOrganizer}
+          errores={erroresGuardado}
+          guardando={guardando}
+          confirmandoSalida={confirmandoSalida}
+          setConfirmandoSalida={setConfirmandoSalida}
+          saliendo={saliendo}
+          onLeave={handleLeaveGroup}
           onClose={() => setIsEditGroupModalOpen(false)}
           onSubmit={handleUpdateGroup}
-          submitLabel="Guardar cambios"
         />
       )}
 
@@ -1452,90 +1678,17 @@ export default function GroupDetailPage() {
         </div>
       )}
 
-      {/* Ficha de un integrante del grupo.
-          No es un perfil social: solo lo justo para distinguir a dos personas
-          que se llaman igual y saber qué papel tienen en los planes. */}
-      {memberDetail && memberGroup && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Ficha de ${memberDetail.nombre}`}
-          className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4"
-        >
-          <div className="bg-surface rounded-2xl p-6 w-full max-w-sm elev-3">
-            <div className="flex justify-between items-start gap-3 mb-4 pb-4 border-b border-outline-variant/60">
-              <div className="flex items-center gap-3 min-w-0">
-                <span
-                  aria-hidden="true"
-                  className="w-12 h-12 shrink-0 rounded-full flex items-center justify-center text-on-primary text-lg font-black"
-                  style={{ backgroundColor: memberDetail.color }}
-                >
-                  {memberDetail.nombre.charAt(0)}
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-on-surface truncate">{memberDetail.nombre}</h2>
-                  <p className="text-xs text-on-surface-variant break-all">{memberDetail.email}</p>
-                </div>
-              </div>
-              <button
-                aria-label="Cerrar"
-                onClick={() => setMemberRef(null)}
-                className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer shrink-0"
-              >
-                <span aria-hidden="true" className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <dl className="space-y-3 text-xs">
-              <div className="flex justify-between gap-4">
-                <dt className="text-on-surface-variant">Grupo</dt>
-                <dd className="font-medium text-on-surface text-right">{memberGroup.nombre}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-on-surface-variant">Estado</dt>
-                <dd className="font-medium text-right capitalize">
-                  {memberDetail.status === 'confirmado' ? (
-                    <span className="text-success">Confirmado</span>
-                  ) : (
-                    <span className="text-warning">Invitación pendiente</span>
-                  )}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-on-surface-variant">Rol en los planes</dt>
-                <dd className="font-medium text-on-surface text-right">
-                  {memberDetail.isEssential ? 'Imprescindible' : 'Regular'}
-                </dd>
-              </div>
-            </dl>
-
-            <p className="mt-4 text-2xs text-on-surface-variant leading-relaxed">
-              Huecko nunca muestra el detalle de los bloques de otra persona: del resto del
-              grupo solo se sabe si está ocupada o libre en cada franja.
-            </p>
-
-            <div className="mt-4 pt-4 border-t border-outline-variant/60 flex justify-end">
-              <button
-                type="button"
-                onClick={() => toggleMemberEssential(memberGroup.id, memberDetail.email)}
-                className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface hover:bg-surface-container text-xs font-semibold cursor-pointer flex items-center gap-1.5"
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-warning">
-                  {memberDetail.isEssential ? 'star_border' : 'star'}
-                </span>
-                {memberDetail.isEssential ? 'Quitar imprescindible' : 'Marcar imprescindible'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-// Subcomponente Formulario Reutilizable para Crear / Editar Grupo
+// Integrantes y ajustes de un grupo: editable para quien organiza, de solo lectura para el resto.
 interface GroupFormModalProps {
-  title: string;
+  grupo: Group;
+  /** Solo quien organiza puede cambiar datos, roles o integrantes (el backend responde 403 al resto). */
+  puedeEditar: boolean;
+  miCorreo: string;
+  miId?: string;
   nombre: string;
   setNombre: (val: string) => void;
   descripcion: string;
@@ -1545,20 +1698,28 @@ interface GroupFormModalProps {
   membersList: GroupMember[];
   newMemberEmail: string;
   setNewMemberEmail: (val: string) => void;
-  newMemberName: string;
-  setNewMemberName: (val: string) => void;
+  avisoCorreo: string | null;
   isEssentialNewMember: boolean;
   setIsEssentialNewMember: (val: boolean) => void;
   onAddMember: () => void;
   onRemoveMember: (email: string) => void;
   onToggleEssential: (email: string) => void;
+  onToggleOrganizer: (email: string) => void;
+  errores: string[];
+  guardando: boolean;
+  confirmandoSalida: boolean;
+  setConfirmandoSalida: (val: boolean) => void;
+  saliendo: boolean;
+  onLeave: () => void;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
-  submitLabel: string;
 }
 
 function GroupFormModal({
-  title,
+  grupo,
+  puedeEditar,
+  miCorreo,
+  miId,
   nombre,
   setNombre,
   descripcion,
@@ -1568,177 +1729,305 @@ function GroupFormModal({
   membersList,
   newMemberEmail,
   setNewMemberEmail,
-  newMemberName,
-  setNewMemberName,
+  avisoCorreo,
   isEssentialNewMember,
   setIsEssentialNewMember,
   onAddMember,
   onRemoveMember,
   onToggleEssential,
+  onToggleOrganizer,
+  errores,
+  guardando,
+  confirmandoSalida,
+  setConfirmandoSalida,
+  saliendo,
+  onLeave,
   onClose,
   onSubmit,
-  submitLabel,
 }: GroupFormModalProps) {
+  const yo = miembroActual({ miembros: membersList }, { id: miId, email: miCorreo });
+  const organizadoresGuardados = grupo.miembros.filter((m) => esOrganizador(grupo, m)).length;
+  const soyUnicoOrganizador =
+    puedeEditar && organizadoresGuardados <= 1 && grupo.miembros.length > 1;
+  const ocupado = guardando || saliendo;
+
   return (
-    <div role="dialog" aria-modal="true" aria-label="Formulario de grupo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
+    <div role="dialog" aria-modal="true" aria-labelledby="integrantes-titulo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
       <div className="bg-surface rounded-2xl p-6 w-full max-w-lg elev-3 overflow-y-auto max-h-[90vh]">
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
-          <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
+          <h2 id="integrantes-titulo" className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
             <span aria-hidden="true" className="material-symbols-outlined text-primary">group</span>
-            {title}
+            {puedeEditar ? 'Integrantes y ajustes' : 'Integrantes'}
           </h2>
-          <button aria-label="Cerrar" onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">
+          <button aria-label="Cerrar" onClick={onClose} disabled={ocupado} className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer disabled:cursor-not-allowed">
             <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre del grupo *</label>
-            <input
-              type="text"
-              required
-              placeholder="Ej. Grupo Universidad, Viaje de Verano..."
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Descripción</label>
-            <textarea
-              rows={2}
-              placeholder="Descripción del grupo..."
-              value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
-              className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
-            />
-          </div>
-
-          {/* Umbral de coincidencia */}
-          <div className="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60 space-y-2">
-            <div className="flex justify-between items-center">
-              <label className="text-xs font-semibold text-on-surface flex items-center gap-1.5">
-                <span aria-hidden="true" className="material-symbols-outlined text-primary text-[18px]">tune</span>
-                Umbral mínimo de coincidencia
-              </label>
-              <span className="text-xs font-bold text-primary bg-inverse-primary/30 px-2 py-0.5 rounded-lg border border-secondary/40">
-                {umbral}% del grupo libre
-              </span>
-            </div>
-            <input
-              type="range"
-              min="50"
-              max="100"
-              step="5"
-              value={umbral}
-              onChange={(e) => setUmbral(Number(e.target.value))}
-              className="w-full accent-secondary cursor-pointer mt-1"
-            />
-          </div>
-
-          {/* Gestión de Integrantes */}
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Agregar integrante</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-              <input
-                type="text"
-                placeholder="Nombre (ej. María C.)"
-                value={newMemberName}
-                onChange={(e) => setNewMemberName(e.target.value)}
-                className="px-3.5 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
-              />
-              <input
-                type="email"
-                placeholder="Correo (amigo@correo.com)"
-                value={newMemberEmail}
-                onChange={(e) => setNewMemberEmail(e.target.value)}
-                className="px-3.5 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
-              />
-            </div>
-
-            <div className="flex justify-between items-center mb-3">
-              <label className="text-xs text-on-warning-container font-semibold cursor-pointer flex items-center gap-1">
+          {puedeEditar ? (
+            <>
+              <div>
+                <label htmlFor="grupo-editar-nombre" className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre del grupo *</label>
                 <input
-                  type="checkbox"
-                  checked={isEssentialNewMember}
-                  onChange={(e) => setIsEssentialNewMember(e.target.checked)}
-                  className="rounded border-outline-variant bg-surface-container-lowest text-secondary focus:ring-secondary cursor-pointer"
+                  id="grupo-editar-nombre"
+                  type="text"
+                  required
+                  maxLength={120}
+                  placeholder="Ej. Grupo Universidad, Viaje de Verano..."
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
                 />
-                <span aria-hidden="true" className="material-symbols-outlined text-[15px] text-warning">star</span>
-                Marcar como imprescindible
-              </label>
+              </div>
 
-              <button
-                type="button"
-                onClick={onAddMember}
-                className="px-4 py-1.5 rounded-xl bg-surface-container hover:bg-surface-variant text-on-surface-variant text-xs font-semibold cursor-pointer border border-outline-variant/60"
-              >
-                + Añadir Integrante
-              </button>
-            </div>
+              <div>
+                <label htmlFor="grupo-editar-desc" className="block text-xs font-medium text-on-surface-variant mb-1.5">Descripción</label>
+                <textarea
+                  id="grupo-editar-desc"
+                  rows={2}
+                  maxLength={400}
+                  placeholder="Descripción del grupo..."
+                  value={descripcion}
+                  onChange={(e) => setDescripcion(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
+                />
+              </div>
 
-            {/* Lista actual de integrantes */}
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              {membersList.map((m) => (
-                <div
+              {/* Umbral de coincidencia */}
+              <div className="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60 space-y-2">
+                <div className="flex justify-between items-center">
+                  <label htmlFor="grupo-editar-umbral" className="text-xs font-semibold text-on-surface flex items-center gap-1.5">
+                    <span aria-hidden="true" className="material-symbols-outlined text-primary text-[18px]">tune</span>
+                    Umbral mínimo de coincidencia
+                  </label>
+                  <span className="text-xs font-bold text-primary bg-inverse-primary/30 px-2 py-0.5 rounded-lg border border-secondary/40">
+                    {umbral}% del grupo libre
+                  </span>
+                </div>
+                <input
+                  id="grupo-editar-umbral"
+                  type="range"
+                  min="50"
+                  max="100"
+                  step="5"
+                  value={umbral}
+                  onChange={(e) => setUmbral(Number(e.target.value))}
+                  className="w-full accent-secondary cursor-pointer mt-1"
+                />
+              </div>
+
+              {/* Alta por correo. Sin campo de nombre: el backend usa el de la cuenta. */}
+              <div>
+                <label htmlFor="grupo-editar-correo" className="block text-xs font-medium text-on-surface-variant mb-1.5">Agregar integrante</label>
+                <input
+                  id="grupo-editar-correo"
+                  type="email"
+                  placeholder="Correo (amigo@correo.com)"
+                  value={newMemberEmail}
+                  onChange={(e) => setNewMemberEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Enter añade a la lista en vez de guardar todo el formulario.
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      onAddMember();
+                    }
+                  }}
+                  aria-invalid={Boolean(avisoCorreo)}
+                  aria-describedby={avisoCorreo ? 'grupo-editar-correo-aviso' : undefined}
+                  className="w-full px-3.5 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
+                />
+                {avisoCorreo && (
+                  <p id="grupo-editar-correo-aviso" role="alert" className="mt-1 text-2xs font-semibold text-error">
+                    {avisoCorreo}
+                  </p>
+                )}
+
+                <div className="flex justify-between items-center mt-2">
+                  <label className="text-xs text-on-warning-container font-semibold cursor-pointer flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={isEssentialNewMember}
+                      onChange={(e) => setIsEssentialNewMember(e.target.checked)}
+                      className="rounded border-outline-variant bg-surface-container-lowest text-secondary focus:ring-secondary cursor-pointer"
+                    />
+                    <span aria-hidden="true" className="material-symbols-outlined text-[15px] text-warning">star</span>
+                    Marcar como imprescindible
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={onAddMember}
+                    className="px-4 py-1.5 rounded-xl bg-surface-container hover:bg-surface-variant text-on-surface-variant text-xs font-semibold cursor-pointer border border-outline-variant/60"
+                  >
+                    + Añadir
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-on-surface-variant">
+              Umbral del grupo: <strong className="text-on-surface">{grupo.umbralDisponibilidad}%</strong>.
+              Solo quien organiza el grupo puede cambiar sus ajustes o sus integrantes.
+            </p>
+          )}
+
+          {/* Lista de integrantes. Los cambios (rol, imprescindible, quitar)
+              se aplican al pulsar «Guardar cambios». */}
+          <ul className="space-y-2 max-h-64 overflow-y-auto pr-1" aria-label="Integrantes del grupo">
+            {membersList.map((m) => {
+              const esYo = m === yo;
+              const organiza = m.rol === 'ORGANIZADOR' || m.rol === 'ADMIN';
+              const nuevo = !grupo.miembros.some((g) => g.email.toLowerCase() === m.email.toLowerCase());
+              return (
+                <li
                   key={m.email}
-                  className="flex justify-between items-center p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/60 text-xs"
+                  className="p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/60 text-xs"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.color }} />
-                    <span className="text-on-surface font-medium">{m.nombre}</span>
-                    <span className="text-on-surface-variant">({m.email})</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span aria-hidden="true" className="w-2.5 h-2.5 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
+                    <span className="text-on-surface font-medium truncate">{nuevo ? m.email : m.nombre}</span>
+                    {/* Los nombres del demo ya llevan «(Tú)». */}
+                    {esYo && !/\(tú\)/i.test(m.nombre) && <span className="shrink-0 text-2xs text-on-surface-variant">(tú)</span>}
+                    {organiza && (
+                      <span className="shrink-0 rounded bg-secondary-container px-1.5 py-0.5 text-2xs font-semibold text-on-secondary-container">
+                        Organizador
+                      </span>
+                    )}
+                    {nuevo && (
+                      <span className="shrink-0 text-2xs text-on-surface-variant">se añadirá al guardar</span>
+                    )}
                   </div>
+                  {!nuevo && <p className="mt-0.5 pl-4.5 text-2xs text-on-surface-variant break-all">{m.email}</p>}
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onToggleEssential(m.email)}
-                      className={`px-2 py-0.5 rounded text-2xs font-semibold border flex items-center gap-1 cursor-pointer ${
-                        m.isEssential
-                          ? 'bg-warning-container border-warning/40 text-on-warning-container'
-                          : 'bg-surface border-outline-variant text-on-surface-variant hover:text-on-surface'
-                      }`}
-                    >
-                      <span aria-hidden="true" className="material-symbols-outlined text-xs">star</span>
-                      {m.isEssential ? 'Imprescindible' : 'Regular'}
-                    </button>
+                  <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
+                    {puedeEditar ? (
+                      <button
+                        type="button"
+                        onClick={() => onToggleEssential(m.email)}
+                        aria-pressed={m.isEssential}
+                        className={`px-2 py-0.5 rounded text-2xs font-semibold border flex items-center gap-1 cursor-pointer ${
+                          m.isEssential
+                            ? 'bg-warning-container border-warning/40 text-on-warning-container'
+                            : 'bg-surface border-outline-variant text-on-surface-variant hover:text-on-surface'
+                        }`}
+                      >
+                        <span aria-hidden="true" className="material-symbols-outlined text-xs">star</span>
+                        {m.isEssential ? 'Imprescindible' : 'Regular'}
+                      </button>
+                    ) : (
+                      m.isEssential && (
+                        <span className="px-2 py-0.5 rounded text-2xs font-semibold border bg-warning-container border-warning/40 text-on-warning-container flex items-center gap-1">
+                          <span aria-hidden="true" className="material-symbols-outlined text-xs">star</span>
+                          Imprescindible
+                        </span>
+                      )
+                    )}
 
-                    {membersList.length > 1 && (
+                    {/* Sobre uno mismo no hay «quitar» ni cambio de rol: para
+                        irse está «Salir del grupo», que pide confirmación. */}
+                    {puedeEditar && !esYo && !nuevo && (
+                      <button
+                        type="button"
+                        onClick={() => onToggleOrganizer(m.email)}
+                        className="px-2 py-0.5 rounded text-2xs font-semibold border border-outline-variant bg-surface text-on-surface-variant hover:text-on-surface cursor-pointer"
+                      >
+                        {organiza ? 'Quitar organizador' : 'Hacer organizador'}
+                      </button>
+                    )}
+                    {puedeEditar && !esYo && (
                       <button
                         type="button"
                         onClick={() => onRemoveMember(m.email)}
-                        className="text-error hover:text-error p-1 cursor-pointer"
-                        title="Quitar integrante"
+                        className="px-2 py-0.5 rounded text-2xs font-semibold border border-error/40 bg-surface text-error hover:bg-error-container cursor-pointer flex items-center gap-1"
+                        aria-label={`Quitar a ${nuevo ? m.email : m.nombre} del grupo`}
                       >
-                        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
+                        <span aria-hidden="true" className="material-symbols-outlined text-xs">close</span>
+                        Quitar
                       </button>
                     )}
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                </li>
+              );
+            })}
+          </ul>
 
-          {/* Sin botón de eliminar: el backend no permite borrar grupos y el
-              que había solo cerraba el modal. */}
-          <div className="flex justify-end items-center pt-4 border-t border-outline-variant/60">
+          <p className="text-2xs text-on-surface-variant leading-relaxed">
+            Huecko nunca muestra el detalle de los bloques de otra persona: del resto del grupo solo se
+            sabe si está ocupada o libre en cada franja.
+          </p>
+
+          {errores.length > 0 && (
+            <div role="alert" className="rounded-xl border border-error/40 bg-error-container p-3 text-xs text-on-error-container">
+              <p className="font-semibold">Algunos cambios no se guardaron:</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {errores.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Salir del grupo, con confirmación. Sin botón de borrar el grupo:
+              el backend no lo permite (se borra solo al irse el último). */}
+          {confirmandoSalida ? (
+            <div className="rounded-xl border border-error/40 bg-surface-container-lowest p-3 text-xs">
+              <p className="font-semibold text-on-surface">¿Salir de «{grupo.nombre}»?</p>
+              <p className="mt-1 text-on-surface-variant">
+                {soyUnicoOrganizador
+                  ? 'Eres el único organizador: antes de salir, nombra a otra persona organizadora.'
+                  : 'Dejarás de ver sus planes y su horario en común. Para volver, alguien que lo organice tendrá que añadirte.'}
+              </p>
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmandoSalida(false)}
+                  disabled={saliendo}
+                  className="px-3 py-1.5 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={onLeave}
+                  disabled={saliendo}
+                  className="px-3 py-1.5 rounded-xl bg-error text-on-error text-xs font-semibold cursor-pointer disabled:opacity-60"
+                >
+                  {saliendo ? 'Saliendo…' : 'Sí, salir del grupo'}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-outline-variant/60">
+            <button
+              type="button"
+              onClick={() => setConfirmandoSalida(true)}
+              disabled={ocupado || confirmandoSalida}
+              className="px-3 py-2 rounded-xl text-error hover:bg-error-container text-xs font-semibold cursor-pointer flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[16px]">logout</span>
+              Salir del grupo
+            </button>
+
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer"
+                disabled={ocupado}
+                className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer disabled:cursor-not-allowed"
               >
-                Cancelar
+                {puedeEditar ? 'Cancelar' : 'Cerrar'}
               </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
-              >
-                {submitLabel}
-              </button>
+              {puedeEditar && (
+                <button
+                  type="submit"
+                  disabled={ocupado || !nombre.trim()}
+                  className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {guardando ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+              )}
             </div>
           </div>
         </form>
