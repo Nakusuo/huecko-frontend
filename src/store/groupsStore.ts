@@ -18,6 +18,7 @@ import type { DayOfWeek } from '../types/schedule.types';
 import type { Criticidad } from '../types/incidents.types';
 import { colorByIndex } from '../theme/palette';
 import { useAuthStore } from './authStore';
+import { cuantosOrganizadores, miembroActual, normalizarCorreo, rolDe } from '../lib/grupos';
 
 /** Si una tardanza llega sin minutos, se asume lo mismo que propone el formulario. */
 const MINUTOS_TARDANZA_POR_DEFECTO = 15;
@@ -41,6 +42,22 @@ export interface ResultadoAltas {
   fallidos: string[];
 }
 
+/**
+ * Estado del cruce del servidor para un grupo. Con backend la pantalla no se
+ * inventa nada mientras tanto: dice que está calculando o que falló.
+ */
+export interface EstadoCruce {
+  estado: 'cargando' | 'ok' | 'error';
+  mensaje?: string;
+}
+
+/** Lo que se puede cambiar de un grupo con `PATCH /grupos/{id}`. */
+export interface CambiosDatosGrupo {
+  nombre?: string;
+  descripcion?: string;
+  umbralDisponibilidad?: number;
+}
+
 export interface GroupOccupiedSlot {
   id: string;
   userEmail: string;
@@ -62,6 +79,8 @@ interface GroupsState {
    * entonces la UI cae a su cálculo local sobre `occupiedSlots`.
    */
   availability: Record<string, GroupAvailability>;
+  /** Si el cruce de cada grupo está llegando, llegó o falló. Solo con backend. */
+  availabilityEstado: Record<string, EstadoCruce>;
   isLoading: boolean;
   /**
    * `true` cuando ya llegó al menos una respuesta del servidor (o en modo
@@ -84,8 +103,22 @@ interface GroupsState {
    * y cuáles fallaron por otro motivo, para que la interfaz lo explique.
    */
   addMembersByEmail: (groupId: string, emails: string[]) => Promise<ResultadoAltas>;
-  updateGroupThreshold: (groupId: string, threshold: number) => Promise<void>;
-  toggleMemberEssential: (groupId: string, memberEmail: string) => Promise<void>;
+  /**
+   * Nombre, descripción y umbral. Las acciones de gestión de abajo LANZAN si
+   * el servidor se niega (403 si no organizas, 400 si el grupo se quedaría
+   * sin organizador): quien edita tiene que ver el motivo.
+   */
+  updateGroup: (groupId: string, cambios: CambiosDatosGrupo) => Promise<void>;
+  /** Rol e imprescindible de un integrante (HU-14). */
+  updateMember: (
+    groupId: string,
+    memberEmail: string,
+    cambios: { rol?: 'ORGANIZADOR' | 'MIEMBRO'; isEssential?: boolean }
+  ) => Promise<void>;
+  /** Sacar a otra persona del grupo. Para salir uno mismo, `leaveGroup`. */
+  removeMember: (groupId: string, memberEmail: string) => Promise<void>;
+  /** Salir del grupo: si el servidor lo acepta, el grupo desaparece de la lista. */
+  leaveGroup: (groupId: string) => Promise<void>;
 
   /**
    * `backendPayload` lleva la propuesta ya en el formato del Módulo 3 (fechas
@@ -126,11 +159,11 @@ const INITIAL_GROUPS: Group[] = [
     creadoPor: 'alex.rodriguez@huecko.com',
     umbralDisponibilidad: 80,
     miembros: [
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: true, color: colorByIndex(0), status: 'confirmado' },
-      { email: 'maria.c@huecko.com', nombre: 'María C.', isEssential: true, color: colorByIndex(1), status: 'confirmado' },
-      { email: 'sam.p@huecko.com', nombre: 'Sam P.', isEssential: false, color: colorByIndex(2), status: 'confirmado' },
-      { email: 'lucia.t@huecko.com', nombre: 'Lucía T.', isEssential: false, color: colorByIndex(3), status: 'confirmado' },
-      { email: 'diego.r@huecko.com', nombre: 'Diego R.', isEssential: false, color: colorByIndex(4), status: 'pendiente' },
+      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: true, color: colorByIndex(0), rol: 'ORGANIZADOR' },
+      { email: 'maria.c@huecko.com', nombre: 'María C.', isEssential: true, color: colorByIndex(1), rol: 'MIEMBRO' },
+      { email: 'sam.p@huecko.com', nombre: 'Sam P.', isEssential: false, color: colorByIndex(2), rol: 'MIEMBRO' },
+      { email: 'lucia.t@huecko.com', nombre: 'Lucía T.', isEssential: false, color: colorByIndex(3), rol: 'MIEMBRO' },
+      { email: 'diego.r@huecko.com', nombre: 'Diego R.', isEssential: false, color: colorByIndex(4), rol: 'MIEMBRO' },
     ],
   },
   {
@@ -140,10 +173,10 @@ const INITIAL_GROUPS: Group[] = [
     creadoPor: 'carlos.m@huecko.com',
     umbralDisponibilidad: 70,
     miembros: [
-      { email: 'carlos.m@huecko.com', nombre: 'Carlos M.', isEssential: true, color: colorByIndex(5), status: 'confirmado' },
-      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: false, color: colorByIndex(0), status: 'confirmado' },
-      { email: 'jorge.l@huecko.com', nombre: 'Jorge L.', isEssential: false, color: colorByIndex(6), status: 'confirmado' },
-      { email: 'valeria.v@huecko.com', nombre: 'Valeria V.', isEssential: false, color: colorByIndex(7), status: 'confirmado' },
+      { email: 'carlos.m@huecko.com', nombre: 'Carlos M.', isEssential: true, color: colorByIndex(5), rol: 'ORGANIZADOR' },
+      { email: 'alex.rodriguez@huecko.com', nombre: 'Alex R. (Tú)', isEssential: false, color: colorByIndex(0), rol: 'MIEMBRO' },
+      { email: 'jorge.l@huecko.com', nombre: 'Jorge L.', isEssential: false, color: colorByIndex(6), rol: 'MIEMBRO' },
+      { email: 'valeria.v@huecko.com', nombre: 'Valeria V.', isEssential: false, color: colorByIndex(7), rol: 'MIEMBRO' },
     ],
   },
 ];
@@ -274,6 +307,21 @@ let generacionGrupos = 0;
 let cargaDeGruposEnCurso: Promise<void> | null = null;
 /** Identifica esa petición; `reset` lo borra para que su respuesta se ignore. */
 let turnoDeCarga: symbol | null = null;
+/**
+ * Última petición de cruce por grupo. Tras dar de alta o de baja a alguien se
+ * vuelve a pedir, y una respuesta anterior que llegara después pintaría el
+ * heatmap con los integrantes de antes.
+ */
+const turnoDeCruce = new Map<string, symbol>();
+
+/** Mismo texto que el backend, para que la demo explique lo mismo. */
+const SIN_ORGANIZADOR_ROL = 'El grupo se quedaría sin organizador. Nombra a otro antes de quitarte el rol.';
+const SIN_ORGANIZADOR_SALIDA = 'Eres el único organizador. Nombra a otro antes de salir del grupo.';
+
+function yoMismo() {
+  const user = useAuthStore.getState().user;
+  return { id: user?.id, email: user?.email };
+}
 
 /**
  * Estado de partida. Los datos de ejemplo solo existen en modo demo: con
@@ -287,6 +335,7 @@ function estadoInicial() {
     occupiedSlots: isApiEnabled ? [] : INITIAL_OCCUPIED_SLOTS,
     groupProposals: isApiEnabled ? [] : INITIAL_PROPOSALS,
     availability: {},
+    availabilityEstado: {},
     isLoading: false,
     groupsLoaded: !isApiEnabled,
     syncError: null,
@@ -385,12 +434,27 @@ export const useGroupsStore = create<GroupsState>()(
       fetchAvailability: async (groupId, threshold) => {
         if (!isApiEnabled) return;
 
+        const turno = Symbol('cruce');
+        turnoDeCruce.set(groupId, turno);
+        set((state) => ({
+          availabilityEstado: { ...state.availabilityEstado, [groupId]: { estado: 'cargando' } },
+        }));
+
         try {
           const cruce = await groupsService.getAvailability(groupId, threshold);
-          set((state) => ({ availability: { ...state.availability, [groupId]: cruce } }));
+          if (turnoDeCruce.get(groupId) !== turno) return;
+          set((state) => ({
+            availability: { ...state.availability, [groupId]: cruce },
+            availabilityEstado: { ...state.availabilityEstado, [groupId]: { estado: 'ok' } },
+          }));
         } catch (error) {
-          const msg = error instanceof Error ? error.message : 'Error al calcular la disponibilidad';
-          set({ syncError: msg });
+          if (turnoDeCruce.get(groupId) !== turno) return;
+          /* El fallo se enseña en el propio heatmap, con un botón para
+             reintentar; no en el aviso general, que no dice de qué era. */
+          const mensaje = error instanceof Error ? error.message : 'Error al calcular la disponibilidad';
+          set((state) => ({
+            availabilityEstado: { ...state.availabilityEstado, [groupId]: { estado: 'error', mensaje } },
+          }));
         }
       },
 
@@ -417,7 +481,7 @@ export const useGroupsStore = create<GroupsState>()(
             creadoPor: userEmail,
             umbralDisponibilidad,
             miembros: [
-              { email: userEmail, nombre: userName, isEssential: true, color: colorByIndex(0), status: 'confirmado' },
+              { email: userEmail, nombre: userName, isEssential: true, color: colorByIndex(0), rol: 'ORGANIZADOR' },
             ],
           };
           set((state) => ({
@@ -456,16 +520,18 @@ export const useGroupsStore = create<GroupsState>()(
         // Modo demo: se añade con los datos que hay, sin comprobar cuentas.
         const grupo = get().groups.find((g) => g.id === groupId);
         if (!grupo) return false;
-        if (grupo.miembros.some((m) => m.email === email)) return true;
+        const correo = normalizarCorreo(email);
+        if (grupo.miembros.some((m) => normalizarCorreo(m.email) === correo)) return true;
 
+        // Como en el backend: quien entra lo hace como integrante normal.
         const nuevos: GroupMember[] = [
           ...grupo.miembros,
           {
-            email,
-            nombre: email.split('@')[0],
+            email: correo,
+            nombre: correo.split('@')[0],
             isEssential: false,
             color: colorByIndex(grupo.miembros.length),
-            status: 'confirmado',
+            rol: 'MIEMBRO',
           },
         ];
         set((s) => ({
@@ -479,85 +545,166 @@ export const useGroupsStore = create<GroupsState>()(
 
         /* En serie y no con Promise.all: cada alta devuelve el grupo entero y
            en paralelo la última respuesta en llegar pisaría a las demás. */
+        let alguna = false;
         for (const email of emails) {
           try {
             const ok = await get().addMemberByEmail(groupId, email);
-            if (!ok) resultado.sinCuenta.push(email);
+            if (ok) alguna = true;
+            else resultado.sinCuenta.push(email);
           } catch {
             resultado.fallidos.push(email);
           }
         }
 
+        // Con gente nueva el cruce de antes ya no vale: cambia el denominador.
+        if (alguna) void get().fetchAvailability(groupId);
+
         return resultado;
       },
 
       /**
-       * RF-06. Se aplica en local primero para que el deslizador responda al
-       * instante, igual que hace la rejilla de horario, y el cruce se vuelve a
-       * pedir después porque el umbral cambia qué casillas cumplen (RF-07).
+       * RF-06 y datos del grupo. No se aplica nada en local antes de que
+       * responda el servidor: pintar un cambio que luego rechaza (403 si no
+       * organizas) solo confunde.
        */
-      updateGroupThreshold: async (groupId, threshold) => {
-        const anterior = get().groups.find((g) => g.id === groupId)?.umbralDisponibilidad;
+      updateGroup: async (groupId, cambios) => {
+        if (isApiEnabled) {
+          const actualizado = await groupsService.updateGroup(groupId, {
+            nombre: cambios.nombre,
+            descripcion: cambios.descripcion,
+            umbral_disponibilidad: cambios.umbralDisponibilidad,
+          });
+          generacionGrupos++;
+          set((state) => ({
+            groups: state.groups.map((g) => (g.id === groupId ? actualizado : g)),
+          }));
+          // El umbral cambia qué casillas cumplen (RF-07).
+          if (cambios.umbralDisponibilidad != null) void get().fetchAvailability(groupId);
+          return;
+        }
 
         set((state) => ({
-          groups: state.groups.map((g) => (g.id === groupId ? { ...g, umbralDisponibilidad: threshold } : g)),
+          groups: state.groups.map((g) => (g.id === groupId ? { ...g, ...cambios } : g)),
         }));
-
-        if (!isApiEnabled) return;
-
-        try {
-          await groupsService.updateGroup(groupId, { umbral_disponibilidad: threshold });
-          await get().fetchAvailability(groupId);
-        } catch (error) {
-          // El servidor mandó (p. ej. 403 si quien lo mueve no es el
-          // organizador): se deshace el cambio para no dejar en pantalla un
-          // umbral que nadie más ve.
-          if (anterior != null) {
-            set((state) => ({
-              groups: state.groups.map((g) =>
-                g.id === groupId ? { ...g, umbralDisponibilidad: anterior } : g
-              ),
-            }));
-          }
-          set({ syncError: error instanceof Error ? error.message : 'No se pudo guardar el umbral' });
-        }
       },
 
-      toggleMemberEssential: async (groupId, memberEmail) => {
-        const group = get().groups.find((g) => g.id === groupId);
-        const member = group?.miembros.find((m) => m.email === memberEmail);
-        if (!member) return;
+      updateMember: async (groupId, memberEmail, cambios) => {
+        const grupo = get().groups.find((g) => g.id === groupId);
+        const miembro = grupo?.miembros.find(
+          (m) => normalizarCorreo(m.email) === normalizarCorreo(memberEmail)
+        );
+        if (!grupo || !miembro) throw new Error('Esa persona ya no pertenece al grupo.');
 
-        const nuevoEstado = !member.isEssential;
-        const userId = member.userId ?? member.id;
+        if (isApiEnabled) {
+          const userId = miembro.userId ?? miembro.id;
+          if (!userId) throw new Error('Esa persona ya no pertenece al grupo.');
+          const actualizado = await groupsService.updateMember(groupId, userId, {
+            rol: cambios.rol,
+            esImprescindible: cambios.isEssential,
+          });
+          generacionGrupos++;
+          set((state) => ({
+            groups: state.groups.map((g) => (g.id === groupId ? actualizado : g)),
+          }));
+          return;
+        }
 
-        if (isApiEnabled && userId) {
-          try {
-            const actualizado = await groupsService.updateMember(groupId, userId, {
-              esImprescindible: nuevoEstado,
-            });
-            set((state) => ({
-              groups: state.groups.map((g) => (g.id === groupId ? actualizado : g)),
-            }));
-            return;
-          } catch (error) {
-            set({
-              syncError:
-                error instanceof Error ? error.message : 'No se pudo actualizar al integrante',
-            });
-            return;
-          }
+        // Misma regla que el backend: el grupo nunca se queda sin organizador.
+        if (
+          cambios.rol === 'MIEMBRO' &&
+          rolDe(grupo, miembro) === 'ORGANIZADOR' &&
+          cuantosOrganizadores(grupo) <= 1
+        ) {
+          throw new Error(SIN_ORGANIZADOR_ROL);
         }
 
         set((state) => ({
-          groups: state.groups.map((g) => {
-            if (g.id !== groupId) return g;
-            const updatedMembers = g.miembros.map((m) =>
-              m.email === memberEmail ? { ...m, isEssential: nuevoEstado } : m
-            );
-            return { ...g, miembros: updatedMembers };
-          }),
+          groups: state.groups.map((g) =>
+            g.id !== groupId
+              ? g
+              : {
+                  ...g,
+                  miembros: g.miembros.map((m) =>
+                    m === miembro
+                      ? {
+                          ...m,
+                          rol: cambios.rol ?? rolDe(g, m),
+                          isEssential: cambios.isEssential ?? m.isEssential,
+                        }
+                      : m
+                  ),
+                }
+          ),
         }));
+      },
+
+      removeMember: async (groupId, memberEmail) => {
+        const grupo = get().groups.find((g) => g.id === groupId);
+        const miembro = grupo?.miembros.find(
+          (m) => normalizarCorreo(m.email) === normalizarCorreo(memberEmail)
+        );
+        // Ya no estaba: lo que se pedía ya se cumple.
+        if (!grupo || !miembro) return;
+
+        if (isApiEnabled) {
+          const userId = miembro.userId ?? miembro.id;
+          if (!userId) throw new Error('Esa persona ya no pertenece al grupo.');
+          await groupsService.removeMember(groupId, userId);
+        } else if (
+          rolDe(grupo, miembro) === 'ORGANIZADOR' &&
+          cuantosOrganizadores(grupo) <= 1 &&
+          grupo.miembros.length > 1
+        ) {
+          throw new Error(SIN_ORGANIZADOR_SALIDA);
+        }
+
+        generacionGrupos++;
+        set((state) => ({
+          groups: state.groups.map((g) =>
+            g.id === groupId ? { ...g, miembros: g.miembros.filter((m) => m !== miembro) } : g
+          ),
+        }));
+        // Sus bloques ya no cuentan en el cruce, y el total baja.
+        void get().fetchAvailability(groupId);
+      },
+
+      leaveGroup: async (groupId) => {
+        const grupo = get().groups.find((g) => g.id === groupId);
+        if (!grupo) return;
+        const yo = miembroActual(grupo, yoMismo());
+
+        if (isApiEnabled) {
+          const userId = yo?.userId ?? yo?.id ?? useAuthStore.getState().user?.id;
+          if (!userId) throw new Error('No se pudo identificar tu cuenta en el grupo.');
+          await groupsService.removeMember(groupId, userId);
+        } else if (
+          yo &&
+          rolDe(grupo, yo) === 'ORGANIZADOR' &&
+          cuantosOrganizadores(grupo) <= 1 &&
+          grupo.miembros.length > 1
+        ) {
+          throw new Error(SIN_ORGANIZADOR_SALIDA);
+        }
+
+        /* Fuera del grupo no queda nada que mirar: ni el grupo, ni sus planes
+           (votarlos daría 404), ni su cruce. */
+        generacionGrupos++;
+        turnoDeCruce.delete(groupId);
+        set((state) => {
+          const groups = state.groups.filter((g) => g.id !== groupId);
+          const availability = { ...state.availability };
+          const availabilityEstado = { ...state.availabilityEstado };
+          delete availability[groupId];
+          delete availabilityEstado[groupId];
+          return {
+            groups,
+            groupProposals: state.groupProposals.filter((p) => p.groupId !== groupId),
+            availability,
+            availabilityEstado,
+            selectedGroupId:
+              state.selectedGroupId === groupId ? groups[0]?.id ?? null : state.selectedGroupId,
+          };
+        });
       },
 
       /**
@@ -914,6 +1061,24 @@ export const useGroupsStore = create<GroupsState>()(
     }),
     {
       name: 'huecko-groups',
+      /* v1: los integrantes de demo guardados antes no tenían rol y podían
+         estar «pendientes», un estado que el backend no tiene. */
+      version: 1,
+      migrate: (persistido) => {
+        const estado = persistido as { groups?: Group[] } | undefined;
+        if (!estado?.groups) return persistido as GroupsState;
+        return {
+          ...estado,
+          groups: estado.groups.map((g) => ({
+            ...g,
+            miembros: g.miembros.map((m) => {
+              const limpio: GroupMember & { status?: string } = { ...m, rol: rolDe(g, m) };
+              delete limpio.status;
+              return limpio;
+            }),
+          })),
+        } as unknown as GroupsState;
+      },
       /* Solo los datos. Carga, errores y el cruce son de esta sesión: un
          `isLoading: true` guardado dejaría la pantalla cargando para siempre
          al volver a abrir la app. */
