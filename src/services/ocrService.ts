@@ -154,13 +154,26 @@ async function prepareImageSource(
     const img = new Image();
     img.crossOrigin = 'anonymous';
 
+    /* Un solo blob para todo el proceso.
+     *
+     * Antes se creaba uno para `img.src` y otro más en cada camino de respaldo,
+     * hasta tres por archivo, y no se revocaba ninguno: el navegador retenía el
+     * horario escaneado entero hasta recargar la página, y cada reintento del
+     * OCR sumaba otra copia. */
+    const blobUrl = typeof fileOrUrl === 'string' ? null : URL.createObjectURL(fileOrUrl);
+    const origen = blobUrl ?? (fileOrUrl as string);
+    /* Solo se suelta cuando el resultado es un `data:` URL independiente. En los
+     * caminos de respaldo el propio blob ES el resultado y lo usa Tesseract
+     * después: revocarlo ahí dejaría al OCR sin imagen que leer. */
+    const soltarBlob = () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        resolve({
-          dataUrl: typeof fileOrUrl === 'string' ? fileOrUrl : URL.createObjectURL(fileOrUrl),
-        });
+        resolve({ dataUrl: origen });
         return;
       }
 
@@ -190,19 +203,15 @@ async function prepareImageSource(
 
       ctx.putImageData(imgData, 0, 0);
       resolve({ dataUrl: canvas.toDataURL('image/png') });
+      // El resultado ya no depende del blob: el lienzo lo copió entero.
+      soltarBlob();
     };
 
     img.onerror = () => {
-      resolve({
-        dataUrl: typeof fileOrUrl === 'string' ? fileOrUrl : URL.createObjectURL(fileOrUrl),
-      });
+      resolve({ dataUrl: origen });
     };
 
-    if (typeof fileOrUrl === 'string') {
-      img.src = fileOrUrl;
-    } else {
-      img.src = URL.createObjectURL(fileOrUrl);
-    }
+    img.src = origen;
   });
 }
 

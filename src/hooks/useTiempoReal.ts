@@ -105,6 +105,7 @@ export function useTiempoReal(): void {
         }
 
         case 'VOTACION_EXPRES_ABIERTA':
+        case 'VOTO_EXPRES_ACTUALIZADO':
           if (typeof d.planId !== 'string') break;
           // Se pide al servidor en vez de construirla del evento: el recuento y
           // "mi voto" dependen de quién pregunta, y el topic es del grupo entero.

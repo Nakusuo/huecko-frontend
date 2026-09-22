@@ -1,15 +1,22 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlanProposal } from '../types/groups.types';
 import { instalarAlmacenamientoEnMemoria } from '../test/almacenamientoEnMemoria';
-
-instalarAlmacenamientoEnMemoria();
-const { useGroupsStore } = await import('./groupsStore');
 
 /**
  * `groupsStore` en modo demo (sin `VITE_API_URL`).
  *
  * Las mismas reglas con servidor se prueban en `groupsStore.api.test.ts`.
+ *
+ * La variable se fija vacía en vez de confiar en que no esté: `isApiEnabled` se
+ * calcula al importar `apiClient`, y Vite carga `.env.local` también en los
+ * tests. Con un `.env.local` apuntando al backend —lo normal en cuanto alguien
+ * levanta la app conectada— estas pruebas salían del modo demo e intentaban
+ * pedir por red, así que el resultado dependía de un archivo que ni siquiera
+ * está en el repositorio.
  */
+vi.stubEnv('VITE_API_URL', '');
+instalarAlmacenamientoEnMemoria();
+const { useGroupsStore } = await import('./groupsStore');
 
 const PLAN_CONFIRMADO: PlanProposal = {
   id: 'plan-test',
