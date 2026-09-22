@@ -17,6 +17,8 @@ import { instalarAlmacenamientoEnMemoria } from '../test/almacenamientoEnMemoria
 vi.stubEnv('VITE_API_URL', '');
 instalarAlmacenamientoEnMemoria();
 const { useGroupsStore } = await import('./groupsStore');
+const { useIncidentsStore } = await import('./incidentsStore');
+const { reiniciarSimulador } = await import('../lib/simuladorIncidencias');
 
 const PLAN_CONFIRMADO: PlanProposal = {
   id: 'plan-test',
@@ -36,6 +38,8 @@ describe('groupsStore (demo)', () => {
   beforeEach(() => {
     useGroupsStore.getState().reset();
     useGroupsStore.setState({ groupProposals: [PLAN_CONFIRMADO] });
+    useIncidentsStore.getState().reset();
+    reiniciarSimulador();
   });
 
   it('una tardanza no manda el plan a re-coordinación', async () => {
@@ -49,10 +53,10 @@ describe('groupsStore (demo)', () => {
 
     expect(resultado.replantea).toBe(false);
     expect(planEnStore()?.estado).toBe('confirmado');
-    expect(planEnStore()?.incidencias?.length).toBe(1);
+    expect(useIncidentsStore.getState().retrasos[PLAN_CONFIRMADO.id]).toHaveLength(1);
   });
 
-  it('una ausencia sí replantea el plan en modo demo', async () => {
+  it('la ausencia de quien propuso el plan abre votación, como en el backend', async () => {
     const resultado = await useGroupsStore.getState().reportIncident(PLAN_CONFIRMADO.id, {
       userEmail: 'sam.p@huecko.com',
       userName: 'Sam P.',
@@ -61,7 +65,12 @@ describe('groupsStore (demo)', () => {
     });
 
     expect(resultado.replantea).toBe(true);
-    expect(planEnStore()?.estado).toBe('en_recoordinacion');
+    // Igual que con servidor: el plan sigue confirmado mientras se vota.
+    expect(planEnStore()?.estado).toBe('confirmado');
+    const votacion = useIncidentsStore.getState().votaciones[PLAN_CONFIRMADO.id];
+    expect(votacion?.estado).toBe('ABIERTA');
+    // Quien se cae no decide.
+    expect(votacion?.puedoVotar).toBe(false);
   });
 
   it('cerrar la votación confirma la ventana más votada', async () => {

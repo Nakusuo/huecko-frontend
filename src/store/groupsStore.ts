@@ -2,10 +2,10 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ApiError, isApiEnabled } from '../lib/apiClient';
 import { groupsService } from '../services/groupsService';
-import { eventsService } from '../services/eventsService';
-import { useIncidentsStore } from './incidentsStore';
+import { miIdentificador, useIncidentsStore } from './incidentsStore';
 import { plansService, type CrearPlanPayload } from '../services/plansService';
-import { elegirGanadora, votacionAbierta } from '../lib/planes';
+import { elegirGanadora, inicioDeVentana, ventanaGanadora, votacionAbierta } from '../lib/planes';
+import { configurarSimulador, olvidarPlan as olvidarPlanSimulado } from '../lib/simuladorIncidencias';
 import type {
   Group,
   GroupAvailability,
@@ -113,7 +113,6 @@ interface GroupsState {
     proposalId: string,
     incidence: Omit<PlanIncidence, 'id' | 'fechaReporte'>
   ) => Promise<ResultadoIncidencia>;
-  voteReplanification: (proposalId: string, action: 'cancel' | 'reschedule' | 'keep', userEmail: string) => Promise<void>;
   /** Devuelve `false` si el servidor no lo retiró (el motivo queda en `syncError`). */
   withdrawIncident: (proposalId: string, userEmail: string) => Promise<boolean>;
 }
@@ -170,21 +169,11 @@ const INITIAL_PROPOSALS: PlanProposal[] = [
     lugar: 'Biblioteca Central / Google Meet',
     creadoPor: 'Alex R.',
     plazoVotacion: 'Finalizada',
-    estado: 'en_recoordinacion',
+    estado: 'confirmado',
+    ventanaConfirmadaId: 'w1',
     ventanasSugeridas: [
       { id: 'w1', dia: 'Mié', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: 100, votosUsuarios: ['alex.rodriguez@huecko.com', 'maria.c@huecko.com', 'sam.p@huecko.com'] },
     ],
-    incidencias: [
-      {
-        id: 'inc-1',
-        userEmail: 'maria.c@huecko.com',
-        userName: 'María C.',
-        tipo: 'falta',
-        motivo: 'Tengo un cruce de examen de laboratorio a última hora.',
-        fechaReporte: 'Hace 10 min',
-      },
-    ],
-    votosReplanificacion: { cancel: [], reschedule: ['maria.c@huecko.com'], keep: [] },
   },
   {
     id: 'prop-2',
@@ -199,7 +188,6 @@ const INITIAL_PROPOSALS: PlanProposal[] = [
       { id: 'w-102', dia: 'Dom', horaInicio: '11:00', horaFin: '13:00', disponibilidadPorcentaje: 100, votosUsuarios: ['carlos.m@huecko.com'] },
       { id: 'w-103', dia: 'Dom', horaInicio: '15:00', horaFin: '17:00', disponibilidadPorcentaje: 70, votosUsuarios: [] },
     ],
-    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
   },
   {
     id: 'prop-3',
@@ -213,55 +201,8 @@ const INITIAL_PROPOSALS: PlanProposal[] = [
       { id: 'w-201', dia: 'Mié', horaInicio: '14:00', horaFin: '16:00', disponibilidadPorcentaje: 100, votosUsuarios: ['sam.p@huecko.com'] },
       { id: 'w-202', dia: 'Jue', horaInicio: '10:00', horaFin: '12:00', disponibilidadPorcentaje: 75, votosUsuarios: ['alex.rodriguez@huecko.com'] },
     ],
-    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
   },
 ];
-
-/**
- * Cierra la votación exprés en cuanto hay mayoría y aplica lo decidido.
- *
- * Antes los votos solo se acumulaban: nadie decidía nada, el plan se quedaba
- * en re-coordinación indefinidamente y quien había avisado podía volver a
- * avisar, lo que reabría la votación una y otra vez.
- *
- * En caso de empate gana la opción menos disruptiva: mantener antes que
- * reprogramar, y reprogramar antes que cancelar.
- */
-function resolverVotacionExpres(proposal: PlanProposal, miembros: number): PlanProposal {
-  if (miembros <= 0) return proposal;
-
-  const votos = proposal.votosReplanificacion ?? { cancel: [], reschedule: [], keep: [] };
-  const emitidos = votos.cancel.length + votos.reschedule.length + votos.keep.length;
-  const mayoria = Math.min(Math.floor(miembros / 2) + 1, miembros);
-  if (emitidos < mayoria) return proposal;
-
-  const preferencia = [
-    ['keep', votos.keep.length],
-    ['reschedule', votos.reschedule.length],
-    ['cancel', votos.cancel.length],
-  ] as const;
-  const [ganadora] = preferencia.reduce((mejor, actual) => (actual[1] > mejor[1] ? actual : mejor));
-
-  const ESTADO_POR_OPCION: Record<typeof ganadora, PlanProposal['estado']> = {
-    cancel: 'cancelado',
-    reschedule: 'propuesto',
-    keep: 'confirmado',
-  };
-  const estado = ESTADO_POR_OPCION[ganadora];
-
-  return {
-    ...proposal,
-    estado,
-    votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
-    incidencias: (proposal.incidencias ?? []).map((i) => ({ ...i, resuelta: true })),
-    /* Reprogramar es volver a elegir hora: los votos de la ronda anterior ya
-       no dicen nada sobre las ventanas nuevas. */
-    ventanasSugeridas:
-      ganadora === 'reschedule'
-        ? proposal.ventanasSugeridas.map((v) => ({ ...v, votosUsuarios: [] }))
-        : proposal.ventanasSugeridas,
-  };
-}
 
 /**
  * Cada cambio local de la lista de grupos (crear, añadir integrante, cerrar
@@ -572,19 +513,9 @@ export const useGroupsStore = create<GroupsState>()(
         try {
           const planes = await plansService.getPlans(groupId, miembros);
           set((state) => {
-            /* Los avisos propios solo viven en el cliente (el backend no los
-               devuelve con el plan). Se conservan al recargar: si no, «Ya
-               avisaste» desaparecía y se podía volver a avisar. */
-            const anteriores = new Map(state.groupProposals.map((p) => [p.id, p]));
-            const conAvisos = planes.map((plan) => {
-              const anterior = anteriores.get(plan.id);
-              return anterior?.incidencias
-                ? { ...plan, incidencias: anterior.incidencias }
-                : plan;
-            });
             return {
               groupProposals: [
-                ...conAvisos,
+                ...planes,
                 ...state.groupProposals.filter((p) => p.groupId !== groupId),
               ],
             };
@@ -712,11 +643,15 @@ export const useGroupsStore = create<GroupsState>()(
           const actualizado = await plansService.reschedule(proposalId, backendPayload, miembros);
           set((state) => ({
             groupProposals: state.groupProposals.map((p) =>
-              p.id === proposalId ? { ...p, ...actualizado, incidencias: [] } : p
+              p.id === proposalId ? { ...p, ...actualizado } : p
             ),
           }));
+          useIncidentsStore.getState().olvidarPlan(proposalId);
           return;
         }
+
+        olvidarPlanSimulado(proposalId);
+        useIncidentsStore.getState().olvidarPlan(proposalId);
 
         set((state) => ({
           groupProposals: state.groupProposals.map((p) =>
@@ -727,189 +662,53 @@ export const useGroupsStore = create<GroupsState>()(
                   plazoVotacion: plazoTexto,
                   ventanasSugeridas: ventanas.map((v) => ({ ...v, votosUsuarios: [] })),
                   ventanaConfirmadaId: null,
-                  votosReplanificacion: { cancel: [], reschedule: [], keep: [] },
-                  incidencias: [],
                 }
               : p
           ),
         }));
       },
 
+      /*
+       * Un solo camino para los dos modos: `incidentsStore` habla con el
+       * servidor o, en demo, con `simuladorIncidencias`, que aplica las mismas
+       * reglas. Antes el demo simulaba por su cuenta que toda ausencia
+       * replanteaba el plan y que la votación cerraba al llegar a mayoría.
+       *
+       * Sin try/catch a propósito: si se rechaza el aviso, la página tiene
+       * que enterarse y decírselo a quien reporta.
+       */
       reportIncident: async (proposalId, incidenceData) => {
-        const esTardanza = incidenceData.tipo === 'tardanza';
+        const incidencias = useIncidentsStore.getState();
+        if (incidenceData.tipo === 'tardanza') {
+          await incidencias.reportarRetraso(
+            proposalId,
+            incidenceData.minutosTardanza ?? MINUTOS_TARDANZA_POR_DEFECTO
+          );
+          return { replantea: false, criticidad: null };
+        }
 
-        /* Una tardanza es Módulo 4: avisa, pero el plan sigue en pie (RF-13).
-           Solo una ausencia puede replantearlo, y con backend eso lo decide el
-           servidor (RF-16 y RF-19). En modo demo no hay quien decida y se
-           mantiene la simulación: toda ausencia replantea. */
-        let resultado: ResultadoIncidencia = {
-          replantea: !esTardanza,
-          criticidad: null,
+        const res = await incidencias.reportarImprevisto(proposalId, incidenceData.motivo);
+        return {
+          replantea: res?.votacion != null,
+          criticidad: res?.criticidad ?? null,
+          razon: res?.razon,
         };
-
-        if (isApiEnabled) {
-          // Sin try/catch a propósito: si el servidor rechaza el aviso, la
-          // página tiene que enterarse y no aplicar nada en local.
-          // Se pasa por `incidentsStore` y no directo al servicio: así el
-          // retraso o la votación exprés aparecen al momento en el panel del
-          // evento, sin esperar al WebSocket.
-          const incidencias = useIncidentsStore.getState();
-          if (esTardanza) {
-            await incidencias.reportarRetraso(
-              proposalId,
-              incidenceData.minutosTardanza ?? MINUTOS_TARDANZA_POR_DEFECTO
-            );
-          } else {
-            const res = await incidencias.reportarImprevisto(proposalId, incidenceData.motivo);
-            resultado = {
-              replantea: res?.votacion != null,
-              criticidad: res?.criticidad ?? null,
-              razon: res?.razon,
-            };
-          }
-        }
-
-        /* Con backend el plan sigue CONFIRMADO mientras la votación exprés está
-           abierta: el servidor solo lo cambia al cerrarla (y llega por
-           WebSocket). Cambiarlo aquí escondía el evento del panel de inicio
-           justo cuando había que votar. En modo demo no hay servidor y se
-           simula la re-coordinación en local. */
-        const replanteaEnLocal = resultado.replantea && !isApiEnabled;
-
-        set((state) => {
-          const newIncidence: PlanIncidence = {
-            ...incidenceData,
-            id: `inc-${Date.now()}`,
-            fechaReporte: 'Ahora',
-          };
-          return {
-            groupProposals: state.groupProposals.map((p) => {
-              if (p.id !== proposalId) return p;
-
-              // Sobre un plan cancelado ya no hay nada que avisar.
-              if (p.estado === 'cancelado') return p;
-
-              const current = p.incidencias || [];
-              /* Una incidencia abierta por persona. Sin esta guarda, quien
-                 avisa puede volver a avisar en cuanto ha votado, y el plan no
-                 sale nunca de la re-coordinación. */
-              const yaAviso = current.some(
-                (i) => i.userEmail === incidenceData.userEmail && !i.resuelta
-              );
-              if (yaAviso) return p;
-
-              return {
-                ...p,
-                estado:
-                  replanteaEnLocal && p.estado === 'confirmado' ? 'en_recoordinacion' : p.estado,
-                incidencias: [newIncidence, ...current],
-              };
-            }),
-          };
-        });
-
-        return resultado;
       },
 
-      voteReplanification: async (proposalId, action, userEmail) => {
-        if (isApiEnabled) {
-          try {
-            await eventsService.voteExpress(proposalId, action);
-          } catch (error) {
-            // Un voto que el servidor no guardó no se pinta: nadie más lo vería.
-            set({
-              syncError: error instanceof Error ? error.message : 'No se pudo registrar tu voto',
-            });
-            return;
-          }
-        }
-
-        set((state) => ({
-          groupProposals: state.groupProposals.map((p) => {
-            if (p.id !== proposalId) return p;
-            // Solo se vota mientras hay algo que decidir.
-            if (p.estado !== 'en_recoordinacion') return p;
-
-            const currentVotes = p.votosReplanificacion || { cancel: [], reschedule: [], keep: [] };
-
-            const cleanCancel = currentVotes.cancel.filter((e) => e !== userEmail);
-            const cleanReschedule = currentVotes.reschedule.filter((e) => e !== userEmail);
-            const cleanKeep = currentVotes.keep.filter((e) => e !== userEmail);
-
-            if (action === 'cancel') cleanCancel.push(userEmail);
-            if (action === 'reschedule') cleanReschedule.push(userEmail);
-            if (action === 'keep') cleanKeep.push(userEmail);
-
-            const conVoto: PlanProposal = {
-              ...p,
-              votosReplanificacion: {
-                cancel: cleanCancel,
-                reschedule: cleanReschedule,
-                keep: cleanKeep,
-              },
-            };
-
-            const miembros = state.groups.find((g) => g.id === p.groupId)?.miembros.length ?? 0;
-            return resolverVotacionExpres(conVoto, miembros);
-          }),
-        }));
-      },
-
-      withdrawIncident: async (proposalId, userEmail) => {
-        const aviso = get()
-          .groupProposals.find((p) => p.id === proposalId)
-          ?.incidencias?.find((i) => i.userEmail === userEmail && !i.resuelta);
-
-        /* Una tardanza vive en el servidor (Módulo 4) y se retira allí. Si el
-           servidor no la retira, tampoco se quita de la pantalla: el resto del
-           grupo seguiría viéndola. */
-        /* Una ausencia ya reportada no se puede retirar: el backend no tiene
-           ese endpoint y la votación que abrió sigue para todo el grupo.
-           Quitarla solo de esta pantalla sería mentir. */
-        if (isApiEnabled && aviso && aviso.tipo !== 'tardanza') {
+      /* Solo un retraso se puede retirar. Una ausencia no: la votación que
+         abrió sigue para todo el grupo, y quitarla solo de esta pantalla sería
+         mentir. Si al final puedes ir, se vota «Mantener». */
+      withdrawIncident: async (proposalId) => {
+        try {
+          const usuarioId = miIdentificador();
+          await useIncidentsStore.getState().retirarRetraso(proposalId, usuarioId);
+          return true;
+        } catch (error) {
           set({
-            syncError:
-              'Una ausencia ya reportada no se puede retirar. Si al final puedes ir, vota «Mantener» en la votación del plan.',
+            syncError: error instanceof Error ? error.message : 'No se pudo retirar el aviso',
           });
           return false;
         }
-
-        if (isApiEnabled && aviso?.tipo === 'tardanza') {
-          try {
-            const usuarioId = useAuthStore.getState().user?.id ?? '';
-            await useIncidentsStore.getState().retirarRetraso(proposalId, usuarioId);
-          } catch (error) {
-            set({
-              syncError: error instanceof Error ? error.message : 'No se pudo retirar el aviso',
-            });
-            return false;
-          }
-        }
-
-        set((state) => ({
-          groupProposals: state.groupProposals.map((p) => {
-            if (p.id !== proposalId) return p;
-
-            const restantes = (p.incidencias || []).filter(
-              (i) => !(i.userEmail === userEmail && !i.resuelta)
-            );
-            const quedanAbiertas = restantes.some((i) => !i.resuelta);
-
-            /* Si era el único aviso abierto, el plan vuelve a estar confirmado
-               y la votación desaparece: votar sobre un problema retirado no
-               decide nada. */
-            return {
-              ...p,
-              incidencias: restantes,
-              estado:
-                !quedanAbiertas && p.estado === 'en_recoordinacion' ? 'confirmado' : p.estado,
-              votosReplanificacion: quedanAbiertas
-                ? p.votosReplanificacion
-                : { cancel: [], reschedule: [], keep: [] },
-            };
-          }),
-        }));
-        return true;
       },
     }),
     {
@@ -926,3 +725,56 @@ export const useGroupsStore = create<GroupsState>()(
     }
   )
 );
+
+/*
+ * En demo, el simulador de incidencias necesita saber cómo es cada plan y
+ * cómo aplicarle lo que decide una votación exprés. Se lo cuenta el store que
+ * tiene esos datos, en vez de importarlo desde allí y crear un ciclo.
+ */
+if (!isApiEnabled) {
+  configurarSimulador({
+    contexto: (planId) => {
+      const { groupProposals, groups } = useGroupsStore.getState();
+      const plan = groupProposals.find((p) => p.id === planId);
+      const grupo = plan ? groups.find((g) => g.id === plan.groupId) : undefined;
+      if (!plan || !grupo) return null;
+      const ganadora = ventanaGanadora(plan);
+      const creador = grupo.miembros.find(
+        (m) => m.nombre === plan.creadoPor || m.email === plan.creadoPor
+      );
+      return {
+        tituloPlan: plan.titulo,
+        estado: plan.estado,
+        creadoPorEmail: creador?.email,
+        inicio: ganadora ? inicioDeVentana(ganadora) : null,
+        miembros: grupo.miembros.map((m) => ({
+          email: m.email,
+          nombre: m.nombre,
+          isEssential: m.isEssential,
+          rol: m.rol,
+        })),
+      };
+    },
+    yo: () => {
+      const user = useAuthStore.getState().user;
+      return {
+        email: user?.email ?? 'alex.rodriguez@huecko.com',
+        nombre: user?.nombre ?? 'Alex R.',
+      };
+    },
+    alCerrar: (planId, resultado) => {
+      if (resultado === 'MANTENER') return;
+      useGroupsStore.setState((state) => ({
+        groupProposals: state.groupProposals.map((p) =>
+          p.id === planId
+            ? {
+                ...p,
+                estado: resultado === 'CANCELAR' ? 'cancelado' : 'en_recoordinacion',
+                ventanaConfirmadaId: resultado === 'CANCELAR' ? p.ventanaConfirmadaId : null,
+              }
+            : p
+        ),
+      }));
+    },
+  });
+}
