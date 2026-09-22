@@ -121,6 +121,18 @@ describe('avisoDeEvento', () => {
     expect(aviso?.description).toContain('nadie votó');
   });
 
+  it('un plan cancelado dice el motivo que da el servidor, no uno inventado', () => {
+    const conMotivo = avisoDeEvento(evento('PLAN_CANCELADO', { titulo: 'Cena', motivo: 'La votación cerró sin ningún voto' }));
+    expect(conMotivo?.description).toBe('"Cena" se canceló: la votación cerró sin ningún voto.');
+
+    const sinMotivo = avisoDeEvento(evento('PLAN_CANCELADO', { titulo: 'Cena' }));
+    expect(sinMotivo?.description).toBe('"Cena" se canceló.');
+  });
+
+  it('un voto de ventana no genera aviso: el recuento ya se ve en vivo', () => {
+    expect(avisoDeEvento(evento('VOTO_ACTUALIZADO', { planId: 'p' }))).toBeNull();
+  });
+
   it('un tipo desconocido se ignora en vez de romper', () => {
     const aviso = avisoDeEvento(evento('ALGO_QUE_NO_EXISTE' as RealtimeEventType, {}));
 
