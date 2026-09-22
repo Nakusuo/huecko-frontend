@@ -35,6 +35,8 @@ export function useTiempoReal(): void {
   const aplicarRetrasoRemoto = useIncidentsStore((s) => s.aplicarRetrasoRemoto);
   const aplicarVotacionAbierta = useIncidentsStore((s) => s.aplicarVotacionAbierta);
   const aplicarVotacionCerrada = useIncidentsStore((s) => s.aplicarVotacionCerrada);
+  const cargarPlanIncidencias = useIncidentsStore((s) => s.cargarPlan);
+  const miUsuarioId = useAuthStore((s) => s.user?.id);
 
   // --- conexión ---
   useEffect(() => {
@@ -67,16 +69,21 @@ export function useTiempoReal(): void {
       /* El texto del aviso se arma fuera del hook, en `lib/eventoTexto`, donde
          sí se puede probar. Aquí queda solo el efecto: qué se recarga y qué se
          guarda en los stores. */
-      const aviso = avisoDeEvento(evento);
+      const d = evento.datos as Record<string, unknown>;
+
+      /* Lo que hice yo no me lo notifico: ya lo vi al hacerlo. Antes quien
+         avisaba de un retraso recibía además «Alguien llega tarde: <yo>…». */
+      const aviso = d.usuarioId && d.usuarioId === miUsuarioId ? null : avisoDeEvento(evento);
       if (aviso) {
         addNotification({ ...aviso, groupId: evento.grupoId });
       }
 
-      const d = evento.datos as Record<string, unknown>;
-
       switch (evento.tipo) {
         case 'PLAN_CONFIRMADO':
         case 'PLAN_CANCELADO':
+        case 'PLAN_PROPUESTO':
+        case 'PLAN_REAGENDADO':
+        case 'VOTO_ACTUALIZADO':
           // El aviso ya dice la fecha, pero la vista del grupo seguiría
           // mostrando la votación abierta hasta recargar las propuestas.
           void fetchProposals(evento.grupoId);
@@ -96,15 +103,25 @@ export function useTiempoReal(): void {
                   usuarioId,
                   nombreUsuario: String(d.nombreUsuario ?? 'Alguien'),
                   minutosEstimados: Number(d.minutosEstimados ?? 0),
-                  reportadoEn: evento.ocurridoEn,
-                  corregido: false,
+                  reportadoEn: typeof d.reportadoEn === 'string' ? d.reportadoEn : evento.ocurridoEn,
+                  corregido: d.corregido === true,
                 },
             usuarioId,
           );
           break;
         }
 
+        case 'AUSENCIA_REPORTADA':
+          // La lista de quién no va vive en el servidor: se vuelve a pedir.
+          if (typeof d.planId === 'string') void cargarPlanIncidencias(d.planId);
+          break;
+
         case 'VOTACION_EXPRES_ABIERTA':
+          // Una ausencia crítica no manda AUSENCIA_REPORTADA: con esto llegan
+          // a la vez la votación y la ausencia que la abrió.
+          if (typeof d.planId === 'string') void cargarPlanIncidencias(d.planId);
+          break;
+
         case 'VOTO_EXPRES_ACTUALIZADO':
           if (typeof d.planId !== 'string') break;
           // Se pide al servidor en vez de construirla del evento: el recuento y
@@ -121,7 +138,7 @@ export function useTiempoReal(): void {
           break;
       }
     });
-  }, [addNotification, fetchProposals, aplicarRetrasoRemoto, aplicarVotacionAbierta, aplicarVotacionCerrada]);
+  }, [addNotification, fetchProposals, aplicarRetrasoRemoto, aplicarVotacionAbierta, aplicarVotacionCerrada, cargarPlanIncidencias, miUsuarioId]);
 }
 
 /** Estado de la conexión, para pintarlo donde haga falta. */
