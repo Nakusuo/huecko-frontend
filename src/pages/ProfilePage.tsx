@@ -155,7 +155,7 @@ export default function ProfilePage() {
                   className="w-24 h-24 rounded-full object-cover shadow-md shadow-secondary/20"
                 />
               ) : (
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-secondary to-primary flex items-center justify-center text-white text-3xl font-black shadow-md shadow-secondary/20">
+                <div className="w-24 h-24 rounded-full bg-olive flex items-center justify-center text-ink font-headline text-3xl shadow-md">
                   {profile.nombre.charAt(0)}
                 </div>
               )}

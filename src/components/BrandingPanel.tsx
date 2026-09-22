@@ -1,4 +1,6 @@
 import type { CSSProperties } from 'react';
+import { HueckoMark, PixelIcon, PixelMosaic } from './Pixel';
+import { EtiquetaSticker, SelloCircular, StickerRedondo } from './Stickers';
 
 /**
  * Columna de marca de las pantallas de acceso.
@@ -13,8 +15,8 @@ import type { CSSProperties } from 'react';
  *    de acceso es lo primero que resta credibilidad a un producto.
  *
  * 2. **Sin orbes difuminados.** Tres círculos borrosos flotando es el fondo
- *    por defecto de cualquier plantilla. En su lugar hay una rejilla de
- *    horario, que es literalmente el objeto del producto.
+ *    por defecto de cualquier plantilla. En su lugar hay un mosaico pixel que
+ *    es una semana de horario, con unos pocos huecos libres en oliva.
  *
  * 3. **Alineado a la izquierda.** El texto centrado obliga al ojo a buscar el
  *    inicio de cada línea. En una columna estrecha con cuatro puntos que se
@@ -56,22 +58,20 @@ export function BrandingPanel({
     <aside
       style={style}
       className={
-        'on-brand relative flex flex-col justify-between overflow-hidden bg-gradient-to-br ' +
-        'from-brand-deep via-primary-hover to-primary p-10 xl:p-14 text-white ' +
+        'on-brand relative flex flex-col justify-between overflow-hidden bg-ink ' +
+        'p-10 xl:p-14 text-cream ' +
         className
       }
     >
-      <RejillaHorario />
+      <PixelMosaic />
 
       <div className="relative z-10 flex items-center gap-3">
-        <div className="flex size-11 items-center justify-center rounded-2xl bg-white/12">
-          <span className="text-2xl font-black tracking-tighter text-white">H</span>
-        </div>
-        <span className="font-headline text-2xl font-bold tracking-tight text-white">Huecko</span>
+        <HueckoMark size={44} className="ring-1 ring-cream/20" />
+        <span className="font-headline text-2xl text-cream">Huecko</span>
       </div>
 
       <div className="relative z-10 max-w-sm">
-        <h1 className="font-headline text-4xl xl:text-5xl font-bold leading-[1.08] tracking-tight text-white">
+        <h1 className="font-headline text-4xl xl:text-5xl leading-[1.08] text-cream">
           Coordinar horarios sin discutirlo en el grupo.
         </h1>
 
@@ -80,46 +80,41 @@ export function BrandingPanel({
             <li key={c.titulo} className="flex gap-3.5">
               <span
                 aria-hidden="true"
-                className="material-symbols-outlined mt-0.5 shrink-0 text-[20px] text-primary-container"
+                className="material-symbols-outlined mt-0.5 shrink-0 text-[20px] text-olive"
               >
                 {c.icon}
               </span>
               <span>
-                <span className="block text-sm font-semibold text-white">{c.titulo}</span>
-                <span className="block text-sm text-primary-container/85">{c.detalle}</span>
+                <span className="block text-sm font-semibold text-cream">{c.titulo}</span>
+                <span className="block text-sm text-cream/70">{c.detalle}</span>
               </span>
             </li>
           ))}
         </ul>
       </div>
 
-      <p className="relative z-10 text-xs text-primary-container/70">
+      {/* Los stickers solo caben en pantallas altas; en las bajas se quitan
+          antes que apretar el texto, que es lo que informa. */}
+      <div
+        aria-hidden="true"
+        className="relative z-10 hidden flex-wrap items-center gap-4 [@media(min-height:820px)]:flex"
+      >
+        <div className="flex flex-col items-start gap-2">
+          <EtiquetaSticker codigo="404" texto="hueco no encontrado" giro={-2} retardo={120} />
+          <EtiquetaSticker codigo="200" texto="plan confirmado" tono="oliva" giro={1.5} retardo={220} className="ml-5" />
+        </div>
+        <SelloCircular arriba="Huecko · café" abajo="modo grupo" giro={-8} retardo={320}>
+          <PixelIcon name="taza" size={20} className="text-olive" />
+        </SelloCircular>
+        <StickerRedondo tono="oliva" size={72} giro={6} retardo={420}>
+          <PixelIcon name="auriculares" size={30} />
+        </StickerRedondo>
+      </div>
+
+      <p className="relative z-10 text-xs text-cream/60">
         Tus bloques de horario son privados: el grupo solo ve cuándo estás libre.
       </p>
     </aside>
-  );
-}
-
-/**
- * Rejilla de horario del fondo.
- *
- * Es la textura del propio producto —columnas de días, filas de horas— y no un
- * adorno genérico. Va muy tenue: tiene que leerse como papel pautado, no como
- * un patrón.
- */
-function RejillaHorario() {
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-0 opacity-[0.07]"
-      style={{
-        backgroundImage:
-          'linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)',
-        backgroundSize: '88px 56px',
-        maskImage: 'radial-gradient(120% 90% at 20% 15%, #000 30%, transparent 78%)',
-        WebkitMaskImage: 'radial-gradient(120% 90% at 20% 15%, #000 30%, transparent 78%)',
-      }}
-    />
   );
 }
 
@@ -127,10 +122,8 @@ function RejillaHorario() {
 export function MobileLogo() {
   return (
     <div className="mb-7 flex items-center gap-2.5 lg:hidden">
-      <div className="flex size-9 items-center justify-center rounded-xl bg-primary">
-        <span className="text-lg font-black text-on-primary">H</span>
-      </div>
-      <span className="font-headline text-xl font-bold tracking-tight text-on-surface">Huecko</span>
+      <HueckoMark size={36} />
+      <span className="font-headline text-xl text-on-surface">Huecko</span>
     </div>
   );
 }
