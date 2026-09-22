@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import { useShallow } from 'zustand/react/shallow';
@@ -835,6 +835,29 @@ export default function GroupDetailPage() {
     const estado = availabilityEstado[group.id] ?? { estado: 'cargando' as const };
     return { ...estado, hayDatos: Boolean(availability[group.id]) };
   };
+
+  /* «Proponer plan» desde el inicio llega como `?proponer=1`. Se espera a que
+     el grupo exista y, con backend, a que el cruce responda (bien o mal): si
+     no, las dos opciones iniciales saldrían vacías. Se abre durante el render
+     (el patrón de React para ajustar estado cuando cambian los datos) y no en
+     un efecto, y va aquí abajo porque `openProposePlanModal` necesita las
+     funciones del cruce ya declaradas. */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [proponerPendiente, setProponerPendiente] = useState(() => searchParams.get('proponer') === '1');
+  if (proponerPendiente && selectedGroup) {
+    const cruce = estadoDelCruce(selectedGroup);
+    if (cruce.estado !== 'cargando' || cruce.hayDatos) {
+      setProponerPendiente(false);
+      openProposePlanModal(selectedGroup);
+    }
+  }
+  // El parámetro se quita para que recargar o volver atrás no reabra el formulario.
+  useEffect(() => {
+    if (!searchParams.has('proponer')) return;
+    const resto = new URLSearchParams(searchParams);
+    resto.delete('proponer');
+    setSearchParams(resto, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   /**
    * Planes y horario común de un grupo.
