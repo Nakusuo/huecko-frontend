@@ -181,7 +181,7 @@ export default function Navbar({ currentTab }: NavbarProps) {
                 ref={notifRef}
                 role="dialog"
                 aria-label="Notificaciones"
-                className="absolute right-0 mt-3 w-80 bg-surface-container-lowest border border-outline-variant rounded-2xl shadow-xl p-4 z-50 animate-fade-in"
+                className="absolute right-0 mt-3 w-80 bg-surface-container-lowest rounded-2xl elev-3 p-4 z-50 animate-fade-in"
               >
                 <div className="flex justify-between items-center pb-2 border-b border-outline-variant mb-3">
                   <h2 className="font-bold text-sm text-on-surface">Notificaciones</h2>

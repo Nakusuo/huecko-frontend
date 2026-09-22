@@ -1,3 +1,4 @@
+import { MobileLogo } from '../../components/BrandingPanel';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -34,13 +35,6 @@ const registerSchema = z
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
-const FEATURE_PILLS = [
-  { icon: 'calendar_month', label: 'Horarios automáticos' },
-  { icon: 'groups', label: 'Grupos inteligentes' },
-  { icon: 'how_to_vote', label: 'Votación en tiempo real' },
-  { icon: 'spa', label: 'Sin drama, solo planes' },
-];
-
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -76,16 +70,10 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface flex text-on-surface">
-      {/* Branding Panel (Desktop) */}
-      <BrandingPanel />
+    <div className="w-full max-w-[27rem] py-4">
+      <MobileLogo />
 
-      {/* Form Panel */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
-        <div className="w-full max-w-md py-4">
-          <MobileLogo />
-
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-3xl p-7 md:p-9 shadow-lg shadow-secondary/10">
+          <div className="bg-surface-container-lowest rounded-3xl p-7 md:p-9 elev-2">
             <div className="mb-6">
               <h2 className="text-2xl md:text-3xl font-bold text-on-surface font-headline mb-1.5">
                 Crea tu cuenta
@@ -98,12 +86,22 @@ export default function RegisterPage() {
             <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
               {/* Campo Nombre */}
               <div className="space-y-1.5">
-                <label
-                  htmlFor="nombre"
-                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
-                >
-                  Nombre completo
-                </label>
+                {/* El mensaje va en la MISMA fila que la etiqueta, no en una línea
+                    propia debajo del campo. Con una línea por error el bloque crecía de
+                    golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
+                    ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="nombre" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Nombre completo
+                  </label>
+                  {errors.nombre && (
+                    /* `role="alert"` porque al perder tamaño pierde también presencia: quien
+                       usa lector de pantalla tiene que enterarse igual. */
+                    <p role="alert" className="text-2xs font-semibold text-error text-right">
+                      {errors.nombre.message}
+                    </p>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">person</span>
@@ -121,22 +119,26 @@ export default function RegisterPage() {
                     }`}
                   />
                 </div>
-                {errors.nombre && (
-                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
-                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
-                    {errors.nombre.message}
-                  </p>
-                )}
               </div>
 
               {/* Campo Email */}
               <div className="space-y-1.5">
-                <label
-                  htmlFor="email"
-                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
-                >
-                  Correo electrónico
-                </label>
+                {/* El mensaje va en la MISMA fila que la etiqueta, no en una línea
+                    propia debajo del campo. Con una línea por error el bloque crecía de
+                    golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
+                    ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Correo electrónico
+                  </label>
+                  {errors.email && (
+                    /* `role="alert"` porque al perder tamaño pierde también presencia: quien
+                       usa lector de pantalla tiene que enterarse igual. */
+                    <p role="alert" className="text-2xs font-semibold text-error text-right">
+                      {errors.email.message}
+                    </p>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">mail</span>
@@ -154,22 +156,26 @@ export default function RegisterPage() {
                     }`}
                   />
                 </div>
-                {errors.email && (
-                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
-                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
-                    {errors.email.message}
-                  </p>
-                )}
               </div>
 
               {/* Campo Password */}
               <div className="space-y-1.5">
-                <label
-                  htmlFor="password"
-                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
-                >
-                  Contraseña
-                </label>
+                {/* El mensaje va en la MISMA fila que la etiqueta, no en una línea
+                    propia debajo del campo. Con una línea por error el bloque crecía de
+                    golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
+                    ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Contraseña
+                  </label>
+                  {errors.password && (
+                    /* `role="alert"` porque al perder tamaño pierde también presencia: quien
+                       usa lector de pantalla tiene que enterarse igual. */
+                    <p role="alert" className="text-2xs font-semibold text-error text-right">
+                      {errors.password.message}
+                    </p>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">lock</span>
@@ -197,22 +203,26 @@ export default function RegisterPage() {
                     </span>
                   </button>
                 </div>
-                {errors.password && (
-                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
-                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
-                    {errors.password.message}
-                  </p>
-                )}
               </div>
 
               {/* Campo Confirm Password */}
               <div className="space-y-1.5">
-                <label
-                  htmlFor="confirmPassword"
-                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
-                >
-                  Confirmar Contraseña
-                </label>
+                {/* El mensaje va en la MISMA fila que la etiqueta, no en una línea
+                    propia debajo del campo. Con una línea por error el bloque crecía de
+                    golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
+                    ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="confirmPassword" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Confirmar Contraseña
+                  </label>
+                  {errors.confirmPassword && (
+                    /* `role="alert"` porque al perder tamaño pierde también presencia: quien
+                       usa lector de pantalla tiene que enterarse igual. */
+                    <p role="alert" className="text-2xs font-semibold text-error text-right">
+                      {errors.confirmPassword.message}
+                    </p>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">lock_reset</span>
@@ -240,18 +250,12 @@ export default function RegisterPage() {
                     </span>
                   </button>
                 </div>
-                {errors.confirmPassword && (
-                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
-                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
-                    {errors.confirmPassword.message}
-                  </p>
-                )}
               </div>
 
               {/* Error del Servidor */}
               {serverError && (
-                <div className="p-3 rounded-xl bg-error-container border border-error/30 text-xs text-error flex items-start gap-2">
-                  <span aria-hidden="true" className="material-symbols-outlined text-[18px] shrink-0 text-error">
+                <div role="alert" className="px-3 py-2 rounded-xl bg-error-container border border-error/30 text-2xs text-error flex items-start gap-2">
+                  <span aria-hidden="true" className="material-symbols-outlined text-[15px] shrink-0 text-error">
                     cancel
                   </span>
                   <span>{serverError}</span>
@@ -305,77 +309,7 @@ export default function RegisterPage() {
                 Inicia sesión aquí
               </Link>
             </p>
-          </div>
-        </div>
       </div>
-    </div>
-  );
-}
-
-function BrandingPanel() {
-  return (
-    <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center p-12 bg-gradient-to-br from-brand-deep via-primary-hover to-primary text-white">
-      {/* Decorative Orbs */}
-      <div className="absolute top-1/4 -left-20 w-80 h-80 bg-secondary/25 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-primary-container/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-3/4 left-1/3 w-48 h-48 bg-tertiary-container/15 rounded-full blur-2xl pointer-events-none" />
-
-      <div className="relative z-10 text-center max-w-md">
-        <div className="mb-6 flex items-center justify-center">
-          <div className="relative">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-secondary to-primary flex items-center justify-center shadow-2xl shadow-black/30 border border-white/20">
-              <span className="text-4xl font-black text-white tracking-tighter">H</span>
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-primary-container rounded-full border-2 border-brand-deep flex items-center justify-center">
-              <div className="w-2 h-2 bg-primary rounded-full" />
-            </div>
-          </div>
-        </div>
-
-        <h1 className="text-5xl font-bold font-headline mb-2 tracking-tight text-white">
-          Huecko
-        </h1>
-        <p className="text-primary-container text-lg font-medium mb-8">
-          Coordinar horarios sin discutirlo en el grupo.
-        </p>
-
-        <div className="flex flex-wrap gap-2.5 justify-center mb-8">
-          {FEATURE_PILLS.map((item) => (
-            <span
-              key={item.label}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-surface-container-lowest/10 border border-white/15 rounded-lg text-xs text-surface-container-low backdrop-blur-sm shadow-xs"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-primary-container">
-                {item.icon}
-              </span>
-              {item.label}
-            </span>
-          ))}
-        </div>
-
-        <div className="p-4 bg-surface-container-lowest/10 border border-white/15 rounded-2xl text-left shadow-lg shadow-black/10">
-          <p className="text-surface-container-low text-sm italic leading-relaxed">
-            "Coordina tus huecos libres entre clases y sal con tus amigos al instante."
-          </p>
-          <div className="mt-3 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-secondary to-primary-container flex items-center justify-center text-xs font-bold text-brand-deep">
-              H
-            </div>
-            <span className="text-xs text-primary-container">Comunidad Universitaria Huecko</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MobileLogo() {
-  return (
-    <div className="lg:hidden flex items-center gap-3 mb-6 justify-center">
-      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-secondary to-primary flex items-center justify-center shadow-md shadow-secondary/20">
-        <span className="text-xl font-black text-white">H</span>
-      </div>
-      <span className="text-2xl font-bold font-headline text-on-surface tracking-tight">Huecko</span>
     </div>
   );
 }

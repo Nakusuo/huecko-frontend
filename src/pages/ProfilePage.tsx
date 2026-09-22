@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useAuthStore } from '../store/authStore';
 import { useProfileStore, type UserProfileData } from '../store/profileStore';
 import Toggle from '../components/Toggle';
@@ -25,7 +26,9 @@ export default function ProfilePage() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempProfile, setTempProfile] = useState<UserProfileData>(profile);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  /* El aviso de «guardado» comparte el problema de los demás: dos guardados
+     seguidos y el temporizador del primero apagaba el segundo antes de tiempo. */
+  const [saveSuccess, marcarGuardado] = useAvisoEfimero<true>(3000);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarError, setAvatarError] = useState('');
@@ -113,8 +116,7 @@ export default function ProfilePage() {
     e.preventDefault();
     await updateProfile(tempProfile);
     setIsEditing(false);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    marcarGuardado(true);
   };
 
   const handleCancel = () => {
@@ -123,7 +125,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
+    <div className="bg-surface text-on-surface min-h-dvh flex flex-col">
       <Navbar currentTab="profile" />
 
       {/* Main Container */}
@@ -144,7 +146,7 @@ export default function ProfilePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Card: Avatar e Información básica */}
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-sm flex flex-col items-center text-center">
+          <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6 flex flex-col items-center text-center">
             <div className="relative mb-4">
               {profile.avatarUrl ? (
                 <img
@@ -167,7 +169,7 @@ export default function ProfilePage() {
               <button
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
-                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-surface-container-lowest border border-outline-variant flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface transition-all cursor-pointer shadow-xs"
+                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-surface-container-lowest flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface transition-all cursor-pointer elev-0"
                 aria-label={profile.avatarUrl ? 'Cambiar foto de perfil' : 'Subir foto de perfil'}
                 title={profile.avatarUrl ? 'Cambiar foto' : 'Subir foto'}
               >
@@ -222,7 +224,7 @@ export default function ProfilePage() {
           {/* Formulario y Configuraciones */}
           <div className="lg:col-span-2 space-y-6">
             {/* Sección: Datos de Cuenta */}
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-sm">
+            <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6">
               <div className="flex justify-between items-center mb-4 pb-3 border-b border-outline-variant/60">
                 <h3 className="text-lg font-bold text-on-surface flex items-center gap-2">
                   <span aria-hidden="true" className="material-symbols-outlined text-primary">person</span>
@@ -319,7 +321,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Sección de privacidad y visibilidad */}
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-sm">
+            <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6">
               <h3 className="text-lg font-bold text-on-surface flex items-center gap-2 mb-4 pb-3 border-b border-outline-variant/60">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">lock</span>
                 Privacidad de horarios
@@ -336,7 +338,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Sección: Notificaciones */}
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-sm">
+            <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6">
               <h3 className="text-lg font-bold text-on-surface flex items-center gap-2 mb-4 pb-3 border-b border-outline-variant/60">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">notifications</span>
                 Notificaciones y alertas
