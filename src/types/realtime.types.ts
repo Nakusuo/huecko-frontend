@@ -19,7 +19,13 @@ export type RealtimeEventType =
   /** RF-17: alguien votó y el recuento cambió. No dice quién ni qué. */
   | 'VOTO_EXPRES_ACTUALIZADO'
   /** RF-17 y RF-18: la votación exprés terminó. */
-  | 'VOTACION_EXPRES_CERRADA';
+  | 'VOTACION_EXPRES_CERRADA'
+  /** RF-08: alguien propuso un plan nuevo en el grupo. */
+  | 'PLAN_PROPUESTO'
+  /** Un plan en re-coordinación vuelve a votarse con fechas nuevas. */
+  | 'PLAN_REAGENDADO'
+  /** RF-09: cambió el recuento de una votación de ventanas. No dice qué se votó. */
+  | 'VOTO_ACTUALIZADO';
 
 export interface RealtimeEvent {
   tipo: RealtimeEventType;
