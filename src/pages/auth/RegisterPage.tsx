@@ -1,4 +1,4 @@
-import { BrandingPanel, MobileLogo } from '../../components/BrandingPanel';
+import { MobileLogo } from '../../components/BrandingPanel';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -70,14 +70,8 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-surface flex text-on-surface">
-      {/* Columna de marca: solo en pantallas anchas. */}
-      <BrandingPanel />
-
-      {/* El formulario se lleva el resto. En móvil, la pantalla entera. */}
-      <div className="flex-1 flex items-center justify-center px-5 py-8 sm:p-10 lg:p-12 overflow-y-auto">
-        <div className="w-full max-w-[27rem] py-4">
-          <MobileLogo />
+    <div className="w-full max-w-[27rem] py-4">
+      <MobileLogo />
 
           <div className="bg-surface-container-lowest rounded-3xl p-7 md:p-9 elev-2">
             <div className="mb-6">
@@ -92,12 +86,22 @@ export default function RegisterPage() {
             <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
               {/* Campo Nombre */}
               <div className="space-y-1.5">
-                <label
-                  htmlFor="nombre"
-                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
-                >
-                  Nombre completo
-                </label>
+                {/* El mensaje va en la MISMA fila que la etiqueta, no en una línea
+                    propia debajo del campo. Con una línea por error el bloque crecía de
+                    golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
+                    ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="nombre" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Nombre completo
+                  </label>
+                  {errors.nombre && (
+                    /* `role="alert"` porque al perder tamaño pierde también presencia: quien
+                       usa lector de pantalla tiene que enterarse igual. */
+                    <p role="alert" className="text-2xs font-semibold text-error text-right">
+                      {errors.nombre.message}
+                    </p>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">person</span>
@@ -115,22 +119,26 @@ export default function RegisterPage() {
                     }`}
                   />
                 </div>
-                {errors.nombre && (
-                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
-                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
-                    {errors.nombre.message}
-                  </p>
-                )}
               </div>
 
               {/* Campo Email */}
               <div className="space-y-1.5">
-                <label
-                  htmlFor="email"
-                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
-                >
-                  Correo electrónico
-                </label>
+                {/* El mensaje va en la MISMA fila que la etiqueta, no en una línea
+                    propia debajo del campo. Con una línea por error el bloque crecía de
+                    golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
+                    ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Correo electrónico
+                  </label>
+                  {errors.email && (
+                    /* `role="alert"` porque al perder tamaño pierde también presencia: quien
+                       usa lector de pantalla tiene que enterarse igual. */
+                    <p role="alert" className="text-2xs font-semibold text-error text-right">
+                      {errors.email.message}
+                    </p>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">mail</span>
@@ -148,22 +156,26 @@ export default function RegisterPage() {
                     }`}
                   />
                 </div>
-                {errors.email && (
-                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
-                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
-                    {errors.email.message}
-                  </p>
-                )}
               </div>
 
               {/* Campo Password */}
               <div className="space-y-1.5">
-                <label
-                  htmlFor="password"
-                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
-                >
-                  Contraseña
-                </label>
+                {/* El mensaje va en la MISMA fila que la etiqueta, no en una línea
+                    propia debajo del campo. Con una línea por error el bloque crecía de
+                    golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
+                    ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Contraseña
+                  </label>
+                  {errors.password && (
+                    /* `role="alert"` porque al perder tamaño pierde también presencia: quien
+                       usa lector de pantalla tiene que enterarse igual. */
+                    <p role="alert" className="text-2xs font-semibold text-error text-right">
+                      {errors.password.message}
+                    </p>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">lock</span>
@@ -191,22 +203,26 @@ export default function RegisterPage() {
                     </span>
                   </button>
                 </div>
-                {errors.password && (
-                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
-                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
-                    {errors.password.message}
-                  </p>
-                )}
               </div>
 
               {/* Campo Confirm Password */}
               <div className="space-y-1.5">
-                <label
-                  htmlFor="confirmPassword"
-                  className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
-                >
-                  Confirmar Contraseña
-                </label>
+                {/* El mensaje va en la MISMA fila que la etiqueta, no en una línea
+                    propia debajo del campo. Con una línea por error el bloque crecía de
+                    golpe al equivocarse y dejaba de verse entero; aquí ocupa un hueco que
+                    ya estaba vacío, así que la tarjeta mide igual con errores y sin ellos. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="confirmPassword" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Confirmar Contraseña
+                  </label>
+                  {errors.confirmPassword && (
+                    /* `role="alert"` porque al perder tamaño pierde también presencia: quien
+                       usa lector de pantalla tiene que enterarse igual. */
+                    <p role="alert" className="text-2xs font-semibold text-error text-right">
+                      {errors.confirmPassword.message}
+                    </p>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant flex items-center">
                     <span aria-hidden="true" className="material-symbols-outlined text-[20px]">lock_reset</span>
@@ -234,18 +250,12 @@ export default function RegisterPage() {
                     </span>
                   </button>
                 </div>
-                {errors.confirmPassword && (
-                  <p className="text-xs text-error font-medium flex items-center gap-1 mt-1">
-                    <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
-                    {errors.confirmPassword.message}
-                  </p>
-                )}
               </div>
 
               {/* Error del Servidor */}
               {serverError && (
-                <div className="p-3 rounded-xl bg-error-container border border-error/30 text-xs text-error flex items-start gap-2">
-                  <span aria-hidden="true" className="material-symbols-outlined text-[18px] shrink-0 text-error">
+                <div role="alert" className="px-3 py-2 rounded-xl bg-error-container border border-error/30 text-2xs text-error flex items-start gap-2">
+                  <span aria-hidden="true" className="material-symbols-outlined text-[15px] shrink-0 text-error">
                     cancel
                   </span>
                   <span>{serverError}</span>
@@ -299,8 +309,6 @@ export default function RegisterPage() {
                 Inicia sesión aquí
               </Link>
             </p>
-          </div>
-        </div>
       </div>
     </div>
   );

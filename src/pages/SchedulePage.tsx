@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import type { OcrExtractedSlot } from '../services/ocrService';
 import { useScheduleStore } from '../store/scheduleStore';
 import type { DayOfWeek, TimeSlot } from '../store/scheduleStore';
 import { CATEGORY_COLORS, DEFAULT_CATEGORY_COLOR } from '../theme/palette';
+import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -46,17 +47,27 @@ export default function SchedulePage() {
   const [ocrDraftSlots, setOcrDraftSlots] = useState<OcrExtractedSlot[]>([]);
 
   // Notification Toast
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, showToast] = useAvisoEfimero<string>();
+
+  /* El preview también se revoca al salir de la pantalla: sin esto, el último
+     quedaba retenido aunque nadie fuera a mirarlo. La ref evita que el efecto se
+     rearme con cada archivo elegido. */
+  const previewVigente = useRef<string | null>(null);
+  useEffect(() => {
+    previewVigente.current = filePreviewUrl;
+  }, [filePreviewUrl]);
+  useEffect(
+    () => () => {
+      if (previewVigente.current) URL.revokeObjectURL(previewVigente.current);
+    },
+    [],
+  );
 
   // Escape cierra el diálogo y el fondo deja de desplazarse mientras está abierto.
   useModalDismiss(isModalOpen, () => setIsModalOpen(false));
   useModalDismiss(isOcrUploadModalOpen, () => setIsOcrUploadModalOpen(false));
   useModalDismiss(isOcrDraftModalOpen, () => setIsOcrDraftModalOpen(false));
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
 
   const timeLabels = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
 
@@ -233,12 +244,13 @@ export default function SchedulePage() {
   // File Handlers for Real Upload
   const handleFileSelect = (file: File) => {
     setSelectedOcrFile(file);
-    if (file.type.startsWith('image/')) {
-      const preview = URL.createObjectURL(file);
-      setFilePreviewUrl(preview);
-    } else {
-      setFilePreviewUrl(null);
-    }
+    /* Se revoca el anterior antes de pisarlo. Elegir una segunda imagen sin
+       pasar por «quitar» dejaba el primer blob retenido por el navegador hasta
+       recargar la página, y un horario escaneado no es un archivo pequeño. */
+    setFilePreviewUrl((anterior) => {
+      if (anterior) URL.revokeObjectURL(anterior);
+      return file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    });
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

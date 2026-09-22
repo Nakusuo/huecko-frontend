@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 /**
  * Columna de marca de las pantallas de acceso.
  *
@@ -37,9 +39,28 @@ const CAPACIDADES = [
   },
 ];
 
-export function BrandingPanel() {
+/**
+ * @param className Colocación. La aporta quien lo usa porque en las pantallas de
+ *   acceso el panel no ocupa un hueco de la maquetación: se desplaza por encima
+ *   de los dos formularios (ver `AuthPage`).
+ * @param style Ancho y desplazamiento, que se calculan en tiempo de ejecución.
+ */
+export function BrandingPanel({
+  className = '',
+  style,
+}: {
+  className?: string;
+  style?: CSSProperties;
+}) {
   return (
-    <aside className="on-brand relative hidden lg:flex lg:w-[44%] xl:w-2/5 flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-deep via-primary-hover to-primary p-10 xl:p-14 text-white">
+    <aside
+      style={style}
+      className={
+        'on-brand relative flex flex-col justify-between overflow-hidden bg-gradient-to-br ' +
+        'from-brand-deep via-primary-hover to-primary p-10 xl:p-14 text-white ' +
+        className
+      }
+    >
       <RejillaHorario />
 
       <div className="relative z-10 flex items-center gap-3">
