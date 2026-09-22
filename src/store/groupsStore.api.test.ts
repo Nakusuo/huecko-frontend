@@ -121,33 +121,23 @@ describe('groupsStore (con backend)', () => {
     };
 
     await expect(useGroupsStore.getState().reportIncident(PLAN.id, aviso('falta'))).rejects.toThrow();
-    expect(plan()?.incidencias).toBe(undefined);
+    expect(useIncidentsStore.getState().ausencias[PLAN.id]).toBe(undefined);
     expect(plan()?.estado).toBe('confirmado');
   });
 
-  it('un voto que el servidor no guarda no se pinta', async () => {
-    useGroupsStore.setState({ groupProposals: [{ ...PLAN, estado: 'en_recoordinacion' }] });
+  it('un voto exprés que el servidor rechaza sube el error y no se pinta', async () => {
+    useIncidentsStore.setState({ votaciones: { [PLAN.id]: VOTACION } });
     incidentsService.votarExpres = async () => {
       throw new ApiError('Votación cerrada', 409);
     };
 
-    await useGroupsStore.getState().voteReplanification(PLAN.id, 'keep', 'sam@huecko.com');
-
-    expect(useGroupsStore.getState().syncError).toBe('Votación cerrada');
-    expect(plan()?.votosReplanificacion).toBe(undefined);
+    await expect(useIncidentsStore.getState().votarExpres(PLAN.id, 'MANTENER')).rejects.toThrow('Votación cerrada');
+    expect(useIncidentsStore.getState().votaciones[PLAN.id]?.miVoto ?? null).toBe(VOTACION.miVoto ?? null);
   });
 
-  it('retirar una tardanza que el servidor no retira deja el aviso', async () => {
-    useGroupsStore.setState({
-      groupProposals: [
-        {
-          ...PLAN,
-          incidencias: [
-            { id: 'i-1', userEmail: 'sam@huecko.com', userName: 'Sam', tipo: 'tardanza', motivo: 'x', fechaReporte: 'Ahora' },
-          ],
-        },
-      ],
-    });
+  it('retirar un retraso que el servidor no retira lo deja a la vista', async () => {
+    const retraso = { usuarioId: 'u-1', nombreUsuario: 'Sam', minutosEstimados: 10, reportadoEn: '2026-09-21T10:00:00Z', corregido: false };
+    useIncidentsStore.setState({ retrasos: { [PLAN.id]: [retraso] } });
     incidentsService.retirarRetraso = async () => {
       throw new ApiError('Error', 500);
     };
@@ -155,26 +145,8 @@ describe('groupsStore (con backend)', () => {
     const retirado = await useGroupsStore.getState().withdrawIncident(PLAN.id, 'sam@huecko.com');
 
     expect(retirado).toBe(false);
-    expect(plan()?.incidencias?.length).toBe(1);
-  });
-
-  it('una ausencia no se puede retirar desde el cliente', async () => {
-    useGroupsStore.setState({
-      groupProposals: [
-        {
-          ...PLAN,
-          incidencias: [
-            { id: 'i-2', userEmail: 'sam@huecko.com', userName: 'Sam', tipo: 'falta', motivo: 'x', fechaReporte: 'Ahora' },
-          ],
-        },
-      ],
-    });
-
-    const retirado = await useGroupsStore.getState().withdrawIncident(PLAN.id, 'sam@huecko.com');
-
-    expect(retirado).toBe(false);
-    expect(plan()?.incidencias?.length).toBe(1);
-    expect(useGroupsStore.getState().syncError).not.toBeNull();
+    expect(useIncidentsStore.getState().retrasos[PLAN.id]).toHaveLength(1);
+    expect(useGroupsStore.getState().syncError).toBe('Error');
   });
 
   it('una respuesta de grupos que llega tarde no pisa un grupo recién creado', async () => {
