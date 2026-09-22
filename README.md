@@ -22,21 +22,24 @@ npm run dev
 
 La app queda en `http://localhost:5173`.
 
-### Modo demostración (sin servidor)
+### Entornos
 
-Sin variables de entorno arranca con datos simulados. Entra con
-`alex.rodriguez@huecko.com` / `demo1234`. No hace falta levantar nada más.
+Vite carga un archivo de variables según el modo en que se arranca:
+
+| Archivo | Modo | `VITE_API_URL` | Resultado |
+|---|---|---|---|
+| `.env.development` | `npm run dev` | `/api` | Conectado a Spring Boot a través del proxy de Vite. |
+| `.env.production` | `npm run build` | vacía (la define Vercel) | Conectado al backend desplegado, o demo si no hay URL. |
+| `.env.demo` | `npm run dev:demo` | vacía | Demostración con datos simulados, sin servidor. |
+
+`.env.example` documenta todas las variables. Para cambiar algo solo en tu
+máquina, crea `.env.development.local`, que git ignora.
 
 ### Modo conectado
 
-Copia `.env.example` a `.env.local` y define:
-
-```bash
-VITE_API_URL=/api                          # activa el modo conectado
-VITE_BACKEND_PROXY=http://localhost:8080   # a dónde reenvía el proxy de Vite
-```
-
-Con `VITE_API_URL=/api` el navegador pide al mismo origen y Vite reenvía a Spring
+`npm run dev` espera el backend en `http://localhost:8080` (ver
+[`huecko-backend`](https://github.com/Nakusuo/huecko-backend)). Con
+`VITE_API_URL=/api` el navegador pide al mismo origen y Vite reenvía a Spring
 Boot, así que no hace falta configurar CORS en desarrollo. El cliente añade solo
 la cabecera `Authorization: Bearer <JWT>`.
 
@@ -46,11 +49,20 @@ Para probar el modo conectado sin levantar Spring Boot hay un backend de mentira
 npm run dev:stub
 ```
 
+### Modo demostración (sin servidor)
+
+```bash
+npm run dev:demo
+```
+
+Arranca con datos simulados. Entra con `alex.rodriguez@huecko.com` / `demo1234`.
+
 ## Scripts
 
 | Script | Qué hace |
 |---|---|
-| `npm run dev` | Servidor de desarrollo con recarga en caliente. |
+| `npm run dev` | Servidor de desarrollo con recarga en caliente, conectado al backend. |
+| `npm run dev:demo` | Servidor de desarrollo en modo demostración, sin backend. |
 | `npm run build` | Comprueba tipos (`tsc -b`) y compila a `dist/`. |
 | `npm run preview` | Sirve lo compilado, para revisar el build de producción. |
 | `npm run test` | Pasa la batería de pruebas una vez. |
