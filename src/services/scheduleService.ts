@@ -62,6 +62,7 @@ export function toTimeSlot(bloque: BloqueHorarioResponse, previous?: TimeSlot): 
     specificDate: bloque.fecha ?? previous?.specificDate,
     specificEndDate: bloque.fechaFin ?? previous?.specificEndDate,
     isOcrImported: bloque.fuente === 'OCR' || previous?.isOcrImported,
+    confirmado: bloque.estado === 'CONFIRMADO',
   };
 }
 
@@ -107,10 +108,20 @@ export async function fetchSlots(existing: TimeSlot[] = []): Promise<TimeSlot[]>
   );
 }
 
+/**
+ * Cuerpo del POST de creación. `confirmado` va aparte de `toBloqueRequest`
+ * porque solo viaja al crear: meterlo en la comparación de cambios haría que
+ * un bloque recién traído del servidor pareciera modificado.
+ */
+export function toCreateRequest(slot: TimeSlot): BloqueHorarioRequest {
+  const request = toBloqueRequest(slot);
+  return slot.isOcrImported && slot.confirmado ? { ...request, confirmado: true } : request;
+}
+
 async function createBlock(usuarioId: string, slot: TimeSlot): Promise<string> {
   const { data } = await apiClient.post<BloqueHorarioResponse>(
     endpoints.schedule.blocks(usuarioId),
-    toBloqueRequest(slot)
+    toCreateRequest(slot)
   );
   return data.id;
 }
@@ -128,6 +139,18 @@ function hasServerRelevantChange(before: TimeSlot, after: TimeSlot): boolean {
   return JSON.stringify(toBloqueRequest(before)) !== JSON.stringify(toBloqueRequest(after));
 }
 
+/** Lo que llegó a aplicarse en el servidor, aunque el lote no terminara. */
+export interface SyncProgress {
+  /** `idLocal → idDelServidor` de los bloques ya creados. */
+  creados: Record<string, string>;
+  actualizados: Set<string>;
+  borrados: Set<string>;
+}
+
+export function emptyProgress(): SyncProgress {
+  return { creados: {}, actualizados: new Set(), borrados: new Set() };
+}
+
 /**
  * Sincroniza contra el backend la diferencia entre dos versiones de la rejilla.
  *
@@ -135,31 +158,38 @@ function hasServerRelevantChange(before: TimeSlot, after: TimeSlot): boolean {
  * porque las páginas ya mutan el horario con `setSlots(prev => …)`; así el
  * store sincroniza cualquier cambio sin tocar los componentes.
  *
- * Devuelve el mapa `idLocal → idDelServidor` de los bloques recién creados.
+ * Va apuntando en `progress` cada operación que el servidor acepta. Si una
+ * falla a mitad de lote la promesa se rechaza, pero `progress` conserva lo ya
+ * hecho: el store lo necesita para no deshacer en local bloques que sí se
+ * crearon (y que volverían a aparecer, duplicados, al reintentar).
  */
 export async function syncSlots(
   previous: TimeSlot[],
-  next: TimeSlot[]
-): Promise<Record<string, string>> {
+  next: TimeSlot[],
+  progress: SyncProgress = emptyProgress()
+): Promise<SyncProgress> {
   const usuarioId = currentUserId();
-  const idMap: Record<string, string> = {};
-  if (!isApiEnabled || !usuarioId) return idMap;
+  if (!isApiEnabled || !usuarioId) return progress;
 
   const previousById = new Map(previous.map((slot) => [slot.id, slot]));
   const nextIds = new Set(next.map((slot) => slot.id));
 
   for (const slot of previous) {
-    if (!nextIds.has(slot.id)) await deleteBlock(usuarioId, slot.id);
+    if (!nextIds.has(slot.id)) {
+      await deleteBlock(usuarioId, slot.id);
+      progress.borrados.add(slot.id);
+    }
   }
 
   for (const slot of next) {
     const before = previousById.get(slot.id);
     if (!before) {
-      idMap[slot.id] = await createBlock(usuarioId, slot);
+      progress.creados[slot.id] = await createBlock(usuarioId, slot);
     } else if (hasServerRelevantChange(before, slot)) {
       await updateBlock(usuarioId, slot);
+      progress.actualizados.add(slot.id);
     }
   }
 
-  return idMap;
+  return progress;
 }
