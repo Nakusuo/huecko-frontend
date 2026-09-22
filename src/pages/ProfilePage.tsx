@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useAuthStore } from '../store/authStore';
 import { useProfileStore, type UserProfileData } from '../store/profileStore';
 import Toggle from '../components/Toggle';
@@ -25,7 +26,9 @@ export default function ProfilePage() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempProfile, setTempProfile] = useState<UserProfileData>(profile);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  /* El aviso de «guardado» comparte el problema de los demás: dos guardados
+     seguidos y el temporizador del primero apagaba el segundo antes de tiempo. */
+  const [saveSuccess, marcarGuardado] = useAvisoEfimero<true>(3000);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarError, setAvatarError] = useState('');
@@ -113,8 +116,7 @@ export default function ProfilePage() {
     e.preventDefault();
     await updateProfile(tempProfile);
     setIsEditing(false);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    marcarGuardado(true);
   };
 
   const handleCancel = () => {

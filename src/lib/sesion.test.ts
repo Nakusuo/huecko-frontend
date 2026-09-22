@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { instalarAlmacenamientoEnMemoria } from '../test/almacenamientoEnMemoria';
 
-/** Modo demo (sin `VITE_API_URL`). */
+/**
+ * Modo demo. La variable se fija vacía en vez de confiar en que no esté: Vite
+ * carga `.env.local` también en los tests, así que con la app apuntando al
+ * backend estas pruebas se ejecutaban en modo conectado y comprobaban lo
+ * contrario de lo que dicen. Ver `sesion.api.test.ts` para el caso con servidor.
+ */
+vi.stubEnv('VITE_API_URL', '');
 instalarAlmacenamientoEnMemoria();
 const { useAuthStore } = await import('../store/authStore');
 const { useGroupsStore } = await import('../store/groupsStore');

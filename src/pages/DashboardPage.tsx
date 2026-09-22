@@ -10,6 +10,7 @@ import type {
   DashboardPendingVote,
 } from '../types/dashboard.types';
 import { DEFAULT_CATEGORY_COLOR } from '../theme/palette';
+import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
@@ -144,10 +145,18 @@ export default function DashboardPage() {
 
   /* Módulos 4 y 5 del evento en curso. Se piden una vez al aparecer el evento;
      a partir de ahí el canal en tiempo real los mantiene al día sin volver a
-     preguntar (ver `useTiempoReal`). */
+     preguntar (ver `useTiempoReal`).
+
+     La dependencia es el ID y no el objeto `upcomingEvent`: ese objeto sale de
+     un `useMemo` sobre `groups` y `proposals`, y el store reemplaza esos arrays
+     enteros en cada refresco. Con el objeto en las dependencias, cualquier
+     cambio en cualquier grupo relanzaba las dos peticiones — y como cada evento
+     del canal llama a `fetchProposals`, el tiempo real se realimentaba a sí
+     mismo. */
+  const upcomingEventId = upcomingEvent?.id;
   useEffect(() => {
-    if (upcomingEvent) void cargarPlanIncidencias(upcomingEvent.id);
-  }, [upcomingEvent, cargarPlanIncidencias]);
+    if (upcomingEventId) void cargarPlanIncidencias(upcomingEventId);
+  }, [upcomingEventId, cargarPlanIncidencias]);
 
   const retrasos = upcomingEvent ? retrasosDelPlan[upcomingEvent.id] ?? [] : [];
   const votacionExpres = upcomingEvent ? votaciones[upcomingEvent.id] ?? null : null;
@@ -161,7 +170,10 @@ export default function DashboardPage() {
   useModalDismiss(isDelayModalOpen, () => setIsDelayModalOpen(false));
   useModalDismiss(isIncidentModalOpen, () => setIsIncidentModalOpen(false));
   const [incidentReason, setIncidentReason] = useState('');
-  const [notificationToast, setNotificationToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
+  type Aviso = { message: string; type: 'success' | 'info' | 'warning' };
+  const [notificationToast, mostrarAviso] = useAvisoEfimero<Aviso>();
+  const showToast = (message: string, type: Aviso['type'] = 'success') =>
+    mostrarAviso({ message, type });
 
   /* Si ya avisé de algo sobre este plan, lo que toca es retirarlo, no mandar
      otro aviso encima: era lo que permitía avisar, votar y volver a avisar. */
@@ -171,13 +183,6 @@ export default function DashboardPage() {
         ?.incidencias?.find((i) => i.userEmail === userEmail && !i.resuelta) ?? null
     : null;
 
-
-  const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
-    setNotificationToast({ message, type });
-    setTimeout(() => {
-      setNotificationToast(null);
-    }, 3500);
-  };
 
   const getGreeting = () => {
     const hour = new Date().getHours();
