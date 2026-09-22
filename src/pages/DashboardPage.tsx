@@ -19,7 +19,17 @@ import { AccionesRapidas } from '../components/AccionesRapidas';
 import { AvisoError } from '../components/AvisoError';
 import { isApiEnabled } from '../lib/apiClient';
 import { formatearPlazo, formatearVentana, proximoPlanConfirmado, votacionAbierta } from '../lib/planes';
-import { fechaLocalIso, ocupaFecha } from '../lib/horario';
+import { fechaLocalIso, inicioDeSemana, ocupaFecha } from '../lib/horario';
+import {
+  bloquesDemoDeLaSemana,
+  cruceLocal,
+  horasCoincidentesRestantes,
+  mejorVentanaFutura,
+  type CruceSemanal,
+} from '../lib/huecosSemana';
+import { RUTA_CREAR_GRUPO, rutaProponerPlan } from '../lib/intenciones';
+import { EtiquetaSticker } from '../components/Stickers';
+import { PixelMosaic } from '../components/Pixel';
 
 interface TodayScheduleBlock {
   id: string;
@@ -36,6 +46,10 @@ export default function DashboardPage() {
   const proposals = useGroupsStore((s) => s.groupProposals);
   const voteProposalWindow = useGroupsStore((s) => s.voteProposalWindow);
   const scheduleSlots = useScheduleStore((s) => s.slots);
+  const occupiedSlots = useGroupsStore((s) => s.occupiedSlots);
+  const availability = useGroupsStore((s) => s.availability);
+  const availabilityEstado = useGroupsStore((s) => s.availabilityEstado);
+  const fetchAvailability = useGroupsStore((s) => s.fetchAvailability);
   // El usuario de ejemplo solo existe en modo demo: con backend, votar o avisar
   // en su nombre sería actuar como otra persona.
   const userEmail = user?.email || (isApiEnabled ? '' : 'alex.rodriguez@huecko.com');
@@ -83,32 +97,105 @@ export default function DashboardPage() {
     [groups, proposals, userEmail]
   );
 
-  const metrics = useMemo(() => ({
-    activeGroupsCount: groups.length,
-    // «Por votar» son las que aún no he votado, no todas las abiertas.
-    pendingVotesCount: pendingVotes.filter((v) => !v.suggestedWindows.some((w) => w.hasVoted)).length,
-    freeMatchHoursThisWeek: proposals
-      .flatMap((proposal) => proposal.ventanasSugeridas)
-      .filter((window) => window.disponibilidadPorcentaje >= 80)
-      .reduce((total, window) => total + Number(window.horaFin.slice(0, 2)) - Number(window.horaInicio.slice(0, 2)), 0),
-    connectedMembersCount: new Set(groups.flatMap((group) => group.miembros.map((member) => member.email))).size,
-  }), [groups, pendingVotes, proposals]);
+  /* Cruce de disponibilidad de ESTA semana por grupo, con el umbral de cada
+     grupo. Con backend es el del servidor (el único que ve el horario real de
+     todos); en demo se calcula aquí con las mismas reglas que el heatmap del
+     grupo. `null` = todavía no hay cruce de esta semana para ese grupo. */
+  const lunes = inicioDeSemana(hoyIso);
+  const bloquesDemo = useMemo(
+    () => (isApiEnabled ? null : bloquesDemoDeLaSemana(occupiedSlots, scheduleSlots, userEmail, lunes)),
+    [occupiedSlots, scheduleSlots, userEmail, lunes]
+  );
+  const crucesPorGrupo = useMemo(() => {
+    const cruces: Record<string, CruceSemanal | null> = {};
+    for (const group of groups) {
+      if (bloquesDemo) {
+        cruces[group.id] = cruceLocal(
+          group.miembros.map((m) => m.email),
+          bloquesDemo,
+          group.umbralDisponibilidad,
+          lunes
+        );
+      } else {
+        const cruce = availability[group.id];
+        // Un cruce de una semana anterior ya no dice nada de esta.
+        cruces[group.id] = cruce && cruce.weekFrom >= lunes ? cruce : null;
+      }
+    }
+    return cruces;
+  }, [groups, bloquesDemo, availability, lunes]);
 
+  /* Con backend, el inicio pide el cruce de los grupos que aún no lo tienen
+     (o lo tienen de otra semana). Por ids y no por el array de grupos: cada
+     recarga crea uno nuevo y relanzaría las peticiones en bucle. */
+  const idsGrupos = groups.map((g) => g.id).join(',');
+  useEffect(() => {
+    if (!isApiEnabled || !idsGrupos) return;
+    const { availability: cruces, availabilityEstado: estados } = useGroupsStore.getState();
+    for (const id of idsGrupos.split(',')) {
+      const cruce = cruces[id];
+      if (estados[id]?.estado === 'cargando') continue;
+      if (!cruce || cruce.weekFrom < lunes) void fetchAvailability(id);
+    }
+  }, [idsGrupos, lunes, fetchAvailability]);
+
+  /* Qué puede decir la tarjeta de huecos: la cifra solo cuando están los
+     cruces de todos los grupos; si falta alguno, que lo diga en vez de
+     enseñar un total a medias como si fuera el de la semana. */
+  const huecos = useMemo(() => {
+    if (groups.length === 0) return { estado: 'sin_grupos' as const };
+    const faltan = groups.filter((g) => !crucesPorGrupo[g.id]);
+    if (faltan.length > 0) {
+      const alguienCargando = faltan.some((g) => (availabilityEstado[g.id]?.estado ?? 'cargando') === 'cargando');
+      return { estado: alguienCargando ? ('cargando' as const) : ('error' as const) };
+    }
+    const cruces = groups.map((g) => crucesPorGrupo[g.id]).filter((c): c is CruceSemanal => c != null);
+    return { estado: 'ok' as const, horas: horasCoincidentesRestantes(cruces) };
+  }, [groups, crucesPorGrupo, availabilityEstado]);
+
+  // «Por votar» son las que aún no he votado, no todas las abiertas.
+  const porVotarCount = pendingVotes.filter((v) => !v.suggestedWindows.some((w) => w.hasVoted)).length;
+  // Personas distintas entre todos mis grupos, sin contarme dos veces.
+  const personasEnMisGrupos = new Set(
+    groups.flatMap((group) => group.miembros.map((member) => member.email.toLowerCase()))
+  ).size;
+
+  /* Resumen de cada grupo con datos que existen: el próximo plan confirmado
+     del grupo o, si no hay, la mejor franja que queda esta semana según el
+     cruce. Antes el porcentaje era el UMBRAL cuando no había propuesta, y la
+     «próxima coincidencia» la primera ventana del primer plan no cancelado,
+     aunque fuera de la semana pasada o la opción que perdió. */
   const groupSummaries = useMemo(
     () => groups.map((group) => {
-      const nextWindow = proposals
-        .filter((proposal) => proposal.groupId === group.id && proposal.estado !== 'cancelado')
-        .flatMap((proposal) => proposal.ventanasSugeridas)[0];
+      const plan = proximoPlanConfirmado(proposals.filter((p) => p.groupId === group.id));
+      const cruce = crucesPorGrupo[group.id];
+      const mejor = cruce ? mejorVentanaFutura(cruce) : null;
+      const cargando = !cruce && isApiEnabled && (availabilityEstado[group.id]?.estado ?? 'cargando') === 'cargando';
+
+      let detalle: string;
+      let etiqueta: string | null = null;
+      if (plan) {
+        detalle = `Próximo plan: ${formatearVentana(plan.ventana)}`;
+        etiqueta = 'Confirmado';
+      } else if (mejor) {
+        detalle = `Mejor hueco: ${formatearVentana(mejor)}`;
+        etiqueta = `${mejor.disponibilidadPorcentaje}% libre`;
+      } else if (cargando) {
+        detalle = 'Calculando huecos…';
+      } else {
+        detalle = cruce ? 'Sin huecos esta semana' : '—';
+      }
+
       return {
         id: group.id,
         name: group.nombre,
         membersCount: group.miembros.length,
-        matchPercentage: nextWindow?.disponibilidadPorcentaje ?? group.umbralDisponibilidad,
-        nextSlot: nextWindow ? `${nextWindow.dia} ${nextWindow.horaInicio} - ${nextWindow.horaFin}` : 'Sin propuesta aún',
+        detalle,
+        etiqueta,
         color: group.miembros[0]?.color || DEFAULT_CATEGORY_COLOR,
       };
     }),
-    [groups, proposals]
+    [groups, proposals, crucesPorGrupo, availabilityEstado]
   );
 
   const reportIncident = useGroupsStore((s) => s.reportIncident);
@@ -192,6 +279,7 @@ export default function DashboardPage() {
   }, [idsConfirmados, cargarPlanIncidencias]);
 
   const retrasos = upcomingEvent ? retrasosDelPlan[upcomingEvent.id] ?? [] : [];
+  const asistentes = upcomingEvent ? upcomingEvent.attendees.filter((a) => a.status !== 'no_asiste').length : 0;
   const votacionesAbiertas = Object.values(votaciones).filter(
     (v): v is NonNullable<typeof v> => v != null && idsConfirmados.split(',').includes(v.planId)
   );
@@ -228,7 +316,9 @@ export default function DashboardPage() {
     return 'Buenas noches';
   };
 
-  const displayName = user?.nombre || (isApiEnabled ? '' : 'Alejandro');
+  /* El nombre de la cuenta o ninguno: antes, sin nombre, el saludo decía
+     «Alejandro», que ni siquiera es el de la cuenta de ejemplo. */
+  const displayName = user?.nombre?.trim() ?? '';
 
   const handleVote = async (voteId: string, windowId: string) => {
     const guardado = await voteProposalWindow(voteId, windowId, userEmail);
@@ -354,10 +444,14 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-on-surface">{metrics.activeGroupsCount}</span>
-              <span className="text-xs text-primary font-semibold">Grupos</span>
+              <span className="text-3xl font-bold text-on-surface">{groups.length}</span>
+              <span className="text-xs text-primary font-semibold">{groups.length === 1 ? 'Grupo' : 'Grupos'}</span>
             </div>
-            <p className="text-2xs text-on-surface-variant mt-1">Con disponibilidad sincronizada</p>
+            <p className="text-2xs text-on-surface-variant mt-1">
+              {personasEnMisGrupos === 0
+                ? 'Aún no hay nadie en tus grupos'
+                : `${personasEnMisGrupos} ${personasEnMisGrupos === 1 ? 'persona' : 'personas'} en total`}
+            </p>
           </button>
 
           <button type="button"
@@ -371,16 +465,27 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-on-surface">{pendingVotes.length}</span>
+              {/* La cifra grande es la que lleva la etiqueta «Por votar»: antes
+                  enseñaba todas las abiertas, votadas incluidas. */}
+              <span className="text-3xl font-bold text-on-surface">{porVotarCount}</span>
               <span className="text-xs text-on-warning-container font-bold bg-warning-container/80 px-2 py-0.5 rounded-lg">
                 Por votar
               </span>
             </div>
-            <p className="text-2xs text-on-surface-variant mt-1">Planes abiertos para definir hora</p>
+            <p className="text-2xs text-on-surface-variant mt-1">
+              {pendingVotes.length === 0
+                ? 'Ninguna votación abierta'
+                : porVotarCount === 0
+                ? `Ya votaste en ${pendingVotes.length === 1 ? 'la abierta' : `las ${pendingVotes.length} abiertas`}`
+                : `De ${pendingVotes.length} ${pendingVotes.length === 1 ? 'abierta' : 'abiertas'} para decidir hora`}
+            </p>
           </button>
 
+          {/* Horas que quedan esta semana en las que algún grupo llega a SU
+              umbral, según el cruce de cada grupo. Lleva al grupo (donde está
+              el heatmap que las explica), no al horario personal. */}
           <button type="button"
-            onClick={() => navigate('/schedule')}
+            onClick={() => navigate(groups.length === 1 ? `/groups/${groups[0].id}` : '/groups')}
             className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
@@ -390,10 +495,20 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-on-surface">{metrics.freeMatchHoursThisWeek}h</span>
-              <span className="text-xs text-primary font-semibold">Esta semana</span>
+              <span className="text-3xl font-bold text-on-surface">
+                {huecos.estado === 'ok' ? `${huecos.horas}h` : huecos.estado === 'cargando' ? '…' : '—'}
+              </span>
+              <span className="text-xs text-primary font-semibold">Quedan esta semana</span>
             </div>
-            <p className="text-2xs text-on-surface-variant mt-1">Donde coincide ≥ 80% del grupo</p>
+            <p className="text-2xs text-on-surface-variant mt-1">
+              {huecos.estado === 'sin_grupos'
+                ? 'Crea un grupo para ver cuándo coincidís'
+                : huecos.estado === 'cargando'
+                ? 'Calculando el cruce de tus grupos…'
+                : huecos.estado === 'error'
+                ? 'No se pudo calcular el cruce de algún grupo'
+                : 'Donde algún grupo llega a su umbral'}
+            </p>
           </button>
 
           <button type="button"
@@ -408,9 +523,13 @@ export default function DashboardPage() {
             </div>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-3xl font-bold text-on-surface">{scheduleSlots.length}</span>
-              <span className="text-xs text-primary font-semibold">Bloques</span>
+              <span className="text-xs text-primary font-semibold">{scheduleSlots.length === 1 ? 'Bloque' : 'Bloques'}</span>
             </div>
-            <p className="text-2xs text-on-surface-variant mt-1">Sincronizado con grupos</p>
+            <p className="text-2xs text-on-surface-variant mt-1">
+              {todayBlocks.length === 0
+                ? 'Nada ocupado hoy'
+                : `${todayBlocks.length} ${todayBlocks.length === 1 ? 'ocupa' : 'ocupan'} hoy`}
+            </p>
           </button>
         </section>
 
@@ -470,7 +589,7 @@ export default function DashboardPage() {
 
                     <div className="flex items-center gap-1.5">
                       <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-primary">group</span>
-                      <span>{upcomingEvent.attendees.filter((a) => a.status !== 'no_asiste').length} Asistentes confirmados</span>
+                      <span>{asistentes} {asistentes === 1 ? 'asistente confirmado' : 'asistentes confirmados'}</span>
                     </div>
                   </div>
 
@@ -529,7 +648,7 @@ export default function DashboardPage() {
               title="No tienes eventos confirmados próximos"
               description="Propón un plan en tus grupos para que Huecko sugiera los mejores horarios."
               actionLabel="Proponer plan"
-              onAction={() => navigate('/groups')}
+              onAction={() => navigate(rutaProponerPlan(groups))}
             />
           )}
         </section>
@@ -607,7 +726,7 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-on-surface">Mis grupos activos</h3>
               </div>
               <button
-                onClick={() => navigate('/groups')}
+                onClick={() => navigate(RUTA_CREAR_GRUPO)}
                 className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all cursor-pointer shadow-xs"
               >
                 + Nuevo grupo
@@ -619,7 +738,7 @@ export default function DashboardPage() {
                 groupSummaries.map((g) => (
                   <button type="button"
                     key={g.id}
-                    onClick={() => navigate('/groups')}
+                    onClick={() => navigate(`/groups/${g.id}`)}
                     className="w-full text-left p-4 rounded-2xl border border-outline-variant/60 bg-surface-container hover:bg-surface-container hover:border-primary transition-all cursor-pointer flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-3">
@@ -634,16 +753,18 @@ export default function DashboardPage() {
                           {g.name}
                         </h4>
                         <p className="text-2xs text-on-surface-variant">
-                          {g.membersCount} miembros • Próx. coincidencia: {g.nextSlot}
+                          {g.membersCount} {g.membersCount === 1 ? 'integrante' : 'integrantes'} • {g.detalle}
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-xs font-bold text-primary bg-surface-container-lowest px-2.5 py-1 rounded-lg border border-outline-variant/60">
-                        {g.matchPercentage}% libre
-                      </span>
-                    </div>
+                    {g.etiqueta && (
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-bold text-primary bg-surface-container-lowest px-2.5 py-1 rounded-lg border border-outline-variant/60">
+                          {g.etiqueta}
+                        </span>
+                      </div>
+                    )}
                   </button>
                 ))
               ) : (
@@ -651,11 +772,11 @@ export default function DashboardPage() {
                   <span aria-hidden="true" className="material-symbols-outlined text-3xl text-primary">group_add</span>
                   <p className="text-xs font-bold text-on-surface">Aún no tienes grupos registrados</p>
                   <button
-                    onClick={() => navigate('/groups')}
+                    onClick={() => navigate(RUTA_CREAR_GRUPO)}
                     className="mt-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-xs hover:bg-primary-hover transition-all cursor-pointer inline-flex items-center gap-1"
                   >
                     <span aria-hidden="true" className="material-symbols-outlined text-[16px]">add</span>
-                    <span>Crear o Unirme a Grupo</span>
+                    <span>Crear grupo</span>
                   </button>
                 </div>
               )}
@@ -674,7 +795,7 @@ export default function DashboardPage() {
                 <h2 className="text-xl font-bold text-on-surface">Votación de planes en curso</h2>
               </div>
               <p className="text-xs text-on-surface-variant">
-                Opciones generadas automáticamente a partir de la disponibilidad de tu grupo.
+                Opciones propuestas en tus grupos, con la disponibilidad de cada una según el cruce.
               </p>
             </div>
             <button
@@ -771,27 +892,22 @@ export default function DashboardPage() {
       {isDetailModalOpen && upcomingEvent && (
         <div role="dialog" aria-modal="true" aria-label="Detalles del evento" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-xs">
           <div className="bg-surface rounded-3xl max-w-2xl w-full overflow-hidden elev-3 animate-modal-in">
-            {/* Banner de Imagen Superior */}
-            <div className="relative h-48 sm:h-60 w-full overflow-hidden">
-              <img
-                src={upcomingEvent.coverImage}
-                alt={upcomingEvent.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-on-surface/90 via-on-surface/30 to-transparent flex flex-col justify-end p-6">
-                <span className="inline-block px-2.5 py-0.5 rounded-lg bg-primary text-on-primary text-2xs font-bold uppercase w-max mb-1">
-                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">check</span>
-                  Confirmado
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-headline font-bold text-white">
+            {/* Cabecera de sticker sobre tinta. Antes era un banner con una
+                imagen de portada y una descripción que ningún plan tiene: una
+                imagen rota y una línea vacía encima del título. */}
+            <div className="on-brand relative overflow-hidden bg-ink px-6 pb-6 pt-7 text-cream">
+              <PixelMosaic columnas={24} filas={8} />
+              <div className="relative z-10 space-y-3">
+                <EtiquetaSticker codigo="200" texto="plan confirmado" tono="oliva" giro={-2} />
+                <h2 className="text-2xl sm:text-3xl font-headline font-bold text-cream">
                   {upcomingEvent.title}
                 </h2>
-                <p className="text-xs text-white/80 mt-1">{upcomingEvent.description}</p>
+                <p className="text-xs text-cream/70">{upcomingEvent.groupName}</p>
               </div>
 
               <button aria-label="Cerrar"
                 onClick={() => setIsDetailModalOpen(false)}
-                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-scrim/50 hover:bg-scrim/70 text-white flex items-center justify-center cursor-pointer transition-colors"
+                className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-cream/10 hover:bg-cream/20 text-cream flex items-center justify-center cursor-pointer transition-colors"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
               </button>
@@ -819,7 +935,6 @@ export default function DashboardPage() {
                   <div>
                     <span className="text-2xs font-bold text-on-surface-variant uppercase">Dónde</span>
                     <p className="text-xs font-bold text-on-surface mt-0.5">{upcomingEvent.locationName}</p>
-                    <p className="text-2xs text-on-surface-variant">{upcomingEvent.locationAddress}</p>
                   </div>
                 </div>
               </div>
