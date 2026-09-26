@@ -5,9 +5,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { DEMO_CREDENTIALS, loginUser } from '../../services/authService';
+import { DEMO_ADMIN_CREDENTIALS, DEMO_CREDENTIALS, loginUser } from '../../services/authService';
 import { isApiEnabled } from '../../lib/apiClient';
 import { destinoTrasLogin } from '../../routes/destino';
+import { esAdmin } from '../../lib/rol';
 
 const loginSchema = z.object({
   email: z
@@ -46,7 +47,7 @@ export default function LoginPage() {
       const res = await loginUser(data);
       login(res.user, res.token);
       // De vuelta a la página donde estaba (p. ej. si la sesión expiró ahí).
-      navigate(destinoTrasLogin(location.state), { replace: true });
+      navigate(destinoTrasLogin(location.state, esAdmin(res.user)), { replace: true });
     } catch (err) {
       const msg =
         err instanceof Error
@@ -56,11 +57,11 @@ export default function LoginPage() {
     }
   };
 
-  const fillDemoCredentials = () => {
-    setValue('email', DEMO_CREDENTIALS.email, {
+  const fillDemoCredentials = (credenciales: { email: string; password: string }) => {
+    setValue('email', credenciales.email, {
       shouldValidate: true,
     });
-    setValue('password', DEMO_CREDENTIALS.password, {
+    setValue('password', credenciales.password, {
       shouldValidate: true,
     });
   };
@@ -236,22 +237,29 @@ export default function LoginPage() {
                 cuenta no existe (el seed está desactivado). */}
             {!isApiEnabled && (
             <div className="mt-5 p-3.5 rounded-2xl border border-dashed border-secondary bg-surface-container-low flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-primary flex items-center gap-1">
-                  <span aria-hidden="true" className="material-symbols-outlined text-[16px]">key</span>
-                  Credenciales Demo:
-                </span>
-                <button
-                  type="button"
-                  onClick={fillDemoCredentials}
-                  className="text-2xs font-semibold text-primary bg-surface-container-lowest border border-outline-variant px-2.5 py-0.5 rounded-lg hover:bg-primary-container/50 transition-colors cursor-pointer"
-                >
-                  Autocompletar
-                </button>
-              </div>
-              <p className="text-xs text-on-surface-variant font-mono bg-surface-container-lowest px-2 py-1 rounded-lg border border-outline-variant/40">
-                {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}
-              </p>
+              <span className="text-xs font-bold text-primary flex items-center gap-1">
+                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">key</span>
+                Credenciales Demo:
+              </span>
+              {[
+                { rotulo: 'Usuario', credenciales: DEMO_CREDENTIALS },
+                { rotulo: 'Admin', credenciales: DEMO_ADMIN_CREDENTIALS },
+              ].map(({ rotulo, credenciales }) => (
+                <div key={rotulo} className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate text-xs text-on-surface-variant font-mono bg-surface-container-lowest px-2 py-1 rounded-lg border border-outline-variant/40">
+                    <span className="font-sans font-semibold text-on-surface">{rotulo}:</span>{' '}
+                    {credenciales.email} / {credenciales.password}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => fillDemoCredentials(credenciales)}
+                    aria-label={`Autocompletar la cuenta ${rotulo.toLowerCase()}`}
+                    className="shrink-0 text-2xs font-semibold text-primary bg-surface-container-lowest border border-outline-variant px-2.5 py-0.5 rounded-lg hover:bg-primary-container/50 transition-colors cursor-pointer"
+                  >
+                    Autocompletar
+                  </button>
+                </div>
+              ))}
             </div>
             )}
       </div>

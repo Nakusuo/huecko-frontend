@@ -4,7 +4,7 @@ import { instalarAlmacenamientoEnMemoria } from '../test/almacenamientoEnMemoria
 /** Modo demo: las cuentas registradas viven en este navegador. */
 vi.stubEnv('VITE_API_URL', '');
 instalarAlmacenamientoEnMemoria();
-const { loginUser, registerUser, actualizarCuentaDemo, leerCuentasDemo, DEMO_CREDENTIALS } = await import('./authService');
+const { loginUser, registerUser, actualizarCuentaDemo, leerCuentasDemo, DEMO_CREDENTIALS, DEMO_ADMIN_CREDENTIALS } = await import('./authService');
 
 /** El servicio simula un segundo de red: se adelanta el reloj en vez de esperarlo. */
 async function sinEspera<T>(promesa: Promise<T>): Promise<T> {
@@ -75,5 +75,35 @@ describe('cuentas demo', () => {
     // Mantener el propio correo sí vale.
     expect(actualizarCuentaDemo(user, { nombre: 'Lucía', email: 'Lucia@correo.com' }).email).toBe('lucia@correo.com');
     expect(leerCuentasDemo().filter((c) => c.id === user.id)).toHaveLength(1);
+  });
+});
+
+describe('cuenta admin del modo demo', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('entra con su contraseña fija y trae el rol ADMIN', async () => {
+    const res = await sinEspera(loginUser(DEMO_ADMIN_CREDENTIALS));
+    expect(res.user.rolSistema).toBe('ADMIN');
+  });
+
+  it('con la contraseña de la cuenta de ejemplo no entra', async () => {
+    await expect(
+      sinEspera(loginUser({ email: DEMO_ADMIN_CREDENTIALS.email, password: DEMO_CREDENTIALS.password }))
+    ).rejects.toThrow('Credenciales incorrectas');
+  });
+
+  it('registrarse nunca da el rol ADMIN, ni con el correo del admin', async () => {
+    const alta = await sinEspera(registerUser({ nombre: 'Lucía', email: 'lucia@correo.com', password: 'secreta123' }));
+    expect(alta.user.rolSistema).toBe('USUARIO');
+
+    await expect(
+      sinEspera(registerUser({ nombre: 'Intrusa', email: DEMO_ADMIN_CREDENTIALS.email, password: 'secreta123' }))
+    ).rejects.toThrow('El correo ya está en uso');
   });
 });
