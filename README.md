@@ -57,6 +57,23 @@ npm run dev:demo
 
 Arranca con datos simulados. Entra con `alex.rodriguez@huecko.com` / `demo1234`.
 
+Para el panel de administración, `admin@huecko.com` / `admin1234`. Es la misma
+cuenta que crea el seed del backend en desarrollo.
+
+### Roles
+
+Cada cuenta tiene un rol de plataforma (`rolSistema`), distinto del rol dentro
+de un grupo:
+
+| Rol | Entra a | Zona |
+|---|---|---|
+| `USUARIO` | `/dashboard` | Horario, grupos, planes y perfil. |
+| `ADMIN` | `/admin` | Panel propio (resumen, usuarios, grupos). No tiene horario ni grupos. |
+
+Cada rol queda redirigido fuera de la zona del otro. La interfaz solo decide qué
+se enseña: quien protege los datos es el backend, que responde 403 en
+`/api/admin/**` a una cuenta normal.
+
 ## Scripts
 
 | Script | Qué hace |
