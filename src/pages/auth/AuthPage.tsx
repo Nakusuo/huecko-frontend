@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { BrandingPanel } from '../../components/BrandingPanel';
 import { useAuthStore } from '../../store/authStore';
 import { destinoTrasLogin } from '../../routes/destino';
+import { esAdmin } from '../../lib/rol';
 import LoginPage from './LoginPage';
 import RegisterPage from './RegisterPage';
 
@@ -44,11 +45,12 @@ const DURACION_FORM_MS = 180;
 
 export default function AuthPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const admin = useAuthStore((s) => esAdmin(s.user));
   const { pathname, state } = useLocation();
   const esRegistro = pathname.startsWith('/register');
 
   // Con sesión abierta no hay nada que hacer aquí: a donde se iba, o al inicio.
-  if (isAuthenticated) return <Navigate to={destinoTrasLogin(state)} replace />;
+  if (isAuthenticated) return <Navigate to={destinoTrasLogin(state, admin)} replace />;
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-surface text-on-surface">
