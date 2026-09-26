@@ -9,7 +9,14 @@ export const DEMO_CREDENTIALS = {
   password: 'demo1234',
 } as const;
 
+/** Administrador del modo demo: las mismas credenciales que el seed del backend. */
+export const DEMO_ADMIN_CREDENTIALS = {
+  email: 'admin@huecko.com',
+  password: 'admin1234',
+} as const;
+
 const ID_CUENTA_EJEMPLO = '1';
+const ID_CUENTA_ADMIN = 'admin';
 const TOKEN_CUENTA_EJEMPLO = 'mock-jwt-token-huecko-2026';
 
 const EMAIL_EN_USO = 'El correo ya está en uso. Intenta con otro.';
@@ -44,6 +51,22 @@ const CUENTA_EJEMPLO: CuentaDemo = {
   nombre: 'Alex Rodríguez',
   email: DEMO_CREDENTIALS.email,
   creado_en: '2026-01-01T00:00:00.000Z',
+  rolSistema: 'USUARIO',
+};
+
+const CUENTA_ADMIN: CuentaDemo = {
+  id: ID_CUENTA_ADMIN,
+  nombre: 'Administración Huecko',
+  email: DEMO_ADMIN_CREDENTIALS.email,
+  creado_en: '2026-01-01T00:00:00.000Z',
+  rolSistema: 'ADMIN',
+};
+
+/** Siempre presentes, aunque no se haya registrado nada. Entran con su contraseña fija. */
+const CUENTAS_FIJAS: CuentaDemo[] = [CUENTA_EJEMPLO, CUENTA_ADMIN];
+const CLAVE_FIJA: Record<string, string> = {
+  [ID_CUENTA_EJEMPLO]: DEMO_CREDENTIALS.password,
+  [ID_CUENTA_ADMIN]: DEMO_ADMIN_CREDENTIALS.password,
 };
 
 function guardarCuentasDemo(cuentas: CuentaDemo[]): void {
@@ -54,7 +77,7 @@ function guardarCuentasDemo(cuentas: CuentaDemo[]): void {
   }
 }
 
-/** Cuentas demo de este navegador, con la de ejemplo siempre presente. */
+/** Cuentas demo de este navegador, con las fijas (ejemplo y admin) siempre presentes. */
 export function leerCuentasDemo(): CuentaDemo[] {
   let guardadas: CuentaDemo[] = [];
   try {
@@ -68,7 +91,10 @@ export function leerCuentasDemo(): CuentaDemo[] {
   } catch {
     guardadas = [];
   }
-  return guardadas.some((c) => c.id === ID_CUENTA_EJEMPLO) ? guardadas : [CUENTA_EJEMPLO, ...guardadas];
+  /* Las fijas van delante: si en este navegador se registró antes una cuenta
+     con el correo del admin, al entrar gana la fija. */
+  const faltan = CUENTAS_FIJAS.filter((fija) => !guardadas.some((c) => c.id === fija.id));
+  return [...faltan, ...guardadas];
 }
 
 const buscarPorEmail = (cuentas: CuentaDemo[], email: string) =>
@@ -94,7 +120,7 @@ async function resumirClave(password: string): Promise<string> {
 }
 
 async function claveCorrecta(cuenta: CuentaDemo, password: string): Promise<boolean> {
-  if (!cuenta.clave) return cuenta.id === ID_CUENTA_EJEMPLO && password === DEMO_CREDENTIALS.password;
+  if (!cuenta.clave) return CLAVE_FIJA[cuenta.id] === password;
   return cuenta.clave === (await resumirClave(password));
 }
 
@@ -160,6 +186,7 @@ export async function registerUser(payload: RegisterPayload): Promise<AuthRespon
     nombre,
     email,
     creado_en: new Date().toISOString(),
+    rolSistema: 'USUARIO',
     clave: await resumirClave(payload.password),
   };
   guardarCuentasDemo([...cuentas, cuenta]);

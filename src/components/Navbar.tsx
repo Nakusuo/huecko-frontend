@@ -36,7 +36,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 /** Distingue de un vistazo si la app habla con el backend o corre en modo demostración. */
-function InsigniaModo() {
+export function InsigniaModo() {
   return (
     <span
       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-2xs font-medium border ${

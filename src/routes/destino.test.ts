@@ -20,3 +20,25 @@ describe('destinoTrasLogin', () => {
     expect(destinoTrasLogin({ from: { pathname: 'https://evil.example' } })).toBe('/dashboard');
   });
 });
+
+describe('destinoTrasLogin según el rol', () => {
+  it('el admin va a su panel, no al dashboard', () => {
+    expect(destinoTrasLogin(null, true)).toBe('/admin');
+  });
+
+  it('el admin vuelve a la página del panel que pedía', () => {
+    expect(destinoTrasLogin({ from: { pathname: '/admin/usuarios', search: '?q=ana' } }, true)).toBe(
+      '/admin/usuarios?q=ana'
+    );
+  });
+
+  it('cada rol se queda en su zona', () => {
+    expect(destinoTrasLogin({ from: { pathname: '/groups/42' } }, true)).toBe('/admin');
+    expect(destinoTrasLogin({ from: { pathname: '/admin' } })).toBe('/dashboard');
+    expect(destinoTrasLogin({ from: { pathname: '/admin/grupos' } })).toBe('/dashboard');
+  });
+
+  it('una ruta que solo empieza igual no es del panel', () => {
+    expect(destinoTrasLogin({ from: { pathname: '/administracion' } }, true)).toBe('/admin');
+  });
+});
