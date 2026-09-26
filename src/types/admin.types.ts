@@ -51,3 +51,18 @@ export interface UsuarioAdmin {
   /** `null` si nunca hizo nada en la app. */
   ultimaActividad: string | null;
 }
+
+/** Espejo de `GrupoAdminResponse`: metadatos y actividad, sin integrantes ni planes por dentro. */
+export interface GrupoAdmin {
+  id: string;
+  nombre: string;
+  creadoEn: string | null;
+  organizadores: string[];
+  miembros: number;
+  umbralDisponibilidad: number;
+  planes: number;
+  planesPorEstado: Record<EstadoPlanAdmin, number>;
+  imprevistos: number;
+  /** `null` si nunca pasó nada en el grupo tras crearlo. */
+  ultimaActividad: string | null;
+}

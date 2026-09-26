@@ -99,6 +99,7 @@ export const endpoints = {
   admin: {
     resumen: '/admin/resumen',
     usuarios: '/admin/usuarios',
+    grupos: '/admin/grupos',
     suspension: (usuarioId: string) => `/admin/usuarios/${usuarioId}/suspension`,
   },
 } as const;
