@@ -98,5 +98,7 @@ export const endpoints = {
   /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */
   admin: {
     resumen: '/admin/resumen',
+    usuarios: '/admin/usuarios',
+    suspension: (usuarioId: string) => `/admin/usuarios/${usuarioId}/suspension`,
   },
 } as const;

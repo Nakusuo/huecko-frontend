@@ -1,3 +1,5 @@
+import type { RolSistema } from './auth.types';
+
 /** Espejo de `ResumenAdminResponse` del backend. Solo cifras agregadas. */
 
 export type EstadoPlanAdmin = 'PROPUESTO' | 'CONFIRMADO' | 'CANCELADO' | 'EN_RECOORDINACION';
@@ -34,4 +36,18 @@ export interface ResumenAdmin {
   };
   /** Las últimas 8 semanas, de la más antigua a la actual. */
   semanas: SemanaAdmin[];
+}
+
+/** Espejo de `UsuarioAdminResponse`: la cuenta y cuánto la usa, nada de su horario. */
+export interface UsuarioAdmin {
+  id: string;
+  nombre: string;
+  email: string;
+  rolSistema: RolSistema;
+  creadoEn: string;
+  suspendido: boolean;
+  grupos: number;
+  planesPropuestos: number;
+  /** `null` si nunca hizo nada en la app. */
+  ultimaActividad: string | null;
 }
