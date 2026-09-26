@@ -20,6 +20,8 @@ const ID_CUENTA_ADMIN = 'admin';
 const TOKEN_CUENTA_EJEMPLO = 'mock-jwt-token-huecko-2026';
 
 const EMAIL_EN_USO = 'El correo ya está en uso. Intenta con otro.';
+/** El mismo texto que devuelve el backend. */
+export const CUENTA_SUSPENDIDA = 'Tu cuenta está suspendida. Contacta con la administración de Huecko.';
 const CREDENCIALES_INVALIDAS = 'Credenciales incorrectas. Intenta de nuevo.';
 
 const simulateNetworkDelay = (): Promise<void> =>
@@ -144,6 +146,36 @@ export function actualizarCuentaDemo(usuario: AuthUser, cambios: { nombre: strin
   return sinClave(actualizada);
 }
 
+/* Cuentas suspendidas por el admin en el modo demo. Van aparte de las cuentas
+   para que la de ejemplo, que no se guarda hasta que se edita, también pueda
+   suspenderse. */
+const CLAVE_SUSPENDIDAS_DEMO = 'huecko-suspendidas-demo';
+
+export function leerSuspendidasDemo(): Set<string> {
+  try {
+    const datos: unknown = JSON.parse(localStorage.getItem(CLAVE_SUSPENDIDAS_DEMO) ?? '[]');
+    return new Set(Array.isArray(datos) ? datos.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Misma regla que el backend: a un admin no se le suspende. */
+export function cambiarSuspensionDemo(usuarioId: string, suspendido: boolean): void {
+  const cuenta = leerCuentasDemo().find((c) => c.id === usuarioId);
+  if (!cuenta) throw new Error('Esa cuenta no existe.');
+  if (cuenta.rolSistema === 'ADMIN') throw new Error('No se puede suspender a un administrador.');
+
+  const ids = leerSuspendidasDemo();
+  if (suspendido) ids.add(usuarioId);
+  else ids.delete(usuarioId);
+  try {
+    localStorage.setItem(CLAVE_SUSPENDIDAS_DEMO, JSON.stringify([...ids]));
+  } catch {
+    // Sin almacenamiento no hay nada que recordar.
+  }
+}
+
 /* ------------------------------------------------------------------------ */
 
 export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
@@ -160,6 +192,10 @@ export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
   const cuenta = buscarPorEmail(leerCuentasDemo(), payload.email);
   if (!cuenta || !(await claveCorrecta(cuenta, payload.password))) {
     throw new Error(CREDENCIALES_INVALIDAS);
+  }
+  // Después de la contraseña, como el backend: no delata qué cuentas existen.
+  if (leerSuspendidasDemo().has(cuenta.id)) {
+    throw new Error(CUENTA_SUSPENDIDA);
   }
 
   return { token: tokenDemo(cuenta.id), user: sinClave(cuenta) };

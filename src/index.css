@@ -83,6 +83,10 @@
   --color-olive: #7d9460;
   --color-cream: #f5f3ec;
 
+  /* Barras de los gráficos del panel de administración. El oliva de marca se
+     lee gris en un gráfico (croma bajo); este pasa contraste y croma. */
+  --color-dato: #648036;
+
   /* Colores de categoría de bloques y grupos (datos, no cromo de interfaz). */
   --color-cat-clase: #8a5a10;
   --color-cat-trabajo: #3c5a80;
