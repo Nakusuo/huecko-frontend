@@ -4,7 +4,7 @@ import { instalarAlmacenamientoEnMemoria } from '../test/almacenamientoEnMemoria
 /** Modo demo: las cuentas registradas viven en este navegador. */
 vi.stubEnv('VITE_API_URL', '');
 instalarAlmacenamientoEnMemoria();
-const { loginUser, registerUser, actualizarCuentaDemo, leerCuentasDemo, DEMO_CREDENTIALS, DEMO_ADMIN_CREDENTIALS } = await import('./authService');
+const { loginUser, registerUser, actualizarCuentaDemo, leerCuentasDemo, cambiarSuspensionDemo, DEMO_CREDENTIALS, DEMO_ADMIN_CREDENTIALS } = await import('./authService');
 
 /** El servicio simula un segundo de red: se adelanta el reloj en vez de esperarlo. */
 async function sinEspera<T>(promesa: Promise<T>): Promise<T> {
@@ -105,5 +105,34 @@ describe('cuenta admin del modo demo', () => {
     await expect(
       sinEspera(registerUser({ nombre: 'Intrusa', email: DEMO_ADMIN_CREDENTIALS.email, password: 'secreta123' }))
     ).rejects.toThrow('El correo ya está en uso');
+  });
+});
+
+describe('suspensión en el modo demo', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('una cuenta suspendida no entra y al reactivarla vuelve a entrar', async () => {
+    cambiarSuspensionDemo('1', true);
+    await expect(sinEspera(loginUser(DEMO_CREDENTIALS))).rejects.toThrow('suspendida');
+
+    cambiarSuspensionDemo('1', false);
+    await expect(sinEspera(loginUser(DEMO_CREDENTIALS))).resolves.toMatchObject({ user: { id: '1' } });
+  });
+
+  it('con la contraseña mal no se revela la suspensión', async () => {
+    cambiarSuspensionDemo('1', true);
+    await expect(sinEspera(loginUser({ email: DEMO_CREDENTIALS.email, password: 'otra' }))).rejects.toThrow(
+      'Credenciales incorrectas'
+    );
+  });
+
+  it('al admin no se le suspende', () => {
+    expect(() => cambiarSuspensionDemo('admin', true)).toThrow('administrador');
   });
 });
