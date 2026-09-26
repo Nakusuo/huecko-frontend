@@ -94,4 +94,9 @@ export const endpoints = {
     /** Topic al que se suscribe cada grupo. */
     topicGrupo: (grupoId: string) => `/topic/grupos/${grupoId}`,
   },
+
+  /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */
+  admin: {
+    resumen: '/admin/resumen',
+  },
 } as const;
