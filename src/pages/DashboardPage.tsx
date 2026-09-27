@@ -12,12 +12,24 @@ import type {
 import { DEFAULT_CATEGORY_COLOR } from '../theme/palette';
 import { useAvisoEfimero } from '../hooks/useAvisoEfimero';
 import { useModalDismiss } from '../hooks/useModalDismiss';
-import { useIncidentsStore } from '../store/incidentsStore';
+import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
 import { ResumenPuntualidad } from '../components/ResumenPuntualidad';
 import { AccionesRapidas } from '../components/AccionesRapidas';
 import { AvisoError } from '../components/AvisoError';
 import { isApiEnabled } from '../lib/apiClient';
+import { formatearPlazo, formatearVentana, proximoPlanConfirmado, votacionAbierta } from '../lib/planes';
+import { fechaLocalIso, inicioDeSemana, ocupaFecha } from '../lib/horario';
+import {
+  bloquesDemoDeLaSemana,
+  cruceLocal,
+  horasCoincidentesRestantes,
+  mejorVentanaFutura,
+  type CruceSemanal,
+} from '../lib/huecosSemana';
+import { RUTA_CREAR_GRUPO, rutaProponerPlan } from '../lib/intenciones';
+import { EtiquetaSticker } from '../components/Stickers';
+import { PixelMosaic } from '../components/Pixel';
 
 interface TodayScheduleBlock {
   id: string;
@@ -34,14 +46,20 @@ export default function DashboardPage() {
   const proposals = useGroupsStore((s) => s.groupProposals);
   const voteProposalWindow = useGroupsStore((s) => s.voteProposalWindow);
   const scheduleSlots = useScheduleStore((s) => s.slots);
+  const occupiedSlots = useGroupsStore((s) => s.occupiedSlots);
+  const availability = useGroupsStore((s) => s.availability);
+  const availabilityEstado = useGroupsStore((s) => s.availabilityEstado);
+  const fetchAvailability = useGroupsStore((s) => s.fetchAvailability);
   // El usuario de ejemplo solo existe en modo demo: con backend, votar o avisar
   // en su nombre sería actuar como otra persona.
   const userEmail = user?.email || (isApiEnabled ? '' : 'alex.rodriguez@huecko.com');
 
   const today = (['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'] as DayOfWeek[])[new Date().getDay()];
+  // Por fecha y no por día de la semana: un puntual solo cuenta el día (o rango) que dura.
+  const hoyIso = fechaLocalIso();
   const todayBlocks: TodayScheduleBlock[] = useMemo(
     () => scheduleSlots
-      .filter((slot) => slot.day === today)
+      .filter((slot) => ocupaFecha(slot, hoyIso))
       .map((slot) => ({
         id: slot.id,
         title: slot.title,
@@ -49,12 +67,14 @@ export default function DashboardPage() {
         type: slot.type === 'puntual' ? 'puntual' : slot.tag === 'Trabajo' ? 'trabajo' : 'clase',
         customColor: slot.customColor || DEFAULT_CATEGORY_COLOR,
       })),
-    [scheduleSlots, today]
+    [scheduleSlots, hoyIso]
   );
 
   const pendingVotes: DashboardPendingVote[] = useMemo(
     () => proposals
-      .filter((proposal) => proposal.estado === 'propuesto')
+      /* Solo las que aún aceptan votos y de grupos a los que sigo
+         perteneciendo: un propuesto con el plazo vencido ya no se puede votar. */
+      .filter((proposal) => votacionAbierta(proposal) && groups.some((g) => g.id === proposal.groupId))
       .map((proposal) => {
         const group = groups.find((item) => item.id === proposal.groupId);
         return {
@@ -63,10 +83,10 @@ export default function DashboardPage() {
           groupName: group?.nombre || 'Grupo',
           title: proposal.titulo,
           location: proposal.lugar,
-          deadline: proposal.plazoVotacion,
+          deadline: formatearPlazo(proposal.plazoVotacion),
           suggestedWindows: proposal.ventanasSugeridas.map((window) => ({
             id: window.id,
-            day: window.dia,
+            day: formatearVentana(window).split(' · ')[0],
             timeRange: `${window.horaInicio} - ${window.horaFin}`,
             freePercentage: window.disponibilidadPorcentaje,
             votesCount: window.votosUsuarios.length,
@@ -77,37 +97,113 @@ export default function DashboardPage() {
     [groups, proposals, userEmail]
   );
 
-  const metrics = useMemo(() => ({
-    activeGroupsCount: groups.length,
-    pendingVotesCount: pendingVotes.length,
-    freeMatchHoursThisWeek: proposals
-      .flatMap((proposal) => proposal.ventanasSugeridas)
-      .filter((window) => window.disponibilidadPorcentaje >= 80)
-      .reduce((total, window) => total + Number(window.horaFin.slice(0, 2)) - Number(window.horaInicio.slice(0, 2)), 0),
-    connectedMembersCount: new Set(groups.flatMap((group) => group.miembros.map((member) => member.email))).size,
-  }), [groups, pendingVotes.length, proposals]);
+  /* Cruce de disponibilidad de ESTA semana por grupo, con el umbral de cada
+     grupo. Con backend es el del servidor (el único que ve el horario real de
+     todos); en demo se calcula aquí con las mismas reglas que el heatmap del
+     grupo. `null` = todavía no hay cruce de esta semana para ese grupo. */
+  const lunes = inicioDeSemana(hoyIso);
+  const bloquesDemo = useMemo(
+    () => (isApiEnabled ? null : bloquesDemoDeLaSemana(occupiedSlots, scheduleSlots, userEmail, lunes)),
+    [occupiedSlots, scheduleSlots, userEmail, lunes]
+  );
+  const crucesPorGrupo = useMemo(() => {
+    const cruces: Record<string, CruceSemanal | null> = {};
+    for (const group of groups) {
+      if (bloquesDemo) {
+        cruces[group.id] = cruceLocal(
+          group.miembros.map((m) => m.email),
+          bloquesDemo,
+          group.umbralDisponibilidad,
+          lunes
+        );
+      } else {
+        const cruce = availability[group.id];
+        // Un cruce de una semana anterior ya no dice nada de esta.
+        cruces[group.id] = cruce && cruce.weekFrom >= lunes ? cruce : null;
+      }
+    }
+    return cruces;
+  }, [groups, bloquesDemo, availability, lunes]);
 
+  /* Con backend, el inicio pide el cruce de los grupos que aún no lo tienen
+     (o lo tienen de otra semana). Por ids y no por el array de grupos: cada
+     recarga crea uno nuevo y relanzaría las peticiones en bucle. */
+  const idsGrupos = groups.map((g) => g.id).join(',');
+  useEffect(() => {
+    if (!isApiEnabled || !idsGrupos) return;
+    const { availability: cruces, availabilityEstado: estados } = useGroupsStore.getState();
+    for (const id of idsGrupos.split(',')) {
+      const cruce = cruces[id];
+      if (estados[id]?.estado === 'cargando') continue;
+      if (!cruce || cruce.weekFrom < lunes) void fetchAvailability(id);
+    }
+  }, [idsGrupos, lunes, fetchAvailability]);
+
+  /* Qué puede decir la tarjeta de huecos: la cifra solo cuando están los
+     cruces de todos los grupos; si falta alguno, que lo diga en vez de
+     enseñar un total a medias como si fuera el de la semana. */
+  const huecos = useMemo(() => {
+    if (groups.length === 0) return { estado: 'sin_grupos' as const };
+    const faltan = groups.filter((g) => !crucesPorGrupo[g.id]);
+    if (faltan.length > 0) {
+      const alguienCargando = faltan.some((g) => (availabilityEstado[g.id]?.estado ?? 'cargando') === 'cargando');
+      return { estado: alguienCargando ? ('cargando' as const) : ('error' as const) };
+    }
+    const cruces = groups.map((g) => crucesPorGrupo[g.id]).filter((c): c is CruceSemanal => c != null);
+    return { estado: 'ok' as const, horas: horasCoincidentesRestantes(cruces) };
+  }, [groups, crucesPorGrupo, availabilityEstado]);
+
+  // «Por votar» son las que aún no he votado, no todas las abiertas.
+  const porVotarCount = pendingVotes.filter((v) => !v.suggestedWindows.some((w) => w.hasVoted)).length;
+  // Personas distintas entre todos mis grupos, sin contarme dos veces.
+  const personasEnMisGrupos = new Set(
+    groups.flatMap((group) => group.miembros.map((member) => member.email.toLowerCase()))
+  ).size;
+
+  /* Resumen de cada grupo con datos que existen: el próximo plan confirmado
+     del grupo o, si no hay, la mejor franja que queda esta semana según el
+     cruce. Antes el porcentaje era el UMBRAL cuando no había propuesta, y la
+     «próxima coincidencia» la primera ventana del primer plan no cancelado,
+     aunque fuera de la semana pasada o la opción que perdió. */
   const groupSummaries = useMemo(
     () => groups.map((group) => {
-      const nextWindow = proposals
-        .filter((proposal) => proposal.groupId === group.id && proposal.estado !== 'cancelado')
-        .flatMap((proposal) => proposal.ventanasSugeridas)[0];
+      const plan = proximoPlanConfirmado(proposals.filter((p) => p.groupId === group.id));
+      const cruce = crucesPorGrupo[group.id];
+      const mejor = cruce ? mejorVentanaFutura(cruce) : null;
+      const cargando = !cruce && isApiEnabled && (availabilityEstado[group.id]?.estado ?? 'cargando') === 'cargando';
+
+      let detalle: string;
+      let etiqueta: string | null = null;
+      if (plan) {
+        detalle = `Próximo plan: ${formatearVentana(plan.ventana)}`;
+        etiqueta = 'Confirmado';
+      } else if (mejor) {
+        detalle = `Mejor hueco: ${formatearVentana(mejor)}`;
+        etiqueta = `${mejor.disponibilidadPorcentaje}% libre`;
+      } else if (cargando) {
+        detalle = 'Calculando huecos…';
+      } else {
+        detalle = cruce ? 'Sin huecos esta semana' : '—';
+      }
+
       return {
         id: group.id,
         name: group.nombre,
         membersCount: group.miembros.length,
-        matchPercentage: nextWindow?.disponibilidadPorcentaje ?? group.umbralDisponibilidad,
-        nextSlot: nextWindow ? `${nextWindow.dia} ${nextWindow.horaInicio} - ${nextWindow.horaFin}` : 'Sin propuesta aún',
+        detalle,
+        etiqueta,
         color: group.miembros[0]?.color || DEFAULT_CATEGORY_COLOR,
       };
     }),
-    [groups, proposals]
+    [groups, proposals, crucesPorGrupo, availabilityEstado]
   );
 
   const reportIncident = useGroupsStore((s) => s.reportIncident);
   // Modulos 4 y 5: estado real del evento, alimentado por REST y por WebSocket.
   const retrasosDelPlan = useIncidentsStore((s) => s.retrasos);
   const votaciones = useIncidentsStore((s) => s.votaciones);
+  const ausenciasPorPlan = useIncidentsStore((s) => s.ausencias);
+  const miId = miIdentificador();
   const cargarPlanIncidencias = useIncidentsStore((s) => s.cargarPlan);
   const votarExpres = useIncidentsStore((s) => s.votarExpres);
   const errorIncidencias = useIncidentsStore((s) => s.error);
@@ -117,31 +213,48 @@ export default function DashboardPage() {
   const clearSyncError = useGroupsStore((s) => s.clearSyncError);
   const [enviandoAviso, setEnviandoAviso] = useState(false);
 
+  /* El confirmado que viene antes y en la ventana que ganó. Antes era el
+     primero de la lista, con su primera ventana: podía ser un plan de la semana
+     pasada, a una hora que nadie votó. */
   const upcomingEvent = useMemo<UpcomingEventDetail | null>(() => {
-    const proposal = proposals.find((item) => item.estado === 'confirmado');
+    const proximo = proximoPlanConfirmado(
+      proposals.filter((p) => groups.some((g) => g.id === p.groupId))
+    );
+    const proposal = proximo?.plan;
     const group = proposal ? groups.find((item) => item.id === proposal.groupId) : undefined;
-    const window = proposal?.ventanasSugeridas[0];
+    const window = proximo?.ventana;
     if (!proposal || !group || !window) {
       return null;
     }
+    const retrasosDelEvento = retrasosDelPlan[proposal.id] ?? [];
+    const ausenciasDelEvento = ausenciasPorPlan[proposal.id] ?? [];
+    // Retrasos y ausencias identifican por UUID con backend y por correo en demo.
+    const idDe = (m: (typeof group.miembros)[number]) => (isApiEnabled ? m.userId ?? m.id : m.email);
 
     return {
       id: proposal.id,
       groupId: group.id,
       groupName: group.nombre,
       title: proposal.titulo,
-      dayLabel: window.dia,
+      dayLabel: formatearVentana(window).split(' · ')[0],
       timeRange: `${window.horaInicio} - ${window.horaFin}`,
       locationName: proposal.lugar || 'Lugar por definir',
       status: (proposal.estado === 'propuesto' ? 'confirmado' : proposal.estado) as 'confirmado' | 'en_recoordinacion' | 'cancelado',
-      attendees: group.miembros.map((member) => ({
-        email: member.email,
-        name: member.email === userEmail ? 'Tú' : member.nombre,
-        status: proposal.incidencias?.some((incident) => incident.userEmail === member.email) ? 'no_asiste' : 'puntual',
-        isEssential: member.isEssential,
-      })),
+      /* Un retraso es llegar tarde, no faltar: antes cualquier aviso, incluso
+         uno ya resuelto, marcaba a la persona como «No asiste». */
+      attendees: group.miembros.map((member) => {
+        const ausente = ausenciasDelEvento.some((a) => a.usuarioId === idDe(member));
+        const retraso = retrasosDelEvento.find((r) => r.usuarioId === idDe(member));
+        return {
+          email: member.email,
+          name: member.email === userEmail ? 'Tú' : member.nombre,
+          status: ausente ? 'no_asiste' : retraso ? 'retrasado' : 'puntual',
+          delayMinutes: retraso?.minutosEstimados,
+          isEssential: member.isEssential,
+        };
+      }),
     };
-  }, [groups, proposals, userEmail]);
+  }, [groups, proposals, userEmail, retrasosDelPlan, ausenciasPorPlan]);
 
   /* Módulos 4 y 5 del evento en curso. Se piden una vez al aparecer el evento;
      a partir de ahí el canal en tiempo real los mantiene al día sin volver a
@@ -153,13 +266,23 @@ export default function DashboardPage() {
      cambio en cualquier grupo relanzaba las dos peticiones — y como cada evento
      del canal llama a `fetchProposals`, el tiempo real se realimentaba a sí
      mismo. */
-  const upcomingEventId = upcomingEvent?.id;
+  /* Todos los confirmados, no solo el próximo: una votación exprés puede estar
+     abierta en cualquiera de ellos, y antes la de los demás no se veía en
+     ninguna parte. */
+  const idsConfirmados = proposals
+    .filter((p) => p.estado === 'confirmado' && groups.some((g) => g.id === p.groupId))
+    .map((p) => p.id)
+    .join(',');
   useEffect(() => {
-    if (upcomingEventId) void cargarPlanIncidencias(upcomingEventId);
-  }, [upcomingEventId, cargarPlanIncidencias]);
+    if (!idsConfirmados) return;
+    idsConfirmados.split(',').forEach((id) => void cargarPlanIncidencias(id));
+  }, [idsConfirmados, cargarPlanIncidencias]);
 
   const retrasos = upcomingEvent ? retrasosDelPlan[upcomingEvent.id] ?? [] : [];
-  const votacionExpres = upcomingEvent ? votaciones[upcomingEvent.id] ?? null : null;
+  const asistentes = upcomingEvent ? upcomingEvent.attendees.filter((a) => a.status !== 'no_asiste').length : 0;
+  const votacionesAbiertas = Object.values(votaciones).filter(
+    (v): v is NonNullable<typeof v> => v != null && idsConfirmados.split(',').includes(v.planId)
+  );
 
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isDelayModalOpen, setIsDelayModalOpen] = useState(false);
@@ -177,11 +300,13 @@ export default function DashboardPage() {
 
   /* Si ya avisé de algo sobre este plan, lo que toca es retirarlo, no mandar
      otro aviso encima: era lo que permitía avisar, votar y volver a avisar. */
-  const miAvisoAbierto = upcomingEvent
-    ? proposals
-        .find((p) => p.id === upcomingEvent.id)
-        ?.incidencias?.find((i) => i.userEmail === userEmail && !i.resuelta) ?? null
+  const miRetraso = upcomingEvent
+    ? (retrasosDelPlan[upcomingEvent.id] ?? []).find((r) => r.usuarioId === miId) ?? null
     : null;
+  const miAusencia = upcomingEvent
+    ? (ausenciasPorPlan[upcomingEvent.id] ?? []).find((a) => a.usuarioId === miId) ?? null
+    : null;
+  const miAvisoAbierto = miRetraso ?? miAusencia;
 
 
   const getGreeting = () => {
@@ -191,7 +316,9 @@ export default function DashboardPage() {
     return 'Buenas noches';
   };
 
-  const displayName = user?.nombre || (isApiEnabled ? '' : 'Alejandro');
+  /* El nombre de la cuenta o ninguno: antes, sin nombre, el saludo decía
+     «Alejandro», que ni siquiera es el de la cuenta de ejemplo. */
+  const displayName = user?.nombre?.trim() ?? '';
 
   const handleVote = async (voteId: string, windowId: string) => {
     const guardado = await voteProposalWindow(voteId, windowId, userEmail);
@@ -317,10 +444,14 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-on-surface">{metrics.activeGroupsCount}</span>
-              <span className="text-xs text-primary font-semibold">Grupos</span>
+              <span className="text-3xl font-bold text-on-surface">{groups.length}</span>
+              <span className="text-xs text-primary font-semibold">{groups.length === 1 ? 'Grupo' : 'Grupos'}</span>
             </div>
-            <p className="text-2xs text-on-surface-variant mt-1">Con disponibilidad sincronizada</p>
+            <p className="text-2xs text-on-surface-variant mt-1">
+              {personasEnMisGrupos === 0
+                ? 'Aún no hay nadie en tus grupos'
+                : `${personasEnMisGrupos} ${personasEnMisGrupos === 1 ? 'persona' : 'personas'} en total`}
+            </p>
           </button>
 
           <button type="button"
@@ -334,16 +465,27 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-on-surface">{pendingVotes.length}</span>
+              {/* La cifra grande es la que lleva la etiqueta «Por votar»: antes
+                  enseñaba todas las abiertas, votadas incluidas. */}
+              <span className="text-3xl font-bold text-on-surface">{porVotarCount}</span>
               <span className="text-xs text-on-warning-container font-bold bg-warning-container/80 px-2 py-0.5 rounded-lg">
                 Por votar
               </span>
             </div>
-            <p className="text-2xs text-on-surface-variant mt-1">Planes abiertos para definir hora</p>
+            <p className="text-2xs text-on-surface-variant mt-1">
+              {pendingVotes.length === 0
+                ? 'Ninguna votación abierta'
+                : porVotarCount === 0
+                ? `Ya votaste en ${pendingVotes.length === 1 ? 'la abierta' : `las ${pendingVotes.length} abiertas`}`
+                : `De ${pendingVotes.length} ${pendingVotes.length === 1 ? 'abierta' : 'abiertas'} para decidir hora`}
+            </p>
           </button>
 
+          {/* Horas que quedan esta semana en las que algún grupo llega a SU
+              umbral, según el cruce de cada grupo. Lleva al grupo (donde está
+              el heatmap que las explica), no al horario personal. */}
           <button type="button"
-            onClick={() => navigate('/schedule')}
+            onClick={() => navigate(groups.length === 1 ? `/groups/${groups[0].id}` : '/groups')}
             className="w-full text-left p-5 rounded-2xl bg-surface-container-lowest elev-1 elev-hover transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
@@ -353,10 +495,20 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-on-surface">{metrics.freeMatchHoursThisWeek}h</span>
-              <span className="text-xs text-primary font-semibold">Esta semana</span>
+              <span className="text-3xl font-bold text-on-surface">
+                {huecos.estado === 'ok' ? `${huecos.horas}h` : huecos.estado === 'cargando' ? '…' : '—'}
+              </span>
+              <span className="text-xs text-primary font-semibold">Quedan esta semana</span>
             </div>
-            <p className="text-2xs text-on-surface-variant mt-1">Donde coincide ≥ 80% del grupo</p>
+            <p className="text-2xs text-on-surface-variant mt-1">
+              {huecos.estado === 'sin_grupos'
+                ? 'Crea un grupo para ver cuándo coincidís'
+                : huecos.estado === 'cargando'
+                ? 'Calculando el cruce de tus grupos…'
+                : huecos.estado === 'error'
+                ? 'No se pudo calcular el cruce de algún grupo'
+                : 'Donde algún grupo llega a su umbral'}
+            </p>
           </button>
 
           <button type="button"
@@ -371,21 +523,37 @@ export default function DashboardPage() {
             </div>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-3xl font-bold text-on-surface">{scheduleSlots.length}</span>
-              <span className="text-xs text-primary font-semibold">Bloques</span>
+              <span className="text-xs text-primary font-semibold">{scheduleSlots.length === 1 ? 'Bloque' : 'Bloques'}</span>
             </div>
-            <p className="text-2xs text-on-surface-variant mt-1">Sincronizado con grupos</p>
+            <p className="text-2xs text-on-surface-variant mt-1">
+              {todayBlocks.length === 0
+                ? 'Nada ocupado hoy'
+                : `${todayBlocks.length} ${todayBlocks.length === 1 ? 'ocupa' : 'ocupan'} hoy`}
+            </p>
           </button>
         </section>
 
         {/* Votación exprés (RF-17). Va ANTES del próximo plan a propósito: es
             lo único de esta página con un plazo corriendo, y enterrarla bajo
             el evento haría que se venciera sin que nadie la viera. */}
-        {votacionExpres && (
+        {votacionesAbiertas.length > 0 && (
           <section className="space-y-3">
-            <VotacionExpresPanel
-              votacion={votacionExpres}
-              onVotar={(opcion) => votarExpres(votacionExpres.planId, opcion)}
-            />
+            {votacionesAbiertas.map((v) => {
+              const plan = proposals.find((p) => p.id === v.planId);
+              return (
+                <div key={v.planId} className="space-y-1.5">
+                  {plan && (
+                    <p className="rotulo text-2xs text-on-surface-variant">
+                      {plan.titulo} · {groups.find((g) => g.id === plan.groupId)?.nombre}
+                    </p>
+                  )}
+                  <VotacionExpresPanel
+                    votacion={v}
+                    onVotar={(opcion) => votarExpres(v.planId, opcion)}
+                  />
+                </div>
+              );
+            })}
           </section>
         )}
 
@@ -421,7 +589,7 @@ export default function DashboardPage() {
 
                     <div className="flex items-center gap-1.5">
                       <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-primary">group</span>
-                      <span>{upcomingEvent.attendees.filter((a) => a.status !== 'no_asiste').length} Asistentes confirmados</span>
+                      <span>{asistentes} {asistentes === 1 ? 'asistente confirmado' : 'asistentes confirmados'}</span>
                     </div>
                   </div>
 
@@ -462,12 +630,15 @@ export default function DashboardPage() {
                     Ver detalles
                   </button>
 
-                  <button
-                    onClick={() => setIsDelayModalOpen(true)}
-                    className="px-6 py-3 rounded-2xl bg-surface-container-lowest hover:bg-warning-container text-on-warning-container border border-warning/40 text-xs font-semibold transition-all cursor-pointer text-center active:scale-95"
-                  >
-                    Avisar retraso
-                  </button>
+                  {/* Misma guarda que en el detalle: quien ya avisó no manda otro. */}
+                  {!miAvisoAbierto && (
+                    <button
+                      onClick={() => setIsDelayModalOpen(true)}
+                      className="px-6 py-3 rounded-2xl bg-surface-container-lowest hover:bg-warning-container text-on-warning-container border border-warning/40 text-xs font-semibold transition-all cursor-pointer text-center active:scale-95"
+                    >
+                      Avisar retraso
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -477,7 +648,7 @@ export default function DashboardPage() {
               title="No tienes eventos confirmados próximos"
               description="Propón un plan en tus grupos para que Huecko sugiera los mejores horarios."
               actionLabel="Proponer plan"
-              onAction={() => navigate('/groups')}
+              onAction={() => navigate(rutaProponerPlan(groups))}
             />
           )}
         </section>
@@ -555,7 +726,7 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-on-surface">Mis grupos activos</h3>
               </div>
               <button
-                onClick={() => navigate('/groups')}
+                onClick={() => navigate(RUTA_CREAR_GRUPO)}
                 className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all cursor-pointer shadow-xs"
               >
                 + Nuevo grupo
@@ -567,7 +738,7 @@ export default function DashboardPage() {
                 groupSummaries.map((g) => (
                   <button type="button"
                     key={g.id}
-                    onClick={() => navigate('/groups')}
+                    onClick={() => navigate(`/groups/${g.id}`)}
                     className="w-full text-left p-4 rounded-2xl border border-outline-variant/60 bg-surface-container hover:bg-surface-container hover:border-primary transition-all cursor-pointer flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-3">
@@ -582,16 +753,18 @@ export default function DashboardPage() {
                           {g.name}
                         </h4>
                         <p className="text-2xs text-on-surface-variant">
-                          {g.membersCount} miembros • Próx. coincidencia: {g.nextSlot}
+                          {g.membersCount} {g.membersCount === 1 ? 'integrante' : 'integrantes'} • {g.detalle}
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-xs font-bold text-primary bg-surface-container-lowest px-2.5 py-1 rounded-lg border border-outline-variant/60">
-                        {g.matchPercentage}% libre
-                      </span>
-                    </div>
+                    {g.etiqueta && (
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-bold text-primary bg-surface-container-lowest px-2.5 py-1 rounded-lg border border-outline-variant/60">
+                          {g.etiqueta}
+                        </span>
+                      </div>
+                    )}
                   </button>
                 ))
               ) : (
@@ -599,11 +772,11 @@ export default function DashboardPage() {
                   <span aria-hidden="true" className="material-symbols-outlined text-3xl text-primary">group_add</span>
                   <p className="text-xs font-bold text-on-surface">Aún no tienes grupos registrados</p>
                   <button
-                    onClick={() => navigate('/groups')}
+                    onClick={() => navigate(RUTA_CREAR_GRUPO)}
                     className="mt-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-xs hover:bg-primary-hover transition-all cursor-pointer inline-flex items-center gap-1"
                   >
                     <span aria-hidden="true" className="material-symbols-outlined text-[16px]">add</span>
-                    <span>Crear o Unirme a Grupo</span>
+                    <span>Crear grupo</span>
                   </button>
                 </div>
               )}
@@ -622,7 +795,7 @@ export default function DashboardPage() {
                 <h2 className="text-xl font-bold text-on-surface">Votación de planes en curso</h2>
               </div>
               <p className="text-xs text-on-surface-variant">
-                Opciones generadas automáticamente a partir de la disponibilidad de tu grupo.
+                Opciones propuestas en tus grupos, con la disponibilidad de cada una según el cruce.
               </p>
             </div>
             <button
@@ -719,27 +892,22 @@ export default function DashboardPage() {
       {isDetailModalOpen && upcomingEvent && (
         <div role="dialog" aria-modal="true" aria-label="Detalles del evento" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-xs">
           <div className="bg-surface rounded-3xl max-w-2xl w-full overflow-hidden elev-3 animate-modal-in">
-            {/* Banner de Imagen Superior */}
-            <div className="relative h-48 sm:h-60 w-full overflow-hidden">
-              <img
-                src={upcomingEvent.coverImage}
-                alt={upcomingEvent.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-on-surface/90 via-on-surface/30 to-transparent flex flex-col justify-end p-6">
-                <span className="inline-block px-2.5 py-0.5 rounded-lg bg-primary text-on-primary text-2xs font-bold uppercase w-max mb-1">
-                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">check</span>
-                  Confirmado
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-headline font-bold text-white">
+            {/* Cabecera de sticker sobre tinta. Antes era un banner con una
+                imagen de portada y una descripción que ningún plan tiene: una
+                imagen rota y una línea vacía encima del título. */}
+            <div className="on-brand relative overflow-hidden bg-ink px-6 pb-6 pt-7 text-cream">
+              <PixelMosaic columnas={24} filas={8} />
+              <div className="relative z-10 space-y-3">
+                <EtiquetaSticker codigo="200" texto="plan confirmado" tono="oliva" giro={-2} />
+                <h2 className="text-2xl sm:text-3xl font-headline font-bold text-cream">
                   {upcomingEvent.title}
                 </h2>
-                <p className="text-xs text-white/80 mt-1">{upcomingEvent.description}</p>
+                <p className="text-xs text-cream/70">{upcomingEvent.groupName}</p>
               </div>
 
               <button aria-label="Cerrar"
                 onClick={() => setIsDetailModalOpen(false)}
-                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-scrim/50 hover:bg-scrim/70 text-white flex items-center justify-center cursor-pointer transition-colors"
+                className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-cream/10 hover:bg-cream/20 text-cream flex items-center justify-center cursor-pointer transition-colors"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
               </button>
@@ -767,7 +935,6 @@ export default function DashboardPage() {
                   <div>
                     <span className="text-2xs font-bold text-on-surface-variant uppercase">Dónde</span>
                     <p className="text-xs font-bold text-on-surface mt-0.5">{upcomingEvent.locationName}</p>
-                    <p className="text-2xs text-on-surface-variant">{upcomingEvent.locationAddress}</p>
                   </div>
                 </div>
               </div>
@@ -837,22 +1004,27 @@ export default function DashboardPage() {
                 {miAvisoAbierto ? (
                   <div className="flex-1 flex flex-col sm:flex-row items-center gap-3">
                     <p className="flex-1 text-xs text-on-surface-variant">
-                      Ya avisaste: <strong className="text-on-surface">{miAvisoAbierto.motivo}</strong>
+                      Ya avisaste:{' '}
+                      <strong className="text-on-surface">
+                        {miRetraso
+                          ? `llegarás ${miRetraso.minutosEstimados} min tarde`
+                          : `no irás${miAusencia?.motivo ? ` (${miAusencia.motivo})` : ''}`}
+                      </strong>
                     </p>
-                    {/* Con backend solo una tardanza se puede retirar. */}
-                    {(!isApiEnabled || miAvisoAbierto.tipo === 'tardanza') && (
+                    {/* Solo un retraso se puede retirar: una ausencia ya avisó a todo el grupo. */}
+                    {miRetraso && (
                       <button
                         onClick={async () => {
                           const retirado = await withdrawIncident(upcomingEvent.id, userEmail);
                           setIsDetailModalOpen(false);
                           if (retirado) {
-                            showToast('Retiraste tu aviso. El plan vuelve a su estado anterior.', 'info');
+                            showToast('Retiraste tu aviso de retraso.', 'info');
                           }
                         }}
                         className="py-3 px-4 rounded-2xl bg-surface-container-lowest hover:bg-surface-container text-on-surface border border-outline-variant text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
                       >
                         <span aria-hidden="true" className="material-symbols-outlined text-[18px]">undo</span>
-                        <span>Retirar mi aviso</span>
+                        <span>Retirar mi retraso</span>
                       </button>
                     )}
                   </div>

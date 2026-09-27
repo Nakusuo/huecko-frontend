@@ -29,11 +29,34 @@ export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
       };
 
     case 'PLAN_CANCELADO':
+      /* El motivo lo da el servidor. Antes el texto decía siempre «nadie votó
+         antes del plazo», también cuando alguien cerró la votación a mano. */
       return {
         type: 'system',
         title: 'Plan cancelado',
-        description: `"${String(d.titulo ?? 'El plan')}" se canceló: nadie votó antes del plazo.`,
+        description: d.motivo
+          ? `"${String(d.titulo ?? 'El plan')}" se canceló: ${String(d.motivo).charAt(0).toLowerCase()}${String(d.motivo).slice(1)}.`
+          : `"${String(d.titulo ?? 'El plan')}" se canceló.`,
       };
+
+    case 'PLAN_PROPUESTO':
+      return {
+        type: 'proposal',
+        title: 'Nuevo plan para votar',
+        description: `"${String(d.titulo ?? 'Un plan')}" está abierto a votación.`,
+      };
+
+    case 'PLAN_REAGENDADO':
+      return {
+        type: 'proposal',
+        title: 'Fechas nuevas',
+        description: `"${String(d.titulo ?? 'El plan')}" vuelve a votarse con otras opciones.`,
+      };
+
+    /* Igual que los votos exprés: el recuento se ve en vivo en la tarjeta, y
+       un aviso por cada voto sería ruido. */
+    case 'VOTO_ACTUALIZADO':
+      return null;
 
     case 'RETRASO_REPORTADO':
       // Retirar un aviso no genera notificación: quien llega a tiempo al final

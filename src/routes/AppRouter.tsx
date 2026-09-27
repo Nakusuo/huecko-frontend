@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
+import { RutaAdmin } from './RutaAdmin';
 import AuthPage from '../pages/auth/AuthPage';
 import DashboardPage from '../pages/DashboardPage';
 import OnboardingPage from '../pages/OnboardingPage';
@@ -7,10 +8,16 @@ import SchedulePage from '../pages/SchedulePage';
 import ProfilePage from '../pages/ProfilePage';
 import GroupsListPage from '../pages/GroupsListPage';
 import GroupDetailPage from '../pages/GroupDetailPage';
+import AdminResumenPage from '../pages/admin/AdminResumenPage';
+import AdminSaludPage from '../pages/admin/AdminSaludPage';
+import AdminFallosPage from '../pages/admin/AdminFallosPage';
+import AdminConsolaPage from '../pages/admin/AdminConsolaPage';
 import { useAuthStore } from '../store/authStore';
+import { inicioDe } from '../lib/rol';
 
 export default function AppRouter() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const inicio = useAuthStore((s) => inicioDe(s.user));
 
   return (
     <Routes>
@@ -39,12 +46,20 @@ export default function AppRouter() {
         <Route path="/groups/:groupId" element={<GroupDetailPage />} />
       </Route>
 
+      {/* Panel de administración: observa la plataforma, no participa en ella. */}
+      <Route path="/admin" element={<RutaAdmin />}>
+        <Route index element={<AdminResumenPage />} />
+        <Route path="salud" element={<AdminSaludPage />} />
+        <Route path="fallos" element={<AdminFallosPage />} />
+        <Route path="consola" element={<AdminConsolaPage />} />
+      </Route>
+
       {/* Ruta por defecto */}
       <Route
         path="*"
         element={
           <Navigate
-            to={isAuthenticated ? '/dashboard' : '/login'}
+            to={isAuthenticated ? inicio : '/login'}
             replace
           />
         }

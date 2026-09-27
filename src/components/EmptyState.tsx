@@ -19,10 +19,12 @@ export default function EmptyState({
     <div
       className={`flex flex-col items-center justify-center p-8 text-center rounded-2xl border border-dashed border-outline-variant bg-surface-container ${className}`}
     >
-      <div className="w-12 h-12 rounded-2xl bg-secondary/20 flex items-center justify-center text-primary mb-3">
+      {/* Sticker de tinta con el icono en oliva, levemente torcido. */}
+      <div className="w-12 h-12 -rotate-3 bg-ink shadow-md flex items-center justify-center text-olive mb-2">
         <span aria-hidden="true" className="material-symbols-outlined text-[24px]">{icon}</span>
       </div>
-      <h3 className="text-base font-bold text-on-surface mb-1">{title}</h3>
+      <p aria-hidden="true" className="rotulo text-2xs text-on-surface-variant mb-2">404 · nada por aquí</p>
+      <h3 className="font-headline text-base text-on-surface mb-1">{title}</h3>
       {/* `text-sm` y no `text-xs`: esto es texto de lectura, no metadato de
           interfaz. `max-w-sm` mantiene la medida en torno a 60 caracteres. */}
       <p className="text-sm text-on-surface-variant max-w-sm mb-4">{description}</p>

@@ -16,6 +16,13 @@ export interface OcrExtractedSlot {
   customColor: string;
   selected: boolean;
   tag?: string;
+  /**
+   * Qué no se pudo leer de la foto ("día no detectado", "día/hora no
+   * detectados"…). Esas filas llevan un día u hora de relleno, así que salen
+   * sin marcar: presentarlas como detectadas colaba en el horario datos que el
+   * OCR se había inventado.
+   */
+  revisar?: string;
 }
 
 
@@ -85,6 +92,69 @@ export const formatHour = (h: string, m?: string, isPm?: boolean): string => {
   const minStr = m ? m.padStart(2, '0') : '00';
   return `${hourNum.toString().padStart(2, '0')}:${minStr}`;
 };
+
+/** Hora sin heurística: solo respeta un AM/PM explícito. */
+function literalHour(h: string, ampm?: string): number {
+  let hourNum = parseInt(h, 10);
+  if (isNaN(hourNum)) hourNum = 8;
+  const marca = ampm?.toLowerCase();
+  if (marca === 'pm' && hourNum < 12) hourNum += 12;
+  if (marca === 'am' && hourNum === 12) hourNum = 0;
+  return hourNum;
+}
+
+const toHHmm = (hourNum: number, m?: string) =>
+  `${Math.min(hourNum, 23).toString().padStart(2, '0')}:${m ? m.padStart(2, '0') : '00'}`;
+
+const minutesOf = (hourNum: number, m?: string) => hourNum * 60 + (m ? parseInt(m, 10) || 0 : 0);
+
+/**
+ * Convierte un rango "h1[:m1][am|pm] - h2[:m2][am|pm]" a 24 h.
+ *
+ * `formatHour` aplica a cada hora por separado la heurística de que 1–6 sin
+ * AM/PM es de la tarde, y eso rompía rangos: "6-8" salía 18:00–08:00, un bloque
+ * al revés. Aquí la heurística se decide para el rango entero: si deja el fin
+ * antes que el inicio, se prueba con las dos horas por la tarde y, si tampoco
+ * cuadra, con ninguna.
+ *
+ * Como antes, un "pm" solo en el inicio se entiende también para el fin.
+ */
+export function formatHourRange(
+  h1: string,
+  m1: string | undefined,
+  ampm1: string | undefined,
+  h2: string,
+  m2: string | undefined,
+  ampm2: string | undefined
+): [string, string] {
+  const endMarker = ampm2 ?? (ampm1?.toLowerCase() === 'pm' ? 'pm' : undefined);
+  const base1 = literalHour(h1, ampm1);
+  const base2 = literalHour(h2, endMarker);
+  // Solo se puede mover a la tarde una hora sin marca y menor que 12.
+  const movible1 = !ampm1 && base1 < 12;
+  const movible2 = !endMarker && base2 < 12;
+  const tarde = (hourNum: number, movible: boolean) => (movible && hourNum >= 1 && hourNum <= 6 ? hourNum + 12 : hourNum);
+
+  const opciones: Array<[number, number]> = [
+    [tarde(base1, movible1), tarde(base2, movible2)],
+    [movible1 ? base1 + 12 : base1, movible2 ? base2 + 12 : base2],
+    [base1, base2],
+  ];
+  const valida = opciones.find(([a, b]) => b <= 23 && minutesOf(b, m2) > minutesOf(a, m1)) ?? opciones[0];
+  return [toHHmm(valida[0], m1), toHHmm(valida[1], m2)];
+}
+
+/** Hora de inicio y fin de una coincidencia de `TIME_RANGE_REGEX`. */
+function rangeFromMatch(match: RegExpMatchArray): [string, string] | null {
+  if (match[7] && match[8] && match[9] && match[10]) {
+    // Hora militar: 0800 - 1000.
+    return [`${match[7]}:${match[8]}`, `${match[9]}:${match[10]}`];
+  }
+  if (match[1] && match[4]) {
+    return formatHourRange(match[1], match[2], match[3], match[4], match[5], match[6]);
+  }
+  return null;
+}
 
 // Detecta rangos de hora frecuentes.
 export const TIME_RANGE_REGEX = /(?:(?:de\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\s*(?:-|–|—|a|hasta|to|\/)\s*(?:a\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?|(\d{2})(\d{2})\s*(?:-|–|—|a|to)\s*(\d{2})(\d{2}))/i;
@@ -367,40 +437,14 @@ function parseSpatialTable(words: OcrWord[]): OcrExtractedSlot[] {
 
   getVisualLines(words).forEach((line) => {
     const match = line.text.match(TIME_RANGE_REGEX);
-    if (!match) return;
-
-    if (match[7] && match[8] && match[9] && match[10]) {
-      addDetectedRow(`${match[7]}:${match[8]}`, `${match[9]}:${match[10]}`, line.bbox);
-    } else if (match[1] && match[4]) {
-      const isPm1 = match[3]?.toLowerCase() === 'pm';
-      const isPm2 = match[6]?.toLowerCase() === 'pm';
-      addDetectedRow(
-        formatHour(match[1], match[2], isPm1),
-        formatHour(match[4], match[5], isPm2 || isPm1),
-        line.bbox
-      );
-    }
+    const range = match ? rangeFromMatch(match) : null;
+    if (range) addDetectedRow(range[0], range[1], line.bbox);
   });
 
   for (const word of words) {
     const match = word.text.match(TIME_RANGE_REGEX);
-    if (match) {
-      let startTime = '08:00';
-      let endTime = '10:00';
-
-      if (match[7] && match[8] && match[9] && match[10]) {
-        // Military time 0800 - 1000
-        startTime = `${match[7]}:${match[8]}`;
-        endTime = `${match[9]}:${match[10]}`;
-      } else if (match[1] && match[4]) {
-        const isPm1 = Boolean(match[3] && match[3].toLowerCase() === 'pm');
-        const isPm2 = Boolean(match[6] && match[6].toLowerCase() === 'pm');
-        startTime = formatHour(match[1], match[2], isPm1);
-        endTime = formatHour(match[4], match[5], isPm2 || isPm1);
-      }
-
-      addDetectedRow(startTime, endTime, word.bbox);
-    }
+    const range = match ? rangeFromMatch(match) : null;
+    if (range) addDetectedRow(range[0], range[1], word.bbox);
   }
 
   // Sort rows top-to-bottom
@@ -506,6 +550,12 @@ function parseSpatialTable(words: OcrWord[]): OcrExtractedSlot[] {
   return [];
 }
 
+/* Relleno para lo que el texto no dice. Es fijo a propósito: antes se
+   repartían días rotativos y horas 8, 10, 12… que parecían detectados. */
+const PLACEHOLDER_DAY: DayOfWeek = 'Lun';
+const PLACEHOLDER_START = '08:00';
+const PLACEHOLDER_END = '10:00';
+
 // Alternativa para texto sin tabla.
 export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
   const lines = rawText
@@ -515,8 +565,31 @@ export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
 
   const results: OcrExtractedSlot[] = [];
   const dayRegex = /\b(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|lun|mar|mi[eé]|jue|vie|s[aá]b|dom)\b/gi;
-  const standardDays: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
   let colorCount = 0;
+
+  /* Una fila a la que le falta el día o la hora sale desmarcada y avisando de
+     qué hay que revisar: el usuario tiene que completarla antes de importarla. */
+  const pushRow = (
+    prefix: string,
+    subject: string,
+    day: DayOfWeek | null,
+    range: [string, string] | null
+  ) => {
+    const faltan = [!day && 'día', !range && 'hora'].filter(Boolean);
+    const revisar =
+      faltan.length === 2 ? 'día/hora no detectados' : faltan[0] === 'día' ? 'día no detectado' : faltan.length ? 'hora no detectada' : undefined;
+    results.push({
+      id: `${prefix}-${Date.now()}-${results.length}`,
+      title: capitalize(subject),
+      day: day ?? PLACEHOLDER_DAY,
+      startTime: range?.[0] ?? PLACEHOLDER_START,
+      endTime: range?.[1] ?? PLACEHOLDER_END,
+      customColor: getColorForSubject(subject, colorCount++),
+      selected: !revisar,
+      tag: 'Clase',
+      revisar,
+    });
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -526,18 +599,7 @@ export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
     const dayMatches = line.match(dayRegex);
 
     if (timeMatch) {
-      let startTime = '08:00';
-      let endTime = '10:00';
-
-      if (timeMatch[7] && timeMatch[8] && timeMatch[9] && timeMatch[10]) {
-        startTime = `${timeMatch[7]}:${timeMatch[8]}`;
-        endTime = `${timeMatch[9]}:${timeMatch[10]}`;
-      } else if (timeMatch[1] && timeMatch[4]) {
-        const isPm1 = Boolean(timeMatch[3] && timeMatch[3].toLowerCase() === 'pm');
-        const isPm2 = Boolean(timeMatch[6] && timeMatch[6].toLowerCase() === 'pm');
-        startTime = formatHour(timeMatch[1], timeMatch[2], isPm1);
-        endTime = formatHour(timeMatch[4], timeMatch[5], isPm2 || isPm1);
-      }
+      const range = rangeFromMatch(timeMatch);
 
       // Remove time and days from line to extract subject words
       const remaining = line
@@ -550,49 +612,21 @@ export function parseScheduleText(rawText: string): OcrExtractedSlot[] {
       const candidateTokens = extractSubjectTokens(remaining);
 
       if (candidateTokens.length > 1) {
-        candidateTokens.forEach((subject, idx) => {
+        // Varias asignaturas en una línea: no hay forma de saber qué día es cada una.
+        candidateTokens.forEach((subject) => {
           if (!isIgnoredWord(subject) && subject.length >= 3) {
-            results.push({
-              id: `ocr-row-${Date.now()}-${results.length}`,
-              title: capitalize(subject),
-              day: standardDays[idx % standardDays.length],
-              startTime,
-              endTime,
-              customColor: getColorForSubject(subject, colorCount++),
-              selected: true,
-              tag: 'Clase',
-            });
+            pushRow('ocr-row', subject, null, range);
           }
         });
       } else if (candidateTokens.length === 1 && !isIgnoredWord(candidateTokens[0])) {
-        const assignedDay = dayMatches ? normalizeDayString(dayMatches[0]) : standardDays[results.length % standardDays.length];
-        results.push({
-          id: `ocr-row-${Date.now()}-${results.length}`,
-          title: capitalize(candidateTokens[0]),
-          day: assignedDay,
-          startTime,
-          endTime,
-          customColor: getColorForSubject(candidateTokens[0], colorCount++),
-          selected: true,
-          tag: 'Clase',
-        });
+        pushRow('ocr-row', candidateTokens[0], dayMatches ? normalizeDayString(dayMatches[0]) : null, range);
       }
     } else {
-      // Line without time: look for known subjects
+      // Línea sin hora: se rescatan las asignaturas, pero día y hora quedan por completar.
       const subjectTokens = extractSubjectTokens(line);
-      subjectTokens.forEach((subject, idx) => {
+      subjectTokens.forEach((subject) => {
         if (!isIgnoredWord(subject) && subject.length >= 3 && !subject.match(/^\d+$/)) {
-          const startH = 8 + ((results.length + idx) % 5) * 2;
-          results.push({
-            id: `ocr-subj-${Date.now()}-${results.length}`,
-            title: capitalize(subject),
-            day: standardDays[(results.length + idx) % standardDays.length],
-            startTime: formatHour(startH.toString()),
-            endTime: formatHour((startH + 2).toString()),
-            customColor: getColorForSubject(subject, colorCount++),
-            selected: true,
-            tag: 'Clase',
-          });
+          pushRow('ocr-subj', subject, null, null);
         }
       });
     }
@@ -721,7 +755,11 @@ function timeToMinutes(time: string): number {
   return hours * 60 + minutes;
 }
 
-function minutesToTime(value: number): string {
-  const normalized = ((value % 1440) + 1440) % 1440;
+/**
+ * Minutos a "HH:mm" sin dar la vuelta a medianoche: 23:30 + 1 h daba 00:30 y la
+ * fila salía con el fin antes que el inicio. Se topa en 23:59.
+ */
+export function minutesToTime(value: number): string {
+  const normalized = Math.min(Math.max(value, 0), 23 * 60 + 59);
   return `${Math.floor(normalized / 60).toString().padStart(2, '0')}:${(normalized % 60).toString().padStart(2, '0')}`;
 }

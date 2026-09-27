@@ -7,7 +7,22 @@ import { useNotificationStore } from '../store/notificationStore';
 import { isApiEnabled } from '../lib/apiClient';
 import { avisarAltasPendientes } from '../lib/avisosAltas';
 
-type OnboardingStep = 1 | 2 | 3 | 4;
+/**
+ * Asistente de bienvenida: crear el primer grupo y añadir a la gente.
+ *
+ * Tenía un primer paso «¿Cuál es tu tipo de rutina?» que no se guardaba ni se
+ * usaba en ninguna parte, aunque decía que Huecko lo usaría para sugerir
+ * horarios y al final presumía de «perfil configurado». Se quitó: lo que de
+ * verdad alimenta las sugerencias es el horario de cada cual. Tampoco se
+ * podía salir sin crear un grupo; ahora «Omitir por ahora» lleva al inicio.
+ */
+type OnboardingStep = 1 | 2 | 3;
+
+const PASOS: Record<OnboardingStep, string> = {
+  1: '1. Tu primer grupo',
+  2: '2. Añade a tu gente',
+  3: '3. ¡Listo!',
+};
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -19,15 +34,12 @@ export default function OnboardingPage() {
   const [errorGrupo, setErrorGrupo] = useState<string | null>(null);
 
   const [step, setStep] = useState<OnboardingStep>(1);
-  const [profileType, setProfileType] = useState<
-    'universitario' | 'trabajador' | 'mixto'
-  >('universitario');
 
-  // Estado del Grupo
-  const [groupName, setGroupName] = useState('Mis Amigos de Siempre');
-  const [groupDescription, setGroupDescription] = useState(
-    'Coordinar salidas, reuniones y estudio'
-  );
+  /* Vacíos, con ejemplo en el placeholder: un nombre ya escrito («Mis Amigos
+     de Siempre») acababa como nombre real del grupo de quien solo pulsaba
+     «Continuar». */
+  const [groupName, setGroupName] = useState('');
+  const [groupDescription, setGroupDescription] = useState('');
   const [groupThreshold, setGroupThreshold] = useState<number>(100);
 
   /* Integrantes del grupo nuevo. Sustituye al código de invitación: la gente
@@ -52,17 +64,17 @@ export default function OnboardingPage() {
     setErrorCorreo(null);
   };
 
-  /** El grupo se crea al salir del paso 2; los integrantes entran en el 3. */
+  /** El grupo se crea al salir del paso 1; los integrantes entran en el 2. */
   const [grupoCreadoId, setGrupoCreadoId] = useState<string | null>(null);
 
-  const handleStep2Submit = async () => {
-    /* Si se vuelve del paso 3 al 2 y se continúa otra vez, el grupo ya existe:
+  const handleGrupoSubmit = async () => {
+    /* Si se vuelve del paso 2 al 1 y se continúa otra vez, el grupo ya existe:
        crearlo de nuevo dejaba dos grupos iguales. */
     if (grupoCreadoId) {
-      setStep(3);
+      setStep(2);
       return;
     }
-    if (enviando) return;
+    if (enviando || !groupName.trim()) return;
 
     // El usuario de ejemplo solo existe en modo demo.
     const userEmail = user?.email || (isApiEnabled ? '' : 'alex.rodriguez@huecko.com');
@@ -72,14 +84,14 @@ export default function OnboardingPage() {
     setErrorGrupo(null);
     try {
       const nuevo = await createGroup(
-        groupName || 'Mi Nuevo grupo',
-        groupDescription || 'Coordinación de horarios',
+        groupName.trim(),
+        groupDescription.trim(),
         groupThreshold,
         userEmail,
         userName
       );
       setGrupoCreadoId(nuevo.id);
-      setStep(3);
+      setStep(2);
     } catch (error) {
       setErrorGrupo(
         error instanceof Error ? error.message : 'No se pudo crear el grupo. Vuelve a intentarlo.'
@@ -90,13 +102,13 @@ export default function OnboardingPage() {
   };
 
   /**
-   * Da de alta a los correos reunidos en el paso 3.
+   * Da de alta a los correos reunidos en el paso 2.
    *
    * Se hace al avanzar y no correo a correo: quien está montando su primer
    * grupo escribe la lista de un tirón, y una petición por tecla convertiría
    * el paso en una sucesión de esperas.
    */
-  const handleStep3Submit = async () => {
+  const handleIntegrantesSubmit = async () => {
     if (enviando) return;
     if (grupoCreadoId && correos.length > 0) {
       setEnviando(true);
@@ -105,7 +117,7 @@ export default function OnboardingPage() {
       avisarAltasPendientes(addNotification, sinCuenta, fallidos, grupoCreadoId);
       setEnviando(false);
     }
-    setStep(4);
+    setStep(3);
   };
 
   return (
@@ -115,118 +127,34 @@ export default function OnboardingPage() {
       <main id="contenido" tabIndex={-1} className="max-w-3xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 pt-8">
         {/* Barra de Progreso del Asistente */}
         <div className="bg-surface-container-lowest rounded-3xl p-6 elev-1">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-3 mb-4">
             <span className="text-xs font-bold uppercase tracking-wider text-primary">
-              Paso {step} de 4
+              Paso {step} de 3
             </span>
-            <span className="text-xs font-semibold text-on-surface-variant">
-              {step === 1 && '1. Tu Disponibilidad'}
-              {step === 2 && '2. Tu Primer Grupo'}
-              {step === 3 && '3. Invitar Amigos'}
-              {step === 4 && '4. ¡Comencemos!'}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-on-surface-variant">{PASOS[step]}</span>
+              {step < 3 && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard')}
+                  className="text-xs font-bold text-primary hover:underline cursor-pointer"
+                >
+                  Omitir por ahora
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
             <div
               className="bg-primary h-full transition-all duration-300 rounded-full"
-              style={{ width: `${(step / 4) * 100}%` }}
+              style={{ width: `${(step / 3) * 100}%` }}
             ></div>
           </div>
         </div>
 
-        {/* PASO 1: CONFIGURAR DISPONIBILIDAD INICIAL */}
+        {/* PASO 1: CREAR EL GRUPO */}
         {step === 1 && (
-          <div className="bg-surface-container-lowest elev-1 rounded-3xl p-6 sm:p-8 space-y-6 animate-modal-in">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface mt-1">
-                ¿Cuál es tu tipo de rutina habitual?
-              </h2>
-              <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
-                Huecko utilizará este perfil para sugerirte horarios y organizar tus huecos libres de cada semana.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <button type="button"
-                onClick={() => setProfileType('universitario')}
-                aria-pressed={profileType === 'universitario'}
-                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center text-center ${
-                  profileType === 'universitario'
-                    ? 'border-primary bg-surface-container-lowest shadow-xs'
-                    : 'border-outline-variant/50 hover:border-secondary bg-surface-container-lowest'
-                }`}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-3xl text-primary mb-2">school</span>
-                <h3 className="text-sm font-bold text-on-surface">Universitario / Estudiante</h3>
-                <p className="text-2xs text-on-surface-variant mt-1">
-                  Clases por bloques entre semana, laboratorios y fines de semana libres.
-                </p>
-              </button>
-
-              <button type="button"
-                onClick={() => setProfileType('trabajador')}
-                aria-pressed={profileType === 'trabajador'}
-                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center text-center ${
-                  profileType === 'trabajador'
-                    ? 'border-primary bg-surface-container-lowest shadow-xs'
-                    : 'border-outline-variant/50 hover:border-secondary bg-surface-container-lowest'
-                }`}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-3xl text-primary mb-2">work</span>
-                <h3 className="text-sm font-bold text-on-surface">Trabajador / Oficina</h3>
-                <p className="text-2xs text-on-surface-variant mt-1">
-                  Lunes a Viernes ocupado en horario laboral. Tardes y fin de semana disponibles.
-                </p>
-              </button>
-
-              <button type="button"
-                onClick={() => setProfileType('mixto')}
-                aria-pressed={profileType === 'mixto'}
-                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center text-center ${
-                  profileType === 'mixto'
-                    ? 'border-primary bg-surface-container-lowest shadow-xs'
-                    : 'border-outline-variant/50 hover:border-secondary bg-surface-container-lowest'
-                }`}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-3xl text-primary mb-2">timelapse</span>
-                <h3 className="text-sm font-bold text-on-surface">Horario Rotativo / Mixto</h3>
-                <p className="text-2xs text-on-surface-variant mt-1">
-                  Turnos variables o freelance con disponibilidad adaptable.
-                </p>
-              </button>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-surface-container border border-outline-variant/60 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span aria-hidden="true" className="material-symbols-outlined text-primary">document_scanner</span>
-                <div>
-                  <h4 className="text-xs font-bold text-on-surface">¿Tienes tu horario en PDF o Foto?</h4>
-                  <p className="text-2xs text-on-surface-variant">
-                    Podrás subirlo vía OCR en cualquier momento desde "Mi horario".
-                  </p>
-                </div>
-              </div>
-              <span className="text-xs font-bold text-primary bg-surface-container-lowest px-3 py-1 rounded-lg border border-outline-variant/40">
-                OCR Listo
-              </span>
-            </div>
-
-            <div className="flex justify-end pt-4 border-t border-outline-variant/40">
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-2"
-              >
-                <span>Continuar al Paso 2</span>
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">arrow_forward</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* PASO 2: CREAR O UNIRSE A UN GRUPO */}
-        {step === 2 && (
           <div className="bg-surface-container-lowest elev-1 rounded-3xl p-6 sm:p-8 space-y-6 animate-modal-in">
             <div>
               <h2 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface mt-1">
@@ -239,9 +167,11 @@ export default function OnboardingPage() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-on-surface-variant block mb-1">Nombre del grupo</label>
+                  <label htmlFor="onboarding-nombre" className="text-xs font-bold text-on-surface-variant block mb-1">Nombre del grupo</label>
                   <input
+                    id="onboarding-nombre"
                     type="text"
+                    required
                     value={groupName}
                     onChange={(e) => setGroupName(e.target.value)}
                     placeholder="Ej. Grupo de Tesis / Amigos de Fin de Semana"
@@ -250,8 +180,9 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-on-surface-variant block mb-1">Descripción</label>
+                  <label htmlFor="onboarding-descripcion" className="text-xs font-bold text-on-surface-variant block mb-1">Descripción (opcional)</label>
                   <input
+                    id="onboarding-descripcion"
                     type="text"
                     value={groupDescription}
                     onChange={(e) => setGroupDescription(e.target.value)}
@@ -288,30 +219,22 @@ export default function OnboardingPage() {
               <p role="alert" className="text-xs font-semibold text-error">{errorGrupo}</p>
             )}
 
-            <div className="flex justify-between items-center pt-4 border-t border-outline-variant/40">
+            <div className="flex justify-end items-center pt-4 border-t border-outline-variant/40">
               <button
                 type="button"
-                onClick={() => setStep(1)}
-                className="px-5 py-2.5 rounded-xl border border-outline-variant text-xs font-semibold text-on-surface-variant hover:bg-surface-container-low cursor-pointer"
-              >
-                Atrás
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void handleStep2Submit()}
-                disabled={enviando}
+                onClick={() => void handleGrupoSubmit()}
+                disabled={enviando || (!grupoCreadoId && !groupName.trim())}
                 className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Continuar al Paso 3</span>
+                <span>{grupoCreadoId ? 'Continuar' : 'Crear grupo y continuar'}</span>
                 <span aria-hidden="true" className="material-symbols-outlined text-[16px]">arrow_forward</span>
               </button>
             </div>
           </div>
         )}
 
-        {/* PASO 3: INVITAR AMIGOS */}
-        {step === 3 && (
+        {/* PASO 2: AÑADIR INTEGRANTES */}
+        {step === 2 && (
           <div className="bg-surface-container-lowest elev-1 rounded-3xl p-6 sm:p-8 space-y-6 animate-modal-in">
             <div>
               <h2 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface mt-1">
@@ -380,7 +303,7 @@ export default function OnboardingPage() {
             <div className="flex justify-between items-center pt-4 border-t border-outline-variant/40">
               <button
                 type="button"
-                onClick={() => setStep(2)}
+                onClick={() => setStep(1)}
                 className="px-5 py-2.5 rounded-xl border border-outline-variant text-xs font-semibold text-on-surface-variant hover:bg-surface-container-low cursor-pointer"
               >
                 Atrás
@@ -388,7 +311,7 @@ export default function OnboardingPage() {
 
               <button
                 type="button"
-                onClick={() => void handleStep3Submit()}
+                onClick={() => void handleIntegrantesSubmit()}
                 disabled={enviando}
                 className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
@@ -399,8 +322,8 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* PASO 4: CONFIRMACIÓN Y ACCESO AL DASHBOARD */}
-        {step === 4 && (
+        {/* PASO 3: CONFIRMACIÓN */}
+        {step === 3 && (
           <div className="bg-surface-container-lowest rounded-3xl p-8 sm:p-10 space-y-6 text-center elev-1 animate-modal-in">
             <div className="w-16 h-16 rounded-full bg-primary text-on-primary flex items-center justify-center mx-auto text-3xl shadow-lg shadow-primary/20">
               <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
@@ -408,25 +331,14 @@ export default function OnboardingPage() {
 
             <div>
               <h2 className="text-3xl font-headline font-bold text-on-surface">
-                ¡Todo listo, {user?.nombre || 'Alejandro'}!
+                ¡Todo listo{user?.nombre ? `, ${user.nombre}` : ''}!
               </h2>
               <p className="text-xs sm:text-sm text-on-surface-variant mt-2 max-w-md mx-auto">
-                Ya tienes tu perfil configurado y tu primer grupo creado. Ahora puedes ver las coincidencias en tiempo real y proponer planes sin fricción.
+                Tu primer grupo ya está creado. Carga tu horario para que Huecko lo cruce con el de tu gente y te sugiera cuándo quedar.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-lg mx-auto text-left">
-              <div className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60">
-                <span className="text-2xs font-bold text-primary uppercase block">Perfil</span>
-                <span className="text-xs font-bold text-on-surface">
-                  {profileType === 'universitario'
-                    ? 'Universitario'
-                    : profileType === 'trabajador'
-                    ? 'Trabajador'
-                    : 'Mixto'}
-                </span>
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto text-left">
               <div className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/60">
                 <span className="text-2xs font-bold text-primary uppercase block">Grupo</span>
                 <span className="text-xs font-bold text-on-surface truncate block">
@@ -446,7 +358,7 @@ export default function OnboardingPage() {
                 onClick={() => navigate('/dashboard')}
                 className="px-8 py-3.5 rounded-2xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95"
               >
-                Ir a mi Dashboard Principal
+                Ir al inicio
               </button>
 
               <button
@@ -454,7 +366,7 @@ export default function OnboardingPage() {
                 onClick={() => navigate('/schedule')}
                 className="px-8 py-3.5 rounded-2xl bg-surface-container hover:bg-surface-variant text-primary-hover border border-outline-variant text-xs font-bold transition-all cursor-pointer active:scale-95"
               >
-                Ver Mi horario Detallado
+                Cargar mi horario
               </button>
             </div>
           </div>

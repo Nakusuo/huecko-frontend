@@ -9,7 +9,6 @@ export interface GroupMember {
   color: string;
   /** `ADMIN` es el valor histórico del modo demo; el backend dice `ORGANIZADOR`. */
   rol?: 'ADMIN' | 'ORGANIZADOR' | 'MIEMBRO';
-  status: 'confirmado' | 'pendiente';
 }
 
 export interface Group {
@@ -81,11 +80,15 @@ export interface PlanProposal {
   titulo: string;
   lugar?: string;
   creadoPor: string;
+  /** UUID de quien lo propuso: solo esa persona o un organizador pueden cerrarlo. */
+  creadoPorId?: string;
   plazoVotacion: string;
   estado: 'propuesto' | 'confirmado' | 'cancelado' | 'en_recoordinacion';
   ventanasSugeridas: TimeWindowProposal[];
-  incidencias?: PlanIncidence[];
-  votosReplanificacion?: { cancel: string[]; reschedule: string[]; keep: string[] };
+  /** RF-10: la ventana que ganó. Sin ella no hay forma de saber a qué hora es el plan. */
+  ventanaConfirmadaId?: string | null;
+  /** Si acepta votos ahora, según el reloj del servidor. En demo no viene. */
+  votacionAbierta?: boolean;
 }
 
 /* ------------------------------------------------------------------ *

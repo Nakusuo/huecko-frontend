@@ -15,7 +15,11 @@ const USUARIO_DEMO = {
   nombre: 'Alex Rodríguez',
   email: 'alex.rodriguez@huecko.com',
   creado_en: new Date().toISOString(),
+  rolSistema: 'USUARIO',
 };
+
+/** Con este correo el login devuelve el rol ADMIN, como el seed del backend. */
+const EMAIL_ADMIN = 'admin@huecko.com';
 
 let seq = 100;
 const bloques = [
@@ -63,9 +67,12 @@ const server = http.createServer((req, res) => {
 
     if ((p === '/api/auth/login' || p === '/api/auth/register') && req.method === 'POST') {
       const body = JSON.parse(raw || '{}');
+      const admin = !p.endsWith('/register') && body.email === EMAIL_ADMIN;
       return json(res, p.endsWith('/register') ? 201 : 200, {
         token: 'stub-jwt',
-        user: { ...USUARIO_DEMO, nombre: body.nombre || USUARIO_DEMO.nombre, email: body.email },
+        user: admin
+          ? { id: 'admin', nombre: 'Administración Huecko', email: EMAIL_ADMIN, creado_en: USUARIO_DEMO.creado_en, rolSistema: 'ADMIN' }
+          : { ...USUARIO_DEMO, nombre: body.nombre || USUARIO_DEMO.nombre, email: body.email },
       });
     }
 

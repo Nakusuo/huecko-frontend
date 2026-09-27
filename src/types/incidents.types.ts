@@ -60,6 +60,24 @@ export interface VotacionExpres {
   resultado: OpcionExpres | null;
   /** `true` si el resultado salió de RF-18 y no de los votos. */
   resultadoPorDefecto: boolean;
+  /**
+   * Si yo puedo votar. Quien reporta el imprevisto no vota: antes podía
+   * decidir sola, con un único voto, qué hacía el resto del grupo.
+   */
+  puedoVotar?: boolean;
+  /** Lo que se aplica si no vota suficiente gente. Lo configura el servidor. */
+  resultadoPorDefectoOpcion?: OpcionExpres;
+}
+
+/** Alguien avisó de que no irá (RF-15). Crítica o no, queda registrado. */
+export interface Ausencia {
+  usuarioId: string;
+  nombreUsuario: string;
+  motivo: string | null;
+  /** ISO-8601 en UTC. */
+  reportadoEn: string;
+  /** `true` si abrió una votación exprés (RF-16). */
+  critica: boolean;
 }
 
 /** Qué pasó al reportar una ausencia: con votación (crítica) o sin ella. */

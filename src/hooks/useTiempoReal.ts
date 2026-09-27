@@ -12,7 +12,7 @@ import { useAuthStore } from '../store/authStore';
 import { useGroupsStore } from '../store/groupsStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { useIncidentsStore } from '../store/incidentsStore';
-import { useProfileStore } from '../store/profileStore';
+import { usePreferenciasLocales } from '../store/profileStore';
 import type { RealtimeEvent, RealtimeStatus } from '../types/realtime.types';
 import { avisoDeEvento } from '../lib/eventoTexto';
 
@@ -23,28 +23,31 @@ import { avisoDeEvento } from '../lib/eventoTexto';
  * Va montado una sola vez, en `ProtectedRoute`, y no en cada página: si cada
  * vista abriera su propia conexión, navegar dejaría sockets huérfanos.
  *
- * Respeta el interruptor `notificacionesWebSockets` del perfil. Hasta ahora ese
- * ajuste existía en la interfaz sin estar conectado a nada.
+ * El interruptor «Avisos de retrasos e imprevistos» del perfil solo silencia
+ * esos avisos en la campana. Antes desconectaba el canal entero, y con él
+ * dejaban de actualizarse en vivo los votos y los planes.
  */
 export function useTiempoReal(): void {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const activado = useProfileStore((s) => s.profile.notificacionesWebSockets);
+  const { alertasRetrasos } = usePreferenciasLocales();
   const groups = useGroupsStore((s) => s.groups);
   const fetchProposals = useGroupsStore((s) => s.fetchProposals);
   const addNotification = useNotificationStore((s) => s.addNotification);
   const aplicarRetrasoRemoto = useIncidentsStore((s) => s.aplicarRetrasoRemoto);
   const aplicarVotacionAbierta = useIncidentsStore((s) => s.aplicarVotacionAbierta);
   const aplicarVotacionCerrada = useIncidentsStore((s) => s.aplicarVotacionCerrada);
+  const cargarPlanIncidencias = useIncidentsStore((s) => s.cargarPlan);
+  const miUsuarioId = useAuthStore((s) => s.user?.id);
 
   // --- conexión ---
   useEffect(() => {
-    if (!isApiEnabled || !isAuthenticated || !activado) {
+    if (!isApiEnabled || !isAuthenticated) {
       desconectarTiempoReal();
       return;
     }
     conectarTiempoReal();
     return () => desconectarTiempoReal();
-  }, [isAuthenticated, activado]);
+  }, [isAuthenticated]);
 
   // --- una suscripción por grupo ---
   /* Depende de los ids y no del array: cada recarga de grupos crea un array
@@ -52,12 +55,12 @@ export function useTiempoReal(): void {
      los topics. */
   const idsDeGrupos = groups.map((g) => g.id).join(',');
   useEffect(() => {
-    if (!isApiEnabled || !isAuthenticated || !activado || !idsDeGrupos) return;
+    if (!isApiEnabled || !isAuthenticated || !idsDeGrupos) return;
 
     const ids = idsDeGrupos.split(',');
     ids.forEach(escucharGrupo);
     return () => ids.forEach(dejarDeEscucharGrupo);
-  }, [idsDeGrupos, isAuthenticated, activado]);
+  }, [idsDeGrupos, isAuthenticated]);
 
   // --- del evento a la interfaz ---
   useEffect(() => {
@@ -67,16 +70,22 @@ export function useTiempoReal(): void {
       /* El texto del aviso se arma fuera del hook, en `lib/eventoTexto`, donde
          sí se puede probar. Aquí queda solo el efecto: qué se recarga y qué se
          guarda en los stores. */
-      const aviso = avisoDeEvento(evento);
-      if (aviso) {
+      const d = evento.datos as Record<string, unknown>;
+
+      /* Lo que hice yo no me lo notifico: ya lo vi al hacerlo. Antes quien
+         avisaba de un retraso recibía además «Alguien llega tarde: <yo>…». */
+      const aviso = d.usuarioId && d.usuarioId === miUsuarioId ? null : avisoDeEvento(evento);
+      // Silenciar los retrasos solo quita el aviso: el evento se aplica igual.
+      if (aviso && (alertasRetrasos || aviso.type !== 'incident')) {
         addNotification({ ...aviso, groupId: evento.grupoId });
       }
-
-      const d = evento.datos as Record<string, unknown>;
 
       switch (evento.tipo) {
         case 'PLAN_CONFIRMADO':
         case 'PLAN_CANCELADO':
+        case 'PLAN_PROPUESTO':
+        case 'PLAN_REAGENDADO':
+        case 'VOTO_ACTUALIZADO':
           // El aviso ya dice la fecha, pero la vista del grupo seguiría
           // mostrando la votación abierta hasta recargar las propuestas.
           void fetchProposals(evento.grupoId);
@@ -96,15 +105,25 @@ export function useTiempoReal(): void {
                   usuarioId,
                   nombreUsuario: String(d.nombreUsuario ?? 'Alguien'),
                   minutosEstimados: Number(d.minutosEstimados ?? 0),
-                  reportadoEn: evento.ocurridoEn,
-                  corregido: false,
+                  reportadoEn: typeof d.reportadoEn === 'string' ? d.reportadoEn : evento.ocurridoEn,
+                  corregido: d.corregido === true,
                 },
             usuarioId,
           );
           break;
         }
 
+        case 'AUSENCIA_REPORTADA':
+          // La lista de quién no va vive en el servidor: se vuelve a pedir.
+          if (typeof d.planId === 'string') void cargarPlanIncidencias(d.planId);
+          break;
+
         case 'VOTACION_EXPRES_ABIERTA':
+          // Una ausencia crítica no manda AUSENCIA_REPORTADA: con esto llegan
+          // a la vez la votación y la ausencia que la abrió.
+          if (typeof d.planId === 'string') void cargarPlanIncidencias(d.planId);
+          break;
+
         case 'VOTO_EXPRES_ACTUALIZADO':
           if (typeof d.planId !== 'string') break;
           // Se pide al servidor en vez de construirla del evento: el recuento y
@@ -121,7 +140,7 @@ export function useTiempoReal(): void {
           break;
       }
     });
-  }, [addNotification, fetchProposals, aplicarRetrasoRemoto, aplicarVotacionAbierta, aplicarVotacionCerrada]);
+  }, [addNotification, fetchProposals, aplicarRetrasoRemoto, aplicarVotacionAbierta, aplicarVotacionCerrada, cargarPlanIncidencias, miUsuarioId, alertasRetrasos]);
 }
 
 /** Estado de la conexión, para pintarlo donde haga falta. */
