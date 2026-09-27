@@ -56,6 +56,8 @@ export const endpoints = {
     detail: (planId: string) => `/planes/${planId}`,
     vote: (planId: string, ventanaId: string) => `/planes/${planId}/ventanas/${ventanaId}/voto`,
     close: (planId: string) => `/planes/${planId}/cerrar`,
+    /** Vuelve a votar con opciones nuevas un plan en re-coordinación. */
+    reschedule: (planId: string) => `/planes/${planId}/reagendar`,
   },
 
   /**
@@ -71,6 +73,8 @@ export const endpoints = {
     miRetraso: (planId: string) => `/planes/${planId}/retrasos/mio`,
     /** RF-15: reportar que no podré ir. */
     imprevistos: (planId: string) => `/planes/${planId}/imprevistos`,
+    /** Quién avisó de que no irá, crítico o no. */
+    ausencias: (planId: string) => `/planes/${planId}/ausencias`,
     /** RF-17: la votación exprés abierta. Devuelve 204 si no hay ninguna. */
     votacionExpres: (planId: string) => `/planes/${planId}/votacion-expres`,
     votoExpres: (planId: string) => `/planes/${planId}/votacion-expres/voto`,
@@ -89,5 +93,25 @@ export const endpoints = {
     endpoint: '/ws',
     /** Topic al que se suscribe cada grupo. */
     topicGrupo: (grupoId: string) => `/topic/grupos/${grupoId}`,
+  },
+
+  /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */
+  admin: {
+    resumen: '/admin/resumen',
+    pendientes: '/admin/pendientes',
+    salud: '/admin/salud',
+    fallos: '/admin/fallos',
+    estadoFallo: (id: string) => `/admin/fallos/${id}/estado`,
+    reportes: '/admin/reportes',
+    estadoReporte: (id: string) => `/admin/reportes/${id}/estado`,
+    suspensionReporte: (id: string) => `/admin/reportes/${id}/suspension`,
+    logs: '/admin/consola/logs',
+    configuracion: '/admin/consola/configuracion',
+  },
+
+  /** ✅ ReporteController. Cualquier cuenta: «Reportar un problema» y errores del navegador. */
+  reportes: {
+    crear: '/reportes',
+    errores: '/reportes/errores',
   },
 } as const;

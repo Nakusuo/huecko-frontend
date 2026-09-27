@@ -121,33 +121,23 @@ describe('groupsStore (con backend)', () => {
     };
 
     await expect(useGroupsStore.getState().reportIncident(PLAN.id, aviso('falta'))).rejects.toThrow();
-    expect(plan()?.incidencias).toBe(undefined);
+    expect(useIncidentsStore.getState().ausencias[PLAN.id]).toBe(undefined);
     expect(plan()?.estado).toBe('confirmado');
   });
 
-  it('un voto que el servidor no guarda no se pinta', async () => {
-    useGroupsStore.setState({ groupProposals: [{ ...PLAN, estado: 'en_recoordinacion' }] });
+  it('un voto exprés que el servidor rechaza sube el error y no se pinta', async () => {
+    useIncidentsStore.setState({ votaciones: { [PLAN.id]: VOTACION } });
     incidentsService.votarExpres = async () => {
       throw new ApiError('Votación cerrada', 409);
     };
 
-    await useGroupsStore.getState().voteReplanification(PLAN.id, 'keep', 'sam@huecko.com');
-
-    expect(useGroupsStore.getState().syncError).toBe('Votación cerrada');
-    expect(plan()?.votosReplanificacion).toBe(undefined);
+    await expect(useIncidentsStore.getState().votarExpres(PLAN.id, 'MANTENER')).rejects.toThrow('Votación cerrada');
+    expect(useIncidentsStore.getState().votaciones[PLAN.id]?.miVoto ?? null).toBe(VOTACION.miVoto ?? null);
   });
 
-  it('retirar una tardanza que el servidor no retira deja el aviso', async () => {
-    useGroupsStore.setState({
-      groupProposals: [
-        {
-          ...PLAN,
-          incidencias: [
-            { id: 'i-1', userEmail: 'sam@huecko.com', userName: 'Sam', tipo: 'tardanza', motivo: 'x', fechaReporte: 'Ahora' },
-          ],
-        },
-      ],
-    });
+  it('retirar un retraso que el servidor no retira lo deja a la vista', async () => {
+    const retraso = { usuarioId: 'u-1', nombreUsuario: 'Sam', minutosEstimados: 10, reportadoEn: '2026-09-21T10:00:00Z', corregido: false };
+    useIncidentsStore.setState({ retrasos: { [PLAN.id]: [retraso] } });
     incidentsService.retirarRetraso = async () => {
       throw new ApiError('Error', 500);
     };
@@ -155,26 +145,8 @@ describe('groupsStore (con backend)', () => {
     const retirado = await useGroupsStore.getState().withdrawIncident(PLAN.id, 'sam@huecko.com');
 
     expect(retirado).toBe(false);
-    expect(plan()?.incidencias?.length).toBe(1);
-  });
-
-  it('una ausencia no se puede retirar desde el cliente', async () => {
-    useGroupsStore.setState({
-      groupProposals: [
-        {
-          ...PLAN,
-          incidencias: [
-            { id: 'i-2', userEmail: 'sam@huecko.com', userName: 'Sam', tipo: 'falta', motivo: 'x', fechaReporte: 'Ahora' },
-          ],
-        },
-      ],
-    });
-
-    const retirado = await useGroupsStore.getState().withdrawIncident(PLAN.id, 'sam@huecko.com');
-
-    expect(retirado).toBe(false);
-    expect(plan()?.incidencias?.length).toBe(1);
-    expect(useGroupsStore.getState().syncError).not.toBeNull();
+    expect(useIncidentsStore.getState().retrasos[PLAN.id]).toHaveLength(1);
+    expect(useGroupsStore.getState().syncError).toBe('Error');
   });
 
   it('una respuesta de grupos que llega tarde no pisa un grupo recién creado', async () => {
@@ -209,5 +181,91 @@ describe('groupsStore (con backend)', () => {
 
     expect(sinCuenta).toEqual(['nadie@huecko.com']);
     expect(fallidos).toEqual(['otro@huecko.com']);
+  });
+
+  it('el cruce pasa por «cargando» y guarda el error para reintentar', async () => {
+    let fallar = true;
+    groupsService.getAvailability = async () => {
+      if (fallar) throw new ApiError('Servidor caído', 503);
+      return {
+        threshold: 80,
+        membersCount: 3,
+        weekFrom: '2026-09-21',
+        hourFrom: 8,
+        hourTo: 20,
+        cells: {},
+        windows: [],
+      };
+    };
+
+    const peticion = useGroupsStore.getState().fetchAvailability('g-1');
+    expect(useGroupsStore.getState().availabilityEstado['g-1']).toEqual({ estado: 'cargando' });
+    await peticion;
+    expect(useGroupsStore.getState().availabilityEstado['g-1']).toEqual({
+      estado: 'error',
+      mensaje: 'Servidor caído',
+    });
+    expect(useGroupsStore.getState().availability['g-1']).toBeUndefined();
+
+    fallar = false;
+    await useGroupsStore.getState().fetchAvailability('g-1');
+    expect(useGroupsStore.getState().availabilityEstado['g-1']).toEqual({ estado: 'ok' });
+    expect(useGroupsStore.getState().availability['g-1'].membersCount).toBe(3);
+  });
+
+  it('sacar a alguien pide la baja por su id y vuelve a pedir el cruce', async () => {
+    const llamadas: string[] = [];
+    groupsService.removeMember = async (_g, userId) => {
+      llamadas.push(`baja:${userId}`);
+    };
+    groupsService.getAvailability = async (groupId) => {
+      llamadas.push(`cruce:${groupId}`);
+      throw new ApiError('da igual', 500);
+    };
+    useGroupsStore.setState({
+      groups: [
+        {
+          id: 'g-1',
+          nombre: 'G',
+          descripcion: '',
+          creadoPor: 'u-1',
+          umbralDisponibilidad: 80,
+          miembros: [
+            { userId: 'u-1', email: 'yo@huecko.com', nombre: 'Yo', isEssential: false, color: '#000', rol: 'ORGANIZADOR' },
+            { userId: 'u-2', email: 'sam@huecko.com', nombre: 'Sam', isEssential: false, color: '#000', rol: 'MIEMBRO' },
+          ],
+        },
+      ],
+    });
+
+    await useGroupsStore.getState().removeMember('g-1', 'sam@huecko.com');
+
+    expect(llamadas).toEqual(['baja:u-2', 'cruce:g-1']);
+    expect(useGroupsStore.getState().groups[0].miembros.map((m) => m.email)).toEqual(['yo@huecko.com']);
+  });
+
+  it('si el servidor no deja salir, el error sube y el grupo sigue', async () => {
+    groupsService.removeMember = async () => {
+      throw new ApiError('Eres el único organizador. Nombra a otro antes de salir del grupo.', 400);
+    };
+    const { useAuthStore } = await import('./authStore');
+    useAuthStore.setState({ user: { id: 'u-1', nombre: 'Yo', email: 'yo@huecko.com', creado_en: '' } });
+    useGroupsStore.setState({
+      groups: [
+        {
+          id: 'g-1',
+          nombre: 'G',
+          descripcion: '',
+          creadoPor: 'u-1',
+          umbralDisponibilidad: 80,
+          miembros: [
+            { userId: 'u-1', email: 'yo@huecko.com', nombre: 'Yo', isEssential: false, color: '#000', rol: 'ORGANIZADOR' },
+          ],
+        },
+      ],
+    });
+
+    await expect(useGroupsStore.getState().leaveGroup('g-1')).rejects.toThrow(/único organizador/);
+    expect(useGroupsStore.getState().groups).toHaveLength(1);
   });
 });

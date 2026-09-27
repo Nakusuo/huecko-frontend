@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import { useShallow } from 'zustand/react/shallow';
@@ -20,7 +20,28 @@ import { useModalDismiss } from '../hooks/useModalDismiss';
 import { isApiEnabled } from '../lib/apiClient';
 import { AvisoError } from '../components/AvisoError';
 import { avisarAltasPendientes } from '../lib/avisosAltas';
+import {
+  calcularCambios,
+  esOrganizador,
+  hayCambios,
+  miembroActual,
+  rolDe,
+  validarCorreoNuevo,
+} from '../lib/grupos';
+import { calcularCelda, type BloqueDePersona } from '../lib/disponibilidad';
+import { bloquesDemoDeLaSemana } from '../lib/huecosSemana';
+import { fechaLocalIso, inicioDeSemana } from '../lib/horario';
+import { useScheduleStore } from '../store/scheduleStore';
 import { describirAviso } from '../lib/avisosIncidencia';
+import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
+import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
+import {
+  estadoVisible,
+  formatearPlazo,
+  formatearVentana,
+  problemasDePropuesta,
+  ventanaGanadora,
+} from '../lib/planes';
 
 const days: DayOfWeek[] = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const timeSlotsHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
@@ -68,25 +89,10 @@ function plazoAInstante(plazo: string): string {
   return new Date(Date.now() + 24 * 3_600_000).toISOString();
 }
 
-/** Qué opción votó esta persona en la re-coordinación, o `null` si no votó. */
-function votoDeReplanificacion(
-  proposal: PlanProposal,
-  email: string
-): 'cancel' | 'reschedule' | 'keep' | null {
-  const votos = proposal.votosReplanificacion;
-  if (!votos) return null;
-  const opciones = ['cancel', 'reschedule', 'keep'] as const;
-  return opciones.find((opcion) => votos[opcion].includes(email)) ?? null;
-}
+/** Porcentaje desconocido: todavía no llegó el cruce del servidor. */
+const SIN_DATO = -1;
 
-/** Muestra el plazo: si es un instante ISO se formatea, y si no se deja tal cual. */
-function formatearPlazo(plazo: string): string {
-  const fecha = new Date(plazo);
-  if (Number.isNaN(fecha.getTime())) return plazo;
-  return fecha.toLocaleString('es-PE', {
-    weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-  });
-}
+const aHora = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
 export default function GroupDetailPage() {
   const {
@@ -97,14 +103,17 @@ export default function GroupDetailPage() {
     availability,
     fetchAvailability,
     fetchProposals,
-    updateGroupThreshold,
+    availabilityEstado,
+    updateGroup,
     addMembersByEmail,
-    toggleMemberEssential,
+    updateMember,
+    removeMember,
+    leaveGroup,
     addProposal,
     voteProposalWindow,
     closeVotingManually,
+    rescheduleProposal,
     reportIncident,
-    voteReplanification,
     withdrawIncident,
     syncError,
     clearSyncError,
@@ -120,14 +129,17 @@ export default function GroupDetailPage() {
       availability: s.availability,
       fetchAvailability: s.fetchAvailability,
       fetchProposals: s.fetchProposals,
-      updateGroupThreshold: s.updateGroupThreshold,
+      availabilityEstado: s.availabilityEstado,
+      updateGroup: s.updateGroup,
       addMembersByEmail: s.addMembersByEmail,
-      toggleMemberEssential: s.toggleMemberEssential,
+      updateMember: s.updateMember,
+      removeMember: s.removeMember,
+      leaveGroup: s.leaveGroup,
       addProposal: s.addProposal,
       voteProposalWindow: s.voteProposalWindow,
       closeVotingManually: s.closeVotingManually,
+      rescheduleProposal: s.rescheduleProposal,
       reportIncident: s.reportIncident,
-      voteReplanification: s.voteReplanification,
       withdrawIncident: s.withdrawIncident,
       syncError: s.syncError,
       clearSyncError: s.clearSyncError,
@@ -137,12 +149,44 @@ export default function GroupDetailPage() {
 
   const addNotification = useNotificationStore((s) => s.addNotification);
 
+  /* Retrasos, ausencias y votación exprés de cada plan confirmado. Antes la
+     votación exprés solo se podía votar desde el inicio, y solo la del primer
+     plan confirmado: la de cualquier otro plan no tenía pantalla. */
+  const retrasosPorPlan = useIncidentsStore((s) => s.retrasos);
+  const ausenciasPorPlan = useIncidentsStore((s) => s.ausencias);
+  const votacionesPorPlan = useIncidentsStore((s) => s.votaciones);
+  const cargarPlanIncidencias = useIncidentsStore((s) => s.cargarPlan);
+  const votarExpres = useIncidentsStore((s) => s.votarExpres);
+  const miId = miIdentificador();
+
   /* Identidad real de quien usa la app. Antes estaba escrita a mano en cinco
      sitios como 'alex.rodriguez@huecko.com', asi que con backend real todo el
      mundo votaba y creaba grupos en nombre del usuario de demo. */
   const authUser = useAuthStore((state) => state.user);
   const userEmail = authUser?.email ?? (isApiEnabled ? '' : USUARIO_DEMO.email);
   const userName = authUser?.nombre ?? (isApiEnabled ? '' : USUARIO_DEMO.nombre);
+
+  /**
+   * Si quien usa la app organiza este grupo: por id con backend y por correo
+   * en demo. `ADMIN` es el nombre antiguo del demo (ver `rolDe`).
+   */
+  const soyOrganizador = (group: Group) => {
+    const yo = miembroActual(group, { id: authUser?.id, email: userEmail });
+    return yo ? esOrganizador(group, yo) : false;
+  };
+
+  /* Horario propio para el cruce del modo demo: el de «Mi horario», no solo
+     los bloques de ejemplo. Solo cuenta lo que ocupa ESTA semana (un puntual
+     del mes que viene no quita huecos hoy) y, como en el backend, un
+     borrador de OCR sin revisar no bloquea a nadie. */
+  const misBloques = useScheduleStore((s) => s.slots);
+  const bloquesDemoPorDia = useMemo(
+    () =>
+      isApiEnabled
+        ? new Map<DayOfWeek, BloqueDePersona[]>()
+        : bloquesDemoDeLaSemana(occupiedSlots, misBloques, userEmail, inicioDeSemana(fechaLocalIso())),
+    [occupiedSlots, misBloques, userEmail]
+  );
 
   /* El grupo lo manda la URL, no el estado. Asi un enlace a /groups/:id abre
      siempre el mismo grupo, y volver atras en el navegador funciona. */
@@ -168,6 +212,17 @@ export default function GroupDetailPage() {
     fetchProposals(activeGroupId);
   }, [activeGroupId, fetchAvailability, fetchProposals]);
 
+  /* Por ids y no por el array: cada recarga de planes crea uno nuevo aunque
+     sean los mismos, y relanzaría las peticiones en bucle. */
+  const idsConfirmados = groupProposals
+    .filter((p) => p.groupId === activeGroupId && p.estado === 'confirmado')
+    .map((p) => p.id)
+    .join(',');
+  useEffect(() => {
+    if (!idsConfirmados) return;
+    idsConfirmados.split(',').forEach((id) => void cargarPlanIncidencias(id));
+  }, [idsConfirmados, cargarPlanIncidencias]);
+
   // Proposal Modal State
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
   const [proposalTitle, setProposalTitle] = useState('');
@@ -175,6 +230,8 @@ export default function GroupDetailPage() {
   const [proposalPlazo, setProposalPlazo] = useState('24 horas');
   const [proposalError, setProposalError] = useState('');
   const [suggestedWindows, setSuggestedWindows] = useState<TimeWindowProposal[]>([]);
+  /** Plan en re-coordinación que se está reprogramando, o `null` si es uno nuevo. */
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
 
   // Form window input temporary
   const [tempDay, setTempDay] = useState<DayOfWeek>('Mié');
@@ -190,21 +247,23 @@ export default function GroupDetailPage() {
   const [umbral, setUmbral] = useState(100);
   const [membersList, setMembersList] = useState<GroupMember[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [newMemberName, setNewMemberName] = useState('');
   const [isEssentialNewMember, setIsEssentialNewMember] = useState(false);
+  /** Por qué no se pudo añadir el correo escrito (formato, repetido, el propio). */
+  const [avisoCorreo, setAvisoCorreo] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  /** Lo que el servidor rechazó al guardar, una línea por cambio. */
+  const [erroresGuardado, setErroresGuardado] = useState<string[]>([]);
+  const [confirmandoSalida, setConfirmandoSalida] = useState(false);
+  const [saliendo, setSaliendo] = useState(false);
 
 
   // Join Group Modal State
 
   useModalDismiss(isProposeModalOpen, () => setIsProposeModalOpen(false));
-  useModalDismiss(isEditGroupModalOpen, () => setIsEditGroupModalOpen(false));
-  /* Se guarda la referencia (grupo + correo) y no el objeto: así la ficha
-     refleja los cambios del store en vez de quedarse con una copia vieja. */
-  const [memberRef, setMemberRef] = useState<{ groupId: string; email: string } | null>(null);
-  const memberGroup = memberRef ? groups.find((g) => g.id === memberRef.groupId) ?? null : null;
-  const memberDetail = memberGroup?.miembros.find((m) => m.email === memberRef?.email) ?? null;
-
-  useModalDismiss(Boolean(memberDetail), () => setMemberRef(null));
+  // Mientras se guarda no se cierra: el resultado tiene que verse.
+  useModalDismiss(isEditGroupModalOpen, () => {
+    if (!guardando && !saliendo) setIsEditGroupModalOpen(false);
+  });
 
   /* Mismo criterio que en «Mi horario»: en el móvil se elige un día y se ve ese
      día, en vez de arrastrar siete columnas a lo ancho. */
@@ -215,35 +274,54 @@ export default function GroupDetailPage() {
     setNombre(group.nombre);
     setDescripcion(group.descripcion);
     setUmbral(group.umbralDisponibilidad);
-    setMembersList(group.miembros);
+    // El rol se resuelve aquí (demo antiguo sin rol) para comparar al guardar con lo mismo que se ve.
+    setMembersList(group.miembros.map((m) => ({ ...m, rol: rolDe(group, m) })));
     setNewMemberEmail('');
-    setNewMemberName('');
     setIsEssentialNewMember(false);
+    setAvisoCorreo(null);
+    setErroresGuardado([]);
+    setConfirmandoSalida(false);
     setIsEditGroupModalOpen(true);
   };
 
-  const handleAddMemberToForm = () => {
-    if (!newMemberEmail || !newMemberEmail.includes('@')) return;
-    if (membersList.some((m) => m.email.toLowerCase() === newMemberEmail.toLowerCase())) return;
+  /**
+   * Integrante recién añadido al formulario. El nombre es provisional: el
+   * backend usa el de la cuenta, por eso el formulario ya no lo pide.
+   */
+  const miembroNuevo = (correo: string, lista: GroupMember[]): GroupMember => ({
+    email: correo,
+    nombre: correo.split('@')[0],
+    isEssential: isEssentialNewMember,
+    color: colorByIndex(lista.length),
+    rol: 'MIEMBRO',
+  });
 
-    const assignedColor = colorByIndex(membersList.length);
+  /**
+   * Pasa el correo escrito a la lista, con las mismas reglas que al crear el
+   * grupo. Devuelve la lista resultante, o `null` si el correo no valía (y
+   * deja dicho por qué). Un correo mal escrito ya no llega al servidor para
+   * acabar contado como «fallido».
+   */
+  const agregarCorreoAlFormulario = (): GroupMember[] | null => {
+    const resultado = validarCorreoNuevo(
+      newMemberEmail,
+      membersList.map((m) => m.email),
+      userEmail
+    );
+    if ('error' in resultado) {
+      setAvisoCorreo(resultado.error);
+      return null;
+    }
 
-    const newM: GroupMember = {
-      email: newMemberEmail,
-      nombre: newMemberName || newMemberEmail.split('@')[0],
-      isEssential: isEssentialNewMember,
-      color: assignedColor,
-      status: 'pendiente',
-    };
-
-    setMembersList([...membersList, newM]);
+    const lista = [...membersList, miembroNuevo(resultado.correo, membersList)];
+    setMembersList(lista);
     setNewMemberEmail('');
-    setNewMemberName('');
     setIsEssentialNewMember(false);
+    setAvisoCorreo(null);
+    return lista;
   };
 
   const handleRemoveMemberFromForm = (email: string) => {
-    if (membersList.length <= 1) return; // Mínimo 1 integrante
     setMembersList(membersList.filter((m) => m.email !== email));
   };
 
@@ -253,100 +331,190 @@ export default function GroupDetailPage() {
     );
   };
 
+  const handleToggleOrganizer = (email: string) => {
+    setMembersList(
+      membersList.map((m) =>
+        m.email === email ? { ...m, rol: m.rol === 'ORGANIZADOR' ? 'MIEMBRO' : 'ORGANIZADOR' } : m
+      )
+    );
+  };
+
+  const motivoDe = (error: unknown) =>
+    error instanceof Error && error.message ? error.message : 'Vuelve a intentarlo.';
+
   /**
-   * Guarda el umbral y da de alta a quien se haya añadido a la lista.
+   * Guarda todo lo que cambió en el formulario, comparado con el grupo
+   * guardado: datos del grupo, roles e imprescindibles, bajas y altas.
    *
-   * Es la segunda mitad del modelo que sustituyó al código de invitación: la
-   * gente entra al crear el grupo o desde aquí. Las altas van una a una porque
-   * el servidor puede rechazar un correo sin cuenta, y hay que poder decir
-   * cuál falló.
+   * Antes solo se guardaban el umbral y las altas; quitar a alguien,
+   * renombrar o marcar imprescindible se perdía al cerrar sin decir nada.
+   * Cada cambio va por separado para poder decir cuál falló; si alguno falla
+   * el formulario sigue abierto y, al volver a guardar, solo se reintenta lo
+   * que falta (lo demás ya coincide con el grupo guardado).
    */
   const handleUpdateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedGroup || !nombre) return;
+    if (!selectedGroup || !nombre.trim() || guardando) return;
 
-    if (umbral !== selectedGroup.umbralDisponibilidad) {
-      // Si falla, el store deshace el cambio y deja el motivo en `syncError`.
-      await updateGroupThreshold(selectedGroup.id, umbral);
+    // Un correo escrito sin pulsar «Añadir» también cuenta, si es válido.
+    let miembros = membersList;
+    if (newMemberEmail.trim()) {
+      const lista = agregarCorreoAlFormulario();
+      if (!lista) return;
+      miembros = lista;
     }
 
-    const yaEstaban = new Set(selectedGroup.miembros.map((m) => m.email.toLowerCase()));
-    const nuevos = membersList
-      .filter((m) => !yaEstaban.has(m.email.toLowerCase()))
-      .map((m) => m.email);
+    const grupo = selectedGroup;
+    const cambios = calcularCambios(grupo, { nombre, descripcion, umbral, miembros });
+    if (!hayCambios(cambios)) {
+      setIsEditGroupModalOpen(false);
+      return;
+    }
 
-    const { sinCuenta, fallidos } = await addMembersByEmail(selectedGroup.id, nuevos);
-    avisarAltasPendientes(addNotification, sinCuenta, fallidos, selectedGroup.id);
+    setGuardando(true);
+    setErroresGuardado([]);
+    const errores: string[] = [];
 
-    setIsEditGroupModalOpen(false);
+    if (cambios.datos) {
+      try {
+        await updateGroup(grupo.id, cambios.datos);
+      } catch (error) {
+        errores.push(`No se guardaron el nombre, la descripción o el umbral: ${motivoDe(error)}`);
+      }
+    }
+
+    // Ascensos primero (ya vienen ordenados): el grupo nunca se queda sin organizador a medias.
+    for (const cambio of cambios.cambios) {
+      try {
+        await updateMember(grupo.id, cambio.email, { rol: cambio.rol, isEssential: cambio.isEssential });
+      } catch (error) {
+        errores.push(`${cambio.nombre}: ${motivoDe(error)}`);
+      }
+    }
+
+    for (const baja of cambios.bajas) {
+      try {
+        await removeMember(grupo.id, baja.email);
+      } catch (error) {
+        errores.push(`No se pudo quitar a ${baja.nombre}: ${motivoDe(error)}`);
+      }
+    }
+
+    let sinCuenta: string[] = [];
+    if (cambios.altas.length > 0) {
+      const resultado = await addMembersByEmail(grupo.id, cambios.altas.map((m) => m.email));
+      sinCuenta = resultado.sinCuenta;
+      for (const correo of resultado.fallidos) errores.push(`No se pudo añadir a ${correo}.`);
+
+      // Quien entra lo hace como integrante normal: el imprescindible va después.
+      const fallaron = new Set([...resultado.sinCuenta, ...resultado.fallidos]);
+      for (const alta of cambios.altas) {
+        if (!alta.isEssential || fallaron.has(alta.email)) continue;
+        try {
+          await updateMember(grupo.id, alta.email, { isEssential: true });
+        } catch (error) {
+          errores.push(`${alta.email} ya está en el grupo, pero no se pudo marcar como imprescindible: ${motivoDe(error)}`);
+        }
+      }
+    }
+
+    setGuardando(false);
+
+    if (errores.length === 0) {
+      avisarAltasPendientes(addNotification, sinCuenta, [], grupo.id, true);
+      setIsEditGroupModalOpen(false);
+      return;
+    }
+
+    /* Sin cuenta no hay nada que reintentar: se sacan de la lista y se dice.
+       El resto del borrador se conserva tal cual. */
+    if (sinCuenta.length > 0) {
+      errores.push(`Sin cuenta en Huecko: ${sinCuenta.join(', ')}. Pídeles que se registren.`);
+      setMembersList(miembros.filter((m) => !sinCuenta.includes(m.email)));
+    }
+    setErroresGuardado(errores);
   };
 
-  // Calcula la disponibilidad real de una ventana de tiempo.
-  const calculateWindowAvailability = (group: Group, day: DayOfWeek, startTimeStr: string, endTimeStr: string) => {
-    const startH = parseInt(startTimeStr.split(':')[0], 10);
-    const endH = parseInt(endTimeStr.split(':')[0], 10);
-    if (isNaN(startH) || isNaN(endH) || endH <= startH) return 100;
+  /** Salir del grupo. Si el servidor lo impide (único organizador), se dice por qué. */
+  const handleLeaveGroup = async () => {
+    if (!selectedGroup || saliendo) return;
+    const { id, nombre: nombreGrupo } = selectedGroup;
 
-    const groupMemberEmails = group.miembros.map((m) => m.email);
-    const totalMembers = groupMemberEmails.length;
-    if (totalMembers === 0) return 100;
+    setSaliendo(true);
+    setErroresGuardado([]);
+    try {
+      await leaveGroup(id);
+    } catch (error) {
+      setErroresGuardado([motivoDe(error)]);
+      setConfirmandoSalida(false);
+      setSaliendo(false);
+      return;
+    }
 
-    const occupiedEmailsInWindow = new Set<string>();
-    occupiedSlots.forEach((slot) => {
-      if (slot.day !== day) return;
-      if (!groupMemberEmails.includes(slot.userEmail)) return;
-
-      const slotStart = parseInt(slot.startTime.split(':')[0], 10);
-      const slotEnd = parseInt(slot.endTime.split(':')[0], 10);
-
-      if (startH < slotEnd && endH > slotStart) {
-        occupiedEmailsInWindow.add(slot.userEmail);
-      }
+    setSaliendo(false);
+    setIsEditGroupModalOpen(false);
+    addNotification({
+      title: 'Saliste del grupo',
+      description: `Ya no formas parte de «${nombreGrupo}».`,
+      type: 'system',
     });
+    navigate('/groups');
+  };
 
-    const freeCount = totalMembers - occupiedEmailsInWindow.size;
-    return Math.round((freeCount / totalMembers) * 100);
+  /**
+   * Disponibilidad de una ventana: la peor de las horas que cubre, que es como
+   * la mide el backend. Sin cruce del servidor no se inventa nada: antes salía
+   * «100% libre» para cualquier opción en modo conectado.
+   */
+  const porcentajeDeVentana = (group: Group, day: DayOfWeek, inicio: string, fin: string): number => {
+    if (fin <= inicio) return SIN_DATO;
+    if (isApiEnabled && !availability[group.id]) return SIN_DATO;
+    const desde = Number(inicio.slice(0, 2));
+    const hasta = Math.ceil(Number(fin.slice(0, 2)) + Number(fin.slice(3, 5)) / 60);
+    let minimo = 100;
+    for (let hora = desde; hora < hasta; hora++) {
+      minimo = Math.min(minimo, getCellAvailability(group, day, hora).freePercentage);
+    }
+    return minimo;
+  };
+
+  /**
+   * Las dos primeras franjas en las que cabe el grupo y que aún no han pasado.
+   * Antes se precargaban siempre Mié 11–13 y Jue 16–18, cayeran donde cayeran.
+   */
+  const ventanasIniciales = (group: Group): TimeWindowProposal[] => {
+    if (isApiEnabled && !availability[group.id]) return [];
+    const lunes = availability[group.id]?.weekFrom ?? lunesDeEstaSemana();
+    const candidatas: TimeWindowProposal[] = [];
+    for (const dia of days) {
+      for (const franja of getRecommendedWindows(group, dia)) {
+        const horaInicio = aHora(franja.start);
+        const horaFin = aHora(Math.min(franja.end, franja.start + 2));
+        candidatas.push({
+          id: `sugerida-${dia}-${horaInicio}`,
+          dia,
+          fecha: fechaParaDia(lunes, dia, horaInicio),
+          horaInicio,
+          horaFin,
+          disponibilidadPorcentaje: franja.minimumAvailability,
+          votosUsuarios: [],
+        });
+      }
+    }
+    return candidatas
+      .sort((x, y) => `${x.fecha}${x.horaInicio}`.localeCompare(`${y.fecha}${y.horaInicio}`))
+      .slice(0, 2);
   };
 
   // Acciones de propuestas y votaciones.
-  const openProposePlanModal = (group: Group) => {
+  const openProposePlanModal = (group: Group, reprogramar?: PlanProposal) => {
     setSelectedGroupId(group.id);
-    setProposalTitle('');
-    setProposalLugar('');
+    setReschedulingId(reprogramar?.id ?? null);
+    setProposalTitle(reprogramar?.titulo ?? '');
+    setProposalLugar(reprogramar?.lugar ?? '');
     setProposalPlazo('24 horas');
     setProposalError('');
-
-    const avail1 = calculateWindowAvailability(
-      group,
-      'Mié',
-      '11:00',
-      '13:00'
-    );
-    const avail2 = calculateWindowAvailability(
-      group,
-      'Jue',
-      '16:00',
-      '18:00'
-    );
-
-    setSuggestedWindows([
-      {
-        id: 'ventana-mie-1100',
-        dia: 'Mié',
-        horaInicio: '11:00',
-        horaFin: '13:00',
-        disponibilidadPorcentaje: avail1,
-        votosUsuarios: [],
-      },
-      {
-        id: 'ventana-jue-1600',
-        dia: 'Jue',
-        horaInicio: '16:00',
-        horaFin: '18:00',
-        disponibilidadPorcentaje: avail2,
-        votosUsuarios: [],
-      },
-    ]);
+    setSuggestedWindows(ventanasIniciales(group));
     setIsProposeModalOpen(true);
   };
 
@@ -354,19 +522,14 @@ export default function GroupDetailPage() {
     if (!selectedGroup) return;
     if (suggestedWindows.length >= 5) return;
 
-    const realAvail = calculateWindowAvailability(
-      selectedGroup,
-      tempDay,
-      tempStart,
-      tempEnd
-    );
-
+    const lunes = availability[selectedGroup.id]?.weekFrom ?? lunesDeEstaSemana();
     const newW: TimeWindowProposal = {
-      id: Date.now().toString(),
+      id: `opcion-${tempDay}-${tempStart}-${tempEnd}`,
       dia: tempDay,
+      fecha: fechaParaDia(lunes, tempDay, tempStart),
       horaInicio: tempStart,
       horaFin: tempEnd,
-      disponibilidadPorcentaje: realAvail,
+      disponibilidadPorcentaje: porcentajeDeVentana(selectedGroup, tempDay, tempStart, tempEnd),
       votosUsuarios: [],
     };
     setSuggestedWindows([...suggestedWindows, newW]);
@@ -382,14 +545,9 @@ export default function GroupDetailPage() {
   const handleCreateProposalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setProposalError('');
-    if (
-      !selectedGroup ||
-      !proposalTitle ||
-      suggestedWindows.length < 2 ||
-      suggestedWindows.length > 5
-    ) {
-      return;
-    }
+    // El número de opciones lo explica `problemasDePropuesta`; antes el
+    // formulario simplemente no hacía nada con menos de dos.
+    if (!selectedGroup || !proposalTitle.trim()) return;
 
     /* El backend necesita una fecha concreta por ventana y un instante de
        cierre; la UI razona en dias de la semana y en textos como "24 horas".
@@ -397,32 +555,54 @@ export default function GroupDetailPage() {
     const lunesDeLaSemana = availability[selectedGroup.id]?.weekFrom ?? lunesDeEstaSemana();
     const ventanasConFecha = suggestedWindows.map((w) => ({
       ...w,
-      fecha: w.fecha ?? fechaParaDia(lunesDeLaSemana, w.dia),
+      fecha: w.fecha ?? fechaParaDia(lunesDeLaSemana, w.dia, w.horaInicio),
     }));
+    const ventanasPayload = ventanasConFecha.map((w) => ({
+      fecha: w.fecha,
+      horaInicio: w.horaInicio,
+      horaFin: w.horaFin,
+    }));
+    const plazoISO = plazoAInstante(proposalPlazo);
+
+    /* Lo que el backend rechazaría (opciones pasadas, solapadas, un plazo que
+       cierra después de la primera opción) se dice aquí, antes de enviar. */
+    const problemas = problemasDePropuesta(
+      ventanasConFecha.map((w) => ({ dia: w.dia, fecha: w.fecha, horaInicio: w.horaInicio, horaFin: w.horaFin })),
+      plazoISO
+    );
+    if (problemas.length > 0) {
+      setProposalError(problemas.join(' '));
+      return;
+    }
 
     try {
-      await addProposal(
-        {
-          groupId: selectedGroup.id,
-          titulo: proposalTitle,
-          lugar: proposalLugar,
-          creadoPor: userName,
-          plazoVotacion: proposalPlazo,
-          estado: 'propuesto',
-          ventanasSugeridas: ventanasConFecha,
-        },
-        {
-          titulo: proposalTitle,
-          lugar: proposalLugar || undefined,
-          plazoVotacion: plazoAInstante(proposalPlazo),
-          votosMultiples: true,
-          ventanas: ventanasConFecha.map((w) => ({
-            fecha: w.fecha as string,
-            horaInicio: w.horaInicio,
-            horaFin: w.horaFin,
-          })),
-        }
-      );
+      if (reschedulingId) {
+        await rescheduleProposal(
+          reschedulingId,
+          ventanasConFecha,
+          { plazoVotacion: plazoISO, ventanas: ventanasPayload },
+          proposalPlazo
+        );
+      } else {
+        await addProposal(
+          {
+            groupId: selectedGroup.id,
+            titulo: proposalTitle,
+            lugar: proposalLugar,
+            creadoPor: userName,
+            plazoVotacion: proposalPlazo,
+            estado: 'propuesto',
+            ventanasSugeridas: ventanasConFecha,
+          },
+          {
+            titulo: proposalTitle,
+            lugar: proposalLugar || undefined,
+            plazoVotacion: plazoISO,
+            votosMultiples: true,
+            ventanas: ventanasPayload,
+          }
+        );
+      }
     } catch (error: unknown) {
       /* El backend rechaza las ventanas que no llegan al umbral del grupo
          (RF-08). Ese motivo tiene que verse en el formulario, y el modal
@@ -431,12 +611,21 @@ export default function GroupDetailPage() {
       return;
     }
 
-    addNotification({
-      title: 'Nuevo plan propuesto',
-      description: `Se creó "${proposalTitle}" en ${selectedGroup.nombre}`,
-      type: 'proposal',
-      groupId: selectedGroup.id,
-    });
+    addNotification(
+      reschedulingId
+        ? {
+            title: 'Plan reprogramado',
+            description: `"${proposalTitle}" vuelve a votarse con fechas nuevas`,
+            type: 'proposal',
+            groupId: selectedGroup.id,
+          }
+        : {
+            title: 'Nuevo plan propuesto',
+            description: `Se creó "${proposalTitle}" en ${selectedGroup.nombre}`,
+            type: 'proposal',
+            groupId: selectedGroup.id,
+          }
+    );
 
     setIsProposeModalOpen(false);
   };
@@ -452,6 +641,9 @@ export default function GroupDetailPage() {
     const estado = await closeVotingManually(proposalId);
     // Si no se pudo cerrar, el error ya se muestra arriba; no se anuncia nada.
     if (estado === null) return;
+    /* Con backend el cierre llega por el canal en tiempo real a todo el grupo,
+       también a quien cerró: avisar aquí además lo duplicaba. */
+    if (isApiEnabled) return;
 
     /* El servidor decide cómo queda: sin votos el plan se cancela (RF-10), así
        que anunciar siempre «confirmado» mentía en ese caso. */
@@ -536,66 +728,48 @@ export default function GroupDetailPage() {
     }
   };
 
-  const handleReplanVote = (proposalId: string, action: 'cancel' | 'reschedule' | 'keep') => {
-    void voteReplanification(proposalId, action, userEmail);
-  };
 
   /**
    * Coincidencias y espacios libres de una franja de una hora.
    *
-   * Con el backend conectado manda su cruce (RF-05): es la única versión que
-   * ve los horarios reales de todo el grupo, y además mide el solape en
-   * minutos, así que un bloque que acaba a las 10:30 deja ocupada la franja de
-   * las 10. El cálculo local de abajo solo entra en modo demo, donde
-   * `occupiedSlots` son datos de ejemplo del propio cliente.
+   * Con el backend conectado manda SIEMPRE su cruce (RF-05): es la única
+   * versión que ve los horarios reales de todo el grupo. Si aún no llegó o
+   * falló, la casilla no cumple nada y la sección lo dice («Calculando…» o el
+   * error); antes caía al cálculo local con `occupiedSlots` vacío y pintaba
+   * todo «100% libre».
    *
-   * `occupiedMembers` se queda vacío en modo conectado a propósito: el backend
-   * devuelve recuentos, nunca quién está ocupado ni con qué (RNF-02).
+   * En modo demo se calcula en el cliente con `calcularCelda`, que sigue las
+   * mismas reglas que el backend (personas y no bloques, minutos, umbral
+   * exacto), sobre los datos de ejemplo más el horario real de quien usa la app.
    */
   const getCellAvailability = (
     group: Group,
     day: DayOfWeek,
     hour: number
   ) => {
-    const serverCell = availability[group.id]?.cells[availabilityKey(day, hour)];
-    if (serverCell) {
+    if (isApiEnabled) {
+      const cruce = availability[group.id];
+      const serverCell = cruce?.cells[availabilityKey(day, hour)];
       return {
-        freeCount: serverCell.freeCount,
-        totalMembers: availability[group.id].membersCount,
-        freePercentage: serverCell.freePercentage,
-        meetsThreshold: serverCell.meetsThreshold,
-        occupiedMembers: [] as typeof occupiedSlots,
+        freeCount: serverCell?.freeCount ?? 0,
+        // El denominador es el del servidor, no la lista local de integrantes.
+        totalMembers: cruce?.membersCount ?? 0,
+        freePercentage: serverCell?.freePercentage ?? 0,
+        meetsThreshold: serverCell?.meetsThreshold ?? false,
       };
     }
 
-    // Miembros ocupados en esta franja de 1 hora
-    const occupiedInCell = occupiedSlots.filter((s) => {
-      if (s.day !== day) return false;
-      if (!group.miembros.some((m) => m.email === s.userEmail)) {
-        return false;
-      }
-
-      const startH = parseInt(s.startTime.split(':')[0], 10);
-      const endH = parseInt(s.endTime.split(':')[0], 10);
-      return hour >= startH && hour < endH;
-    });
-
-    const totalMembers = group.miembros.length;
-    const occupiedCount = occupiedInCell.length;
-    const freeCount = totalMembers - occupiedCount;
-    const freePercentage = Math.round(
-      (freeCount / totalMembers) * 100
+    const celda = calcularCelda(
+      group.miembros.map((m) => m.email),
+      bloquesDemoPorDia.get(day) ?? [],
+      hour,
+      group.umbralDisponibilidad
     );
-
-    const meetsThreshold =
-      freePercentage >= group.umbralDisponibilidad;
-
     return {
-      freeCount,
-      totalMembers,
-      freePercentage,
-      meetsThreshold,
-      occupiedMembers: occupiedInCell,
+      freeCount: celda.libres,
+      totalMembers: celda.total,
+      freePercentage: celda.porcentaje,
+      meetsThreshold: celda.cumpleUmbral,
     };
   };
 
@@ -609,6 +783,7 @@ export default function GroupDetailPage() {
       end: number;
       minimumAvailability: number;
       freeCount: number;
+      totalMembers: number;
     };
 
     const windows: FreeWindow[] = [];
@@ -633,12 +808,46 @@ export default function GroupDetailPage() {
           end: hour + 1,
           minimumAvailability: cell.freePercentage,
           freeCount: cell.freeCount,
+          totalMembers: cell.totalMembers,
         });
       }
     });
 
     return windows;
   };
+
+  /**
+   * En qué punto está el cruce de un grupo. En demo se calcula al momento y
+   * siempre está al día; con backend, «Actualizado» solo cuando llegó bien.
+   */
+  const estadoDelCruce = (group: Group): { estado: 'cargando' | 'ok' | 'error'; mensaje?: string; hayDatos: boolean } => {
+    if (!isApiEnabled) return { estado: 'ok', hayDatos: true };
+    const estado = availabilityEstado[group.id] ?? { estado: 'cargando' as const };
+    return { ...estado, hayDatos: Boolean(availability[group.id]) };
+  };
+
+  /* «Proponer plan» desde el inicio llega como `?proponer=1`. Se espera a que
+     el grupo exista y, con backend, a que el cruce responda (bien o mal): si
+     no, las dos opciones iniciales saldrían vacías. Se abre durante el render
+     (el patrón de React para ajustar estado cuando cambian los datos) y no en
+     un efecto, y va aquí abajo porque `openProposePlanModal` necesita las
+     funciones del cruce ya declaradas. */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [proponerPendiente, setProponerPendiente] = useState(() => searchParams.get('proponer') === '1');
+  if (proponerPendiente && selectedGroup) {
+    const cruce = estadoDelCruce(selectedGroup);
+    if (cruce.estado !== 'cargando' || cruce.hayDatos) {
+      setProponerPendiente(false);
+      openProposePlanModal(selectedGroup);
+    }
+  }
+  // El parámetro se quita para que recargar o volver atrás no reabra el formulario.
+  useEffect(() => {
+    if (!searchParams.has('proponer')) return;
+    const resto = new URLSearchParams(searchParams);
+    resto.delete('proponer');
+    setSearchParams(resto, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   /**
    * Planes y horario común de un grupo.
@@ -673,23 +882,30 @@ export default function GroupDetailPage() {
                 {groupProposals
                   .filter((p) => p.groupId === grp.id)
                   .map((proposal) => {
+                    const estado = estadoVisible(proposal);
                     const isClosed = proposal.estado === 'confirmado';
                     const isInReplan = proposal.estado === 'en_recoordinacion';
-                    const userReplanVote = votoDeReplanificacion(proposal, userEmail);
-                    const avisosAbiertos = (proposal.incidencias || []).filter((i) => !i.resuelta);
-                    const miAvisoAbierto = avisosAbiertos.find((i) => i.userEmail === userEmail);
-                    const planCancelado = proposal.estado === 'cancelado';
-                    const miembrosDelGrupo = grp.miembros.length;
-                    const votosEmitidos = proposal.votosReplanificacion
-                      ? proposal.votosReplanificacion.cancel.length +
-                        proposal.votosReplanificacion.reschedule.length +
-                        proposal.votosReplanificacion.keep.length
-                      : 0;
-                    const votosParaCerrar = Math.min(
-                      Math.floor(miembrosDelGrupo / 2) + 1,
-                      miembrosDelGrupo
-                    );
-
+                    /* Solo se vota con la votación abierta: antes un plan
+                       cancelado o con el plazo vencido seguía admitiendo votos
+                       y ofreciendo «Confirmar plan». */
+                    const abierta = estado === 'abierta';
+                    const ganadora = ventanaGanadora(proposal);
+                    /* El backend solo deja cerrar o reprogramar a quien propuso
+                       el plan o a un organizador; ofrecerlo a todos acababa en
+                       un 403. En demo no hay roles que comprobar. */
+                    const puedeGestionar =
+                      !isApiEnabled || soyOrganizador(grp) || proposal.creadoPorId === authUser?.id;
+                    /* En demo la votación exprés corre mientras el plan está en
+                       re-coordinación; con backend, ese estado significa que ya
+                       se decidió reprogramar y faltan las fechas nuevas. */
+                    /* Con la votación exprés decidida a favor de reprogramar,
+                       el plan espera fechas nuevas. */
+                    const porReprogramar = isInReplan;
+                    const retrasos = retrasosPorPlan[proposal.id] ?? [];
+                    const ausencias = ausenciasPorPlan[proposal.id] ?? [];
+                    const votacion = votacionesPorPlan[proposal.id] ?? null;
+                    const miRetraso = retrasos.find((r) => r.usuarioId === miId);
+                    const miAusencia = ausencias.find((a) => a.usuarioId === miId);
                     return (
                       <div
                         key={proposal.id}
@@ -717,77 +933,51 @@ export default function GroupDetailPage() {
                                   ? 'bg-warning-container text-on-warning-container border border-warning/50'
                                   : isClosed
                                   ? 'bg-inverse-primary/50 text-on-tertiary-container border border-secondary'
-                                  : 'bg-secondary-container text-on-secondary-container border border-secondary/40'
+                                  : estado === 'abierta'
+                                  ? 'bg-secondary-container text-on-secondary-container border border-secondary/40'
+                                  : 'bg-surface-container-high text-on-surface-variant border border-outline-variant'
                               }`}
                             >
-                              {isInReplan
-                                ? 'Imprevisto'
-                                : isClosed
-                                ? 'Confirmado'
-                                : 'Votación abierta'}
+                              {
+                                {
+                                  abierta: 'Votación abierta',
+                                  cerrando: 'Votación cerrada',
+                                  confirmado: 'Confirmado',
+                                  cancelado: 'Cancelado',
+                                  recoordinacion: porReprogramar ? 'Por reprogramar' : 'Imprevisto',
+                                }[estado]
+                              }
                             </span>
                           </div>
 
-                          {/* ALERTA COMPACTA DE INCIDENCIAS */}
-                          {avisosAbiertos.length > 0 && (
-                            <div className="mb-3 p-3 rounded-xl bg-warning-container border border-warning/30 space-y-2">
-                              {avisosAbiertos.map((inc) => (
-                                <div key={inc.id} className="text-xs flex justify-between items-center text-on-warning-container">
+                          {/* Quién llega tarde y quién no va: lo que ya sabe el
+                              servidor, no solo lo que avisé yo desde aquí. */}
+                          {isClosed && (retrasos.length > 0 || ausencias.length > 0) && (
+                            <ul className="mb-3 p-3 rounded-xl bg-warning-container border border-warning/30 space-y-1.5 text-xs text-on-warning-container">
+                              {ausencias.map((a) => (
+                                <li key={`aus-${a.usuarioId}`} className="flex justify-between gap-2">
                                   <span>
-                                    <span aria-hidden="true" className="material-symbols-outlined text-[14px] align-[-2px] mr-1">
-                                      warning
-                                    </span>
-                                    <strong>{inc.userName}</strong>: {inc.motivo}
+                                    <strong>{a.usuarioId === miId ? 'Tú' : a.nombreUsuario}</strong> no irá
+                                    {a.motivo ? `: ${a.motivo}` : ''}
                                   </span>
-                                  <span className="text-2xs text-on-warning-container font-bold uppercase">
-                                    {inc.tipo}
-                                  </span>
-                                </div>
+                                  {a.critica && <span className="rotulo text-2xs shrink-0">crítica</span>}
+                                </li>
                               ))}
+                              {retrasos.map((r) => (
+                                <li key={`ret-${r.usuarioId}`}>
+                                  <strong>{r.usuarioId === miId ? 'Tú' : r.nombreUsuario}</strong> llegará{' '}
+                                  {r.minutosEstimados} min tarde{r.corregido ? ' (corregido)' : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
 
-                              {/* Votación exprés: solo mientras el plan está en re-coordinación. */}
-                              {isInReplan && (
-                              <div className="pt-2 border-t border-warning/30 flex flex-wrap items-center justify-between gap-2 text-xs">
-                                <span className="text-2xs text-on-warning-container font-semibold shrink-0">
-                                  ¿Qué hacemos?
-                                  <span className="block font-normal opacity-80">
-                                    {votosEmitidos}/{votosParaCerrar} votos para decidir
-                                  </span>
-                                </span>
-                                <div className="flex flex-wrap gap-1.5 w-full justify-end">
-                                  <button
-                                    onClick={() => handleReplanVote(proposal.id, 'reschedule')}
-                                    className={`px-2.5 py-1 rounded-md text-2xs font-medium border transition-colors cursor-pointer ${
-                                      userReplanVote === 'reschedule'
-                                        ? 'bg-secondary text-on-secondary border-primary'
-                                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container'
-                                    }`}
-                                  >
-                                    Re-agendar ({proposal.votosReplanificacion?.reschedule.length || 0})
-                                  </button>
-                                  <button
-                                    onClick={() => handleReplanVote(proposal.id, 'keep')}
-                                    className={`px-2.5 py-1 rounded-md text-2xs font-medium border transition-colors cursor-pointer ${
-                                      userReplanVote === 'keep'
-                                        ? 'bg-primary text-on-primary border-primary-hover'
-                                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container'
-                                    }`}
-                                  >
-                                    Mantener ({proposal.votosReplanificacion?.keep.length || 0})
-                                  </button>
-                                  <button
-                                    onClick={() => handleReplanVote(proposal.id, 'cancel')}
-                                    className={`px-2.5 py-1 rounded-md text-2xs font-medium border transition-colors cursor-pointer ${
-                                      userReplanVote === 'cancel'
-                                        ? 'bg-error text-on-error border-error'
-                                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container'
-                                    }`}
-                                  >
-                                    Cancelar ({proposal.votosReplanificacion?.cancel.length || 0})
-                                  </button>
-                                </div>
-                              </div>
-                              )}
+                          {votacion && (
+                            <div className="mb-3">
+                              <VotacionExpresPanel
+                                votacion={votacion}
+                                onVotar={(opcion) => votarExpres(proposal.id, opcion)}
+                              />
                             </div>
                           )}
 
@@ -795,18 +985,21 @@ export default function GroupDetailPage() {
                           <div className="space-y-1.5 mb-3">
                             {proposal.ventanasSugeridas.map((ventana) => {
                               const hasVoted = ventana.votosUsuarios.includes(userEmail);
+                              const esLaElegida = isClosed && ganadora?.id === ventana.id;
 
                               return (
                                 <button type="button"
                                   key={ventana.id}
-                                  onClick={() => !isClosed && handleVote(proposal.id, ventana.id)}
+                                  onClick={() => abierta && handleVote(proposal.id, ventana.id)}
                                   aria-pressed={hasVoted}
-                                  disabled={isClosed}
+                                  disabled={!abierta}
                                   className={`w-full text-left px-3 py-2 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
-                                    hasVoted
+                                    esLaElegida
+                                      ? 'bg-olive/25 border-ink'
+                                      : hasVoted
                                       ? 'bg-inverse-primary/30 border-secondary'
                                       : 'bg-surface-container-lowest border-outline-variant/60 hover:border-secondary'
-                                  } ${isClosed ? 'cursor-default opacity-85' : ''}`}
+                                  } ${!abierta ? 'cursor-default' : ''} ${!abierta && !esLaElegida ? 'opacity-70' : ''}`}
                                 >
                                   <div className="flex items-center gap-2 text-xs">
                                     <span
@@ -819,11 +1012,15 @@ export default function GroupDetailPage() {
                                       <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
                                     </span>
                                     <span className="font-semibold text-on-surface">
-                                      {ventana.dia} {ventana.horaInicio}-{ventana.horaFin}
+                                      {formatearVentana(ventana)}
                                     </span>
-                                    <span className="text-2xs text-primary font-bold">
-                                      ({ventana.disponibilidadPorcentaje}% libre)
-                                    </span>
+                                    {esLaElegida ? (
+                                      <span className="rotulo text-2xs bg-ink text-cream px-1.5 py-0.5">Elegida</span>
+                                    ) : (
+                                      <span className="text-2xs text-primary font-bold">
+                                        ({ventana.disponibilidadPorcentaje}% libre)
+                                      </span>
+                                    )}
                                   </div>
 
                                   <span className="text-xs font-bold text-on-surface-variant">
@@ -842,21 +1039,28 @@ export default function GroupDetailPage() {
                           <div className="flex gap-2">
                             {/* Un plan cancelado no admite avisos, y quien ya
                                 avisó retira el suyo en vez de mandar otro. */}
-                            {!planCancelado &&
-                              (miAvisoAbierto ? (
-                                /* Con backend solo una tardanza se puede
-                                   retirar: una ausencia ya abrió la votación
-                                   para todo el grupo. */
-                                !isApiEnabled || miAvisoAbierto.tipo === 'tardanza' ? (
-                                  <button
-                                    onClick={() => void withdrawIncident(proposal.id, userEmail)}
-                                    className="text-2xs text-on-surface-variant hover:text-on-surface font-semibold cursor-pointer underline"
-                                  >
-                                    Retirar mi aviso
-                                  </button>
-                                ) : (
-                                  <span className="text-2xs text-on-surface-variant">Ya avisaste</span>
-                                )
+                            {porReprogramar && puedeGestionar && (
+                              <button
+                                onClick={() => openProposePlanModal(grp, proposal)}
+                                className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer"
+                              >
+                                Proponer nuevas fechas
+                              </button>
+                            )}
+
+                            {/* Solo hay algo a lo que faltar o llegar tarde cuando el
+                                plan está confirmado. Un retraso se puede retirar;
+                                una ausencia no, porque ya avisó a todo el grupo. */}
+                            {isClosed &&
+                              (miRetraso ? (
+                                <button
+                                  onClick={() => void withdrawIncident(proposal.id, userEmail)}
+                                  className="text-2xs text-on-surface-variant hover:text-on-surface font-semibold cursor-pointer underline"
+                                >
+                                  Retirar mi retraso
+                                </button>
+                              ) : miAusencia ? (
+                                <span className="text-2xs text-on-surface-variant">Avisaste que no irás</span>
                               ) : (
                                 <button
                                   onClick={() => openReportIncidentModal(proposal)}
@@ -866,12 +1070,14 @@ export default function GroupDetailPage() {
                                 </button>
                               ))}
 
-                            {!isClosed && (
+                            {/* «Cerrar» y no «Confirmar»: si nadie votó, cerrar
+                                cancela el plan. */}
+                            {abierta && puedeGestionar && (
                               <button
                                 onClick={() => void handleCloseVotingManually(proposal.id)}
                                 className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer"
                               >
-                                Confirmar plan
+                                Cerrar votación
                               </button>
                             )}
                           </div>
@@ -892,14 +1098,30 @@ export default function GroupDetailPage() {
               </div>
             )}
           </section>
+          {(() => {
+            const cruce = estadoDelCruce(grp);
+            return (
           <section className="bg-surface-container-low rounded-2xl p-6 md:p-8 elev-1 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-outline-variant/60 pb-4">
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <h2 className="text-2xl font-bold text-on-surface font-headline">Horario en común: {grp.nombre}</h2>
-                  <span className="px-3 py-1 rounded-lg bg-primary-container border border-inverse-primary text-primary text-xs font-bold">
-                    Actualizado
-                  </span>
+                  {cruce.estado === 'ok' ? (
+                    <span className="px-3 py-1 rounded-lg bg-primary-container border border-inverse-primary text-primary text-xs font-bold">
+                      Actualizado
+                    </span>
+                  ) : (
+                    <span
+                      role="status"
+                      className={`px-3 py-1 rounded-lg border text-xs font-bold ${
+                        cruce.estado === 'error'
+                          ? 'bg-error-container border-error/40 text-on-error-container'
+                          : 'bg-surface-container border-outline-variant text-on-surface-variant'
+                      }`}
+                    >
+                      {cruce.estado === 'error' ? 'Sin actualizar' : 'Calculando…'}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -908,8 +1130,39 @@ export default function GroupDetailPage() {
               </div>
             </div>
 
-            {/* Agenda de coincidencias: una lectura rápida, sin 84 casillas. */}
-            <div>
+            {/* Con backend no se enseña nada que no venga del servidor: ni un
+                cruce que falló ni, la primera vez, uno que aún no llegó. */}
+            {cruce.estado === 'error' ? (
+              <div role="alert" className="rounded-xl border border-error/40 bg-error-container p-6 text-center">
+                <span aria-hidden="true" className="material-symbols-outlined text-[32px] text-on-error-container">
+                  cloud_off
+                </span>
+                <p className="mt-1 text-sm font-semibold text-on-error-container">
+                  No se pudo calcular el horario en común
+                </p>
+                {cruce.mensaje && (
+                  <p className="mt-1 text-xs text-on-error-container">{cruce.mensaje}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fetchAvailability(grp.id)}
+                  className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-surface px-4 py-2 text-xs font-semibold text-on-surface transition-colors hover:bg-surface-container active:scale-95"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[16px]">refresh</span>
+                  Reintentar
+                </button>
+              </div>
+            ) : !cruce.hayDatos ? (
+              <p role="status" className="rounded-xl border border-dashed border-outline-variant bg-surface-container/60 p-8 text-center text-sm text-on-surface-variant">
+                Calculando el horario en común…
+              </p>
+            ) : (
+            /* Agenda de coincidencias: una lectura rápida, sin 84 casillas.
+               Mientras se recalcula (tras un cambio de integrantes) se atenúa. */
+            <div
+              aria-busy={cruce.estado === 'cargando'}
+              className={`transition-opacity ${cruce.estado === 'cargando' ? 'opacity-50' : ''}`}
+            >
               <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-7 gap-3">
                 {days.map((day) => {
                   const windows = getRecommendedWindows(grp, day);
@@ -928,7 +1181,7 @@ export default function GroupDetailPage() {
                               {window.start.toString().padStart(2, '0')}:00 - {window.end.toString().padStart(2, '0')}:00
                             </p>
                             <p className="mt-0.5 text-2xs text-on-surface-variant">
-                              {window.minimumAvailability}% libre · {window.freeCount}/{grp.miembros.length}
+                              {window.minimumAvailability}% libre · {window.freeCount}/{window.totalMembers}
                             </p>
                           </div>
                         )) : (
@@ -997,7 +1250,7 @@ export default function GroupDetailPage() {
                           </span>
                           <span className="text-2xs text-on-surface-variant text-right shrink-0">
                             {window.minimumAvailability}% libre
-                            <span className="block">{window.freeCount}/{grp.miembros.length} personas</span>
+                            <span className="block">{window.freeCount}/{window.totalMembers} personas</span>
                           </span>
                         </li>
                       ))}
@@ -1006,7 +1259,10 @@ export default function GroupDetailPage() {
                 })()}
               </div>
             </div>
+            )}
           </section>
+            );
+          })()}
     </div>
   );
 
@@ -1060,7 +1316,8 @@ export default function GroupDetailPage() {
                 className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-surface-container px-4 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high active:scale-95 md:w-auto"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[20px]">group</span>
-                Integrantes y ajustes
+                {/* Quien no organiza ve la lista en solo lectura (y puede salir). */}
+                {soyOrganizador(selectedGroup) ? 'Integrantes y ajustes' : 'Integrantes'}
               </button>
             )}
           </div>
@@ -1085,10 +1342,13 @@ export default function GroupDetailPage() {
         )}
       </main>
 
-      {/* Modal: Editar Grupo / Integrantes */}
+      {/* Modal: integrantes y ajustes del grupo */}
       {isEditGroupModalOpen && selectedGroup && (
         <GroupFormModal
-          title={`Editar Grupo: ${selectedGroup.nombre}`}
+          grupo={selectedGroup}
+          puedeEditar={soyOrganizador(selectedGroup)}
+          miCorreo={userEmail}
+          miId={authUser?.id}
           nombre={nombre}
           setNombre={setNombre}
           descripcion={descripcion}
@@ -1097,17 +1357,27 @@ export default function GroupDetailPage() {
           setUmbral={setUmbral}
           membersList={membersList}
           newMemberEmail={newMemberEmail}
-          setNewMemberEmail={setNewMemberEmail}
-          newMemberName={newMemberName}
-          setNewMemberName={setNewMemberName}
+          setNewMemberEmail={(valor) => {
+            setNewMemberEmail(valor);
+            setAvisoCorreo(null);
+          }}
+          avisoCorreo={avisoCorreo}
           isEssentialNewMember={isEssentialNewMember}
           setIsEssentialNewMember={setIsEssentialNewMember}
-          onAddMember={handleAddMemberToForm}
+          onAddMember={() => {
+            agregarCorreoAlFormulario();
+          }}
           onRemoveMember={handleRemoveMemberFromForm}
           onToggleEssential={handleToggleEssential}
+          onToggleOrganizer={handleToggleOrganizer}
+          errores={erroresGuardado}
+          guardando={guardando}
+          confirmandoSalida={confirmandoSalida}
+          setConfirmandoSalida={setConfirmandoSalida}
+          saliendo={saliendo}
+          onLeave={handleLeaveGroup}
           onClose={() => setIsEditGroupModalOpen(false)}
           onSubmit={handleUpdateGroup}
-          submitLabel="Guardar cambios"
         />
       )}
 
@@ -1118,7 +1388,7 @@ export default function GroupDetailPage() {
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
               <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">campaign</span>
-                Proponer plan: {selectedGroup.nombre}
+                {reschedulingId ? 'Nuevas fechas' : 'Proponer plan'}: {selectedGroup.nombre}
               </h2>
               <button aria-label="Cerrar"
                 onClick={() => setIsProposeModalOpen(false)}
@@ -1229,10 +1499,12 @@ export default function GroupDetailPage() {
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-primary">Opción {idx + 1}:</span>
                         <span className="text-on-surface font-medium">
-                          {w.dia}, {w.horaInicio} a {w.horaFin}
+                          {formatearVentana(w)}
                         </span>
                         <span className="text-2xs text-primary font-bold">
-                          ({w.disponibilidadPorcentaje}% libre)
+                          {w.disponibilidadPorcentaje === SIN_DATO
+                            ? '(sin datos del grupo)'
+                            : `(${w.disponibilidadPorcentaje}% libre)`}
                         </span>
                       </div>
 
@@ -1271,7 +1543,7 @@ export default function GroupDetailPage() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
                 >
-                  Enviar Propuesta a Todos
+                  {reschedulingId ? 'Volver a votar' : 'Enviar Propuesta a Todos'}
                 </button>
               </div>
             </form>
@@ -1385,90 +1657,17 @@ export default function GroupDetailPage() {
         </div>
       )}
 
-      {/* Ficha de un integrante del grupo.
-          No es un perfil social: solo lo justo para distinguir a dos personas
-          que se llaman igual y saber qué papel tienen en los planes. */}
-      {memberDetail && memberGroup && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Ficha de ${memberDetail.nombre}`}
-          className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4"
-        >
-          <div className="bg-surface rounded-2xl p-6 w-full max-w-sm elev-3">
-            <div className="flex justify-between items-start gap-3 mb-4 pb-4 border-b border-outline-variant/60">
-              <div className="flex items-center gap-3 min-w-0">
-                <span
-                  aria-hidden="true"
-                  className="w-12 h-12 shrink-0 rounded-full flex items-center justify-center text-on-primary text-lg font-black"
-                  style={{ backgroundColor: memberDetail.color }}
-                >
-                  {memberDetail.nombre.charAt(0)}
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-on-surface truncate">{memberDetail.nombre}</h2>
-                  <p className="text-xs text-on-surface-variant break-all">{memberDetail.email}</p>
-                </div>
-              </div>
-              <button
-                aria-label="Cerrar"
-                onClick={() => setMemberRef(null)}
-                className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer shrink-0"
-              >
-                <span aria-hidden="true" className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <dl className="space-y-3 text-xs">
-              <div className="flex justify-between gap-4">
-                <dt className="text-on-surface-variant">Grupo</dt>
-                <dd className="font-medium text-on-surface text-right">{memberGroup.nombre}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-on-surface-variant">Estado</dt>
-                <dd className="font-medium text-right capitalize">
-                  {memberDetail.status === 'confirmado' ? (
-                    <span className="text-success">Confirmado</span>
-                  ) : (
-                    <span className="text-warning">Invitación pendiente</span>
-                  )}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-on-surface-variant">Rol en los planes</dt>
-                <dd className="font-medium text-on-surface text-right">
-                  {memberDetail.isEssential ? 'Imprescindible' : 'Regular'}
-                </dd>
-              </div>
-            </dl>
-
-            <p className="mt-4 text-2xs text-on-surface-variant leading-relaxed">
-              Huecko nunca muestra el detalle de los bloques de otra persona: del resto del
-              grupo solo se sabe si está ocupada o libre en cada franja.
-            </p>
-
-            <div className="mt-4 pt-4 border-t border-outline-variant/60 flex justify-end">
-              <button
-                type="button"
-                onClick={() => toggleMemberEssential(memberGroup.id, memberDetail.email)}
-                className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface hover:bg-surface-container text-xs font-semibold cursor-pointer flex items-center gap-1.5"
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-warning">
-                  {memberDetail.isEssential ? 'star_border' : 'star'}
-                </span>
-                {memberDetail.isEssential ? 'Quitar imprescindible' : 'Marcar imprescindible'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-// Subcomponente Formulario Reutilizable para Crear / Editar Grupo
+// Integrantes y ajustes de un grupo: editable para quien organiza, de solo lectura para el resto.
 interface GroupFormModalProps {
-  title: string;
+  grupo: Group;
+  /** Solo quien organiza puede cambiar datos, roles o integrantes (el backend responde 403 al resto). */
+  puedeEditar: boolean;
+  miCorreo: string;
+  miId?: string;
   nombre: string;
   setNombre: (val: string) => void;
   descripcion: string;
@@ -1478,20 +1677,28 @@ interface GroupFormModalProps {
   membersList: GroupMember[];
   newMemberEmail: string;
   setNewMemberEmail: (val: string) => void;
-  newMemberName: string;
-  setNewMemberName: (val: string) => void;
+  avisoCorreo: string | null;
   isEssentialNewMember: boolean;
   setIsEssentialNewMember: (val: boolean) => void;
   onAddMember: () => void;
   onRemoveMember: (email: string) => void;
   onToggleEssential: (email: string) => void;
+  onToggleOrganizer: (email: string) => void;
+  errores: string[];
+  guardando: boolean;
+  confirmandoSalida: boolean;
+  setConfirmandoSalida: (val: boolean) => void;
+  saliendo: boolean;
+  onLeave: () => void;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
-  submitLabel: string;
 }
 
 function GroupFormModal({
-  title,
+  grupo,
+  puedeEditar,
+  miCorreo,
+  miId,
   nombre,
   setNombre,
   descripcion,
@@ -1501,177 +1708,305 @@ function GroupFormModal({
   membersList,
   newMemberEmail,
   setNewMemberEmail,
-  newMemberName,
-  setNewMemberName,
+  avisoCorreo,
   isEssentialNewMember,
   setIsEssentialNewMember,
   onAddMember,
   onRemoveMember,
   onToggleEssential,
+  onToggleOrganizer,
+  errores,
+  guardando,
+  confirmandoSalida,
+  setConfirmandoSalida,
+  saliendo,
+  onLeave,
   onClose,
   onSubmit,
-  submitLabel,
 }: GroupFormModalProps) {
+  const yo = miembroActual({ miembros: membersList }, { id: miId, email: miCorreo });
+  const organizadoresGuardados = grupo.miembros.filter((m) => esOrganizador(grupo, m)).length;
+  const soyUnicoOrganizador =
+    puedeEditar && organizadoresGuardados <= 1 && grupo.miembros.length > 1;
+  const ocupado = guardando || saliendo;
+
   return (
-    <div role="dialog" aria-modal="true" aria-label="Formulario de grupo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
+    <div role="dialog" aria-modal="true" aria-labelledby="integrantes-titulo" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
       <div className="bg-surface rounded-2xl p-6 w-full max-w-lg elev-3 overflow-y-auto max-h-[90vh]">
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-outline-variant/60">
-          <h2 className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
+          <h2 id="integrantes-titulo" className="text-xl font-bold text-on-surface flex items-center gap-2 font-headline">
             <span aria-hidden="true" className="material-symbols-outlined text-primary">group</span>
-            {title}
+            {puedeEditar ? 'Integrantes y ajustes' : 'Integrantes'}
           </h2>
-          <button aria-label="Cerrar" onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">
+          <button aria-label="Cerrar" onClick={onClose} disabled={ocupado} className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer disabled:cursor-not-allowed">
             <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre del grupo *</label>
-            <input
-              type="text"
-              required
-              placeholder="Ej. Grupo Universidad, Viaje de Verano..."
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Descripción</label>
-            <textarea
-              rows={2}
-              placeholder="Descripción del grupo..."
-              value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
-              className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
-            />
-          </div>
-
-          {/* Umbral de coincidencia */}
-          <div className="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60 space-y-2">
-            <div className="flex justify-between items-center">
-              <label className="text-xs font-semibold text-on-surface flex items-center gap-1.5">
-                <span aria-hidden="true" className="material-symbols-outlined text-primary text-[18px]">tune</span>
-                Umbral mínimo de coincidencia
-              </label>
-              <span className="text-xs font-bold text-primary bg-inverse-primary/30 px-2 py-0.5 rounded-lg border border-secondary/40">
-                {umbral}% del grupo libre
-              </span>
-            </div>
-            <input
-              type="range"
-              min="50"
-              max="100"
-              step="5"
-              value={umbral}
-              onChange={(e) => setUmbral(Number(e.target.value))}
-              className="w-full accent-secondary cursor-pointer mt-1"
-            />
-          </div>
-
-          {/* Gestión de Integrantes */}
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Agregar integrante</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-              <input
-                type="text"
-                placeholder="Nombre (ej. María C.)"
-                value={newMemberName}
-                onChange={(e) => setNewMemberName(e.target.value)}
-                className="px-3.5 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
-              />
-              <input
-                type="email"
-                placeholder="Correo (amigo@correo.com)"
-                value={newMemberEmail}
-                onChange={(e) => setNewMemberEmail(e.target.value)}
-                className="px-3.5 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
-              />
-            </div>
-
-            <div className="flex justify-between items-center mb-3">
-              <label className="text-xs text-on-warning-container font-semibold cursor-pointer flex items-center gap-1">
+          {puedeEditar ? (
+            <>
+              <div>
+                <label htmlFor="grupo-editar-nombre" className="block text-xs font-medium text-on-surface-variant mb-1.5">Nombre del grupo *</label>
                 <input
-                  type="checkbox"
-                  checked={isEssentialNewMember}
-                  onChange={(e) => setIsEssentialNewMember(e.target.checked)}
-                  className="rounded border-outline-variant bg-surface-container-lowest text-secondary focus:ring-secondary cursor-pointer"
+                  id="grupo-editar-nombre"
+                  type="text"
+                  required
+                  maxLength={120}
+                  placeholder="Ej. Grupo Universidad, Viaje de Verano..."
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
                 />
-                <span aria-hidden="true" className="material-symbols-outlined text-[15px] text-warning">star</span>
-                Marcar como imprescindible
-              </label>
+              </div>
 
-              <button
-                type="button"
-                onClick={onAddMember}
-                className="px-4 py-1.5 rounded-xl bg-surface-container hover:bg-surface-variant text-on-surface-variant text-xs font-semibold cursor-pointer border border-outline-variant/60"
-              >
-                + Añadir Integrante
-              </button>
-            </div>
+              <div>
+                <label htmlFor="grupo-editar-desc" className="block text-xs font-medium text-on-surface-variant mb-1.5">Descripción</label>
+                <textarea
+                  id="grupo-editar-desc"
+                  rows={2}
+                  maxLength={400}
+                  placeholder="Descripción del grupo..."
+                  value={descripcion}
+                  onChange={(e) => setDescripcion(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-secondary"
+                />
+              </div>
 
-            {/* Lista actual de integrantes */}
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              {membersList.map((m) => (
-                <div
+              {/* Umbral de coincidencia */}
+              <div className="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60 space-y-2">
+                <div className="flex justify-between items-center">
+                  <label htmlFor="grupo-editar-umbral" className="text-xs font-semibold text-on-surface flex items-center gap-1.5">
+                    <span aria-hidden="true" className="material-symbols-outlined text-primary text-[18px]">tune</span>
+                    Umbral mínimo de coincidencia
+                  </label>
+                  <span className="text-xs font-bold text-primary bg-inverse-primary/30 px-2 py-0.5 rounded-lg border border-secondary/40">
+                    {umbral}% del grupo libre
+                  </span>
+                </div>
+                <input
+                  id="grupo-editar-umbral"
+                  type="range"
+                  min="50"
+                  max="100"
+                  step="5"
+                  value={umbral}
+                  onChange={(e) => setUmbral(Number(e.target.value))}
+                  className="w-full accent-secondary cursor-pointer mt-1"
+                />
+              </div>
+
+              {/* Alta por correo. Sin campo de nombre: el backend usa el de la cuenta. */}
+              <div>
+                <label htmlFor="grupo-editar-correo" className="block text-xs font-medium text-on-surface-variant mb-1.5">Agregar integrante</label>
+                <input
+                  id="grupo-editar-correo"
+                  type="email"
+                  placeholder="Correo (amigo@correo.com)"
+                  value={newMemberEmail}
+                  onChange={(e) => setNewMemberEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Enter añade a la lista en vez de guardar todo el formulario.
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      onAddMember();
+                    }
+                  }}
+                  aria-invalid={Boolean(avisoCorreo)}
+                  aria-describedby={avisoCorreo ? 'grupo-editar-correo-aviso' : undefined}
+                  className="w-full px-3.5 py-2 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
+                />
+                {avisoCorreo && (
+                  <p id="grupo-editar-correo-aviso" role="alert" className="mt-1 text-2xs font-semibold text-error">
+                    {avisoCorreo}
+                  </p>
+                )}
+
+                <div className="flex justify-between items-center mt-2">
+                  <label className="text-xs text-on-warning-container font-semibold cursor-pointer flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={isEssentialNewMember}
+                      onChange={(e) => setIsEssentialNewMember(e.target.checked)}
+                      className="rounded border-outline-variant bg-surface-container-lowest text-secondary focus:ring-secondary cursor-pointer"
+                    />
+                    <span aria-hidden="true" className="material-symbols-outlined text-[15px] text-warning">star</span>
+                    Marcar como imprescindible
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={onAddMember}
+                    className="px-4 py-1.5 rounded-xl bg-surface-container hover:bg-surface-variant text-on-surface-variant text-xs font-semibold cursor-pointer border border-outline-variant/60"
+                  >
+                    + Añadir
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-on-surface-variant">
+              Umbral del grupo: <strong className="text-on-surface">{grupo.umbralDisponibilidad}%</strong>.
+              Solo quien organiza el grupo puede cambiar sus ajustes o sus integrantes.
+            </p>
+          )}
+
+          {/* Lista de integrantes. Los cambios (rol, imprescindible, quitar)
+              se aplican al pulsar «Guardar cambios». */}
+          <ul className="space-y-2 max-h-64 overflow-y-auto pr-1" aria-label="Integrantes del grupo">
+            {membersList.map((m) => {
+              const esYo = m === yo;
+              const organiza = m.rol === 'ORGANIZADOR' || m.rol === 'ADMIN';
+              const nuevo = !grupo.miembros.some((g) => g.email.toLowerCase() === m.email.toLowerCase());
+              return (
+                <li
                   key={m.email}
-                  className="flex justify-between items-center p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/60 text-xs"
+                  className="p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/60 text-xs"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.color }} />
-                    <span className="text-on-surface font-medium">{m.nombre}</span>
-                    <span className="text-on-surface-variant">({m.email})</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span aria-hidden="true" className="w-2.5 h-2.5 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
+                    <span className="text-on-surface font-medium truncate">{nuevo ? m.email : m.nombre}</span>
+                    {/* Los nombres del demo ya llevan «(Tú)». */}
+                    {esYo && !/\(tú\)/i.test(m.nombre) && <span className="shrink-0 text-2xs text-on-surface-variant">(tú)</span>}
+                    {organiza && (
+                      <span className="shrink-0 rounded bg-secondary-container px-1.5 py-0.5 text-2xs font-semibold text-on-secondary-container">
+                        Organizador
+                      </span>
+                    )}
+                    {nuevo && (
+                      <span className="shrink-0 text-2xs text-on-surface-variant">se añadirá al guardar</span>
+                    )}
                   </div>
+                  {!nuevo && <p className="mt-0.5 pl-4.5 text-2xs text-on-surface-variant break-all">{m.email}</p>}
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onToggleEssential(m.email)}
-                      className={`px-2 py-0.5 rounded text-2xs font-semibold border flex items-center gap-1 cursor-pointer ${
-                        m.isEssential
-                          ? 'bg-warning-container border-warning/40 text-on-warning-container'
-                          : 'bg-surface border-outline-variant text-on-surface-variant hover:text-on-surface'
-                      }`}
-                    >
-                      <span aria-hidden="true" className="material-symbols-outlined text-xs">star</span>
-                      {m.isEssential ? 'Imprescindible' : 'Regular'}
-                    </button>
+                  <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
+                    {puedeEditar ? (
+                      <button
+                        type="button"
+                        onClick={() => onToggleEssential(m.email)}
+                        aria-pressed={m.isEssential}
+                        className={`px-2 py-0.5 rounded text-2xs font-semibold border flex items-center gap-1 cursor-pointer ${
+                          m.isEssential
+                            ? 'bg-warning-container border-warning/40 text-on-warning-container'
+                            : 'bg-surface border-outline-variant text-on-surface-variant hover:text-on-surface'
+                        }`}
+                      >
+                        <span aria-hidden="true" className="material-symbols-outlined text-xs">star</span>
+                        {m.isEssential ? 'Imprescindible' : 'Regular'}
+                      </button>
+                    ) : (
+                      m.isEssential && (
+                        <span className="px-2 py-0.5 rounded text-2xs font-semibold border bg-warning-container border-warning/40 text-on-warning-container flex items-center gap-1">
+                          <span aria-hidden="true" className="material-symbols-outlined text-xs">star</span>
+                          Imprescindible
+                        </span>
+                      )
+                    )}
 
-                    {membersList.length > 1 && (
+                    {/* Sobre uno mismo no hay «quitar» ni cambio de rol: para
+                        irse está «Salir del grupo», que pide confirmación. */}
+                    {puedeEditar && !esYo && !nuevo && (
+                      <button
+                        type="button"
+                        onClick={() => onToggleOrganizer(m.email)}
+                        className="px-2 py-0.5 rounded text-2xs font-semibold border border-outline-variant bg-surface text-on-surface-variant hover:text-on-surface cursor-pointer"
+                      >
+                        {organiza ? 'Quitar organizador' : 'Hacer organizador'}
+                      </button>
+                    )}
+                    {puedeEditar && !esYo && (
                       <button
                         type="button"
                         onClick={() => onRemoveMember(m.email)}
-                        className="text-error hover:text-error p-1 cursor-pointer"
-                        title="Quitar integrante"
+                        className="px-2 py-0.5 rounded text-2xs font-semibold border border-error/40 bg-surface text-error hover:bg-error-container cursor-pointer flex items-center gap-1"
+                        aria-label={`Quitar a ${nuevo ? m.email : m.nombre} del grupo`}
                       >
-                        <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
+                        <span aria-hidden="true" className="material-symbols-outlined text-xs">close</span>
+                        Quitar
                       </button>
                     )}
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                </li>
+              );
+            })}
+          </ul>
 
-          {/* Sin botón de eliminar: el backend no permite borrar grupos y el
-              que había solo cerraba el modal. */}
-          <div className="flex justify-end items-center pt-4 border-t border-outline-variant/60">
+          <p className="text-2xs text-on-surface-variant leading-relaxed">
+            Huecko nunca muestra el detalle de los bloques de otra persona: del resto del grupo solo se
+            sabe si está ocupada o libre en cada franja.
+          </p>
+
+          {errores.length > 0 && (
+            <div role="alert" className="rounded-xl border border-error/40 bg-error-container p-3 text-xs text-on-error-container">
+              <p className="font-semibold">Algunos cambios no se guardaron:</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {errores.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Salir del grupo, con confirmación. Sin botón de borrar el grupo:
+              el backend no lo permite (se borra solo al irse el último). */}
+          {confirmandoSalida ? (
+            <div className="rounded-xl border border-error/40 bg-surface-container-lowest p-3 text-xs">
+              <p className="font-semibold text-on-surface">¿Salir de «{grupo.nombre}»?</p>
+              <p className="mt-1 text-on-surface-variant">
+                {soyUnicoOrganizador
+                  ? 'Eres el único organizador: antes de salir, nombra a otra persona organizadora.'
+                  : 'Dejarás de ver sus planes y su horario en común. Para volver, alguien que lo organice tendrá que añadirte.'}
+              </p>
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmandoSalida(false)}
+                  disabled={saliendo}
+                  className="px-3 py-1.5 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={onLeave}
+                  disabled={saliendo}
+                  className="px-3 py-1.5 rounded-xl bg-error text-on-error text-xs font-semibold cursor-pointer disabled:opacity-60"
+                >
+                  {saliendo ? 'Saliendo…' : 'Sí, salir del grupo'}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-outline-variant/60">
+            <button
+              type="button"
+              onClick={() => setConfirmandoSalida(true)}
+              disabled={ocupado || confirmandoSalida}
+              className="px-3 py-2 rounded-xl text-error hover:bg-error-container text-xs font-semibold cursor-pointer flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[16px]">logout</span>
+              Salir del grupo
+            </button>
+
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer"
+                disabled={ocupado}
+                className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container text-xs font-medium cursor-pointer disabled:cursor-not-allowed"
               >
-                Cancelar
+                {puedeEditar ? 'Cancelar' : 'Cerrar'}
               </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
-              >
-                {submitLabel}
-              </button>
+              {puedeEditar && (
+                <button
+                  type="submit"
+                  disabled={ocupado || !nombre.trim()}
+                  className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {guardando ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+              )}
             </div>
           </div>
         </form>

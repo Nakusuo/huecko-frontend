@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { SUBJECT_COLORS, CATEGORY_HEXES } from '../theme/palette';
 import { isApiEnabled } from '../lib/apiClient';
-import { fetchSlots, syncSlots } from '../services/scheduleService';
+import { emptyProgress, fetchSlots, syncSlots, type SyncProgress } from '../services/scheduleService';
 import type { TimeSlot } from '../types/schedule.types';
 
 export type { DayOfWeek, TimeSlot } from '../types/schedule.types';
@@ -15,11 +15,24 @@ interface ScheduleState {
   status: ScheduleStatus;
   error: string | null;
   lastSyncedAt: string | null;
-  setSlots: (updater: (prev: TimeSlot[]) => TimeSlot[]) => void;
-  addSlot: (slot: Omit<TimeSlot, 'id'>) => void;
-  addMultipleSlots: (slots: Omit<TimeSlot, 'id'>[]) => void;
-  updateSlot: (id: string, updatedSlot: Partial<TimeSlot>) => void;
-  deleteSlot: (id: string) => void;
+  /**
+   * Ids de los bloques que tienen una operación en curso contra el servidor.
+   * Un bloque recién creado lleva aquí un id provisional hasta que responde el
+   * POST: editarlo o borrarlo antes mandaría un PUT/DELETE a un id que el
+   * servidor no conoce. La página los muestra como "guardando" y no los deja tocar.
+   */
+  pendientes: string[];
+  /*
+   * Todas las mutaciones devuelven si el cambio quedó guardado. En modo demo es
+   * siempre `true` al instante; con backend se resuelve cuando el servidor
+   * responde, y si lo rechaza el cambio ya se ha deshecho y `error` trae su
+   * mensaje. Así la página solo dice "guardado" cuando es verdad.
+   */
+  setSlots: (updater: (prev: TimeSlot[]) => TimeSlot[]) => Promise<boolean>;
+  addSlot: (slot: Omit<TimeSlot, 'id'>) => Promise<boolean>;
+  addMultipleSlots: (slots: Omit<TimeSlot, 'id'>[]) => Promise<boolean>;
+  updateSlot: (id: string, updatedSlot: Partial<TimeSlot>) => Promise<boolean>;
+  deleteSlot: (id: string) => Promise<boolean>;
   /** Trae los bloques del backend. No hace nada en modo demo. */
   hydrate: () => Promise<void>;
   clearError: () => void;
@@ -45,40 +58,134 @@ const INITIAL_SLOTS: TimeSlot[] = [
   { id: '6', title: 'Universidad - Redes', day: 'Vie', startTime: '08:00', endTime: '11:00', customColor: CLASE_REDES, type: 'recurrente', frequency: 'semanal', tag: 'Clase' },
 ];
 
+/** Id provisional para un bloque que aún no tiene el del servidor. */
+export function provisionalId(prefix = 'slot'): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Quita una aparición de cada id: un bloque puede tener dos operaciones en cola. */
+function quitarPendientes(pendientes: string[], ids: string[]): string[] {
+  const restantes = [...pendientes];
+  for (const id of ids) {
+    const i = restantes.indexOf(id);
+    if (i >= 0) restantes.splice(i, 1);
+  }
+  return restantes;
+}
+
+function aplicarIdsReales(slots: TimeSlot[], creados: Record<string, string>): TimeSlot[] {
+  if (!Object.keys(creados).length) return slots;
+  return slots.map((slot) => (creados[slot.id] ? { ...slot, id: creados[slot.id] } : slot));
+}
+
+/**
+ * Deshace en `actual` lo que el servidor no llegó a aceptar de un cambio
+ * `previous → next`, y conserva lo que sí aceptó.
+ *
+ * Se aplica sobre el estado actual y no se vuelve sin más a `previous` porque
+ * entretanto puede haber entrado otro cambio: pisarlo borraría trabajo ajeno.
+ * Y se respeta lo ya hecho porque si un lote de cinco bloques falla en el
+ * cuarto, los tres primeros existen en el servidor: quitarlos en local los
+ * haría reaparecer al recargar, y reintentar los duplicaría.
+ */
+export function revertirCambio(
+  actual: TimeSlot[],
+  previous: TimeSlot[],
+  next: TimeSlot[],
+  progress: SyncProgress
+): TimeSlot[] {
+  const previousById = new Map(previous.map((slot) => [slot.id, slot]));
+  const nextById = new Map(next.map((slot) => [slot.id, slot]));
+
+  const revertidos = actual.flatMap((slot): TimeSlot[] => {
+    const antes = previousById.get(slot.id);
+    const despues = nextById.get(slot.id);
+    if (!antes && despues) {
+      const idReal = progress.creados[slot.id];
+      return idReal ? [{ ...slot, id: idReal }] : [];
+    }
+    // Los updaters devuelven el mismo objeto para los bloques que no tocan.
+    if (antes && despues && antes !== despues && !progress.actualizados.has(slot.id)) {
+      return [antes];
+    }
+    return [slot];
+  });
+
+  const presentes = new Set(revertidos.map((slot) => slot.id));
+  for (const antes of previous) {
+    if (!nextById.has(antes.id) && !progress.borrados.has(antes.id) && !presentes.has(antes.id)) {
+      revertidos.push(antes);
+    }
+  }
+  return revertidos;
+}
+
 export const useScheduleStore = create<ScheduleState>()(
   persist(
     (set, get) => {
+      /* Las sincronizaciones van en fila: cada una calcula su diff sobre el
+         estado en que la dejó la anterior, y un cambio no adelanta al POST del
+         que depende. */
+      let cola: Promise<unknown> = Promise.resolve();
+
       /**
-       * Aplica el cambio en local (la rejilla responde al instante) y, si hay
-       * backend, lo empuja en segundo plano. Los ids provisionales que crea el
-       * cliente se reemplazan por los que devuelve el servidor.
+       * Aplica el cambio en local para que la rejilla responda al instante y, si
+       * hay backend, lo empuja al servidor. La promesa se resuelve cuando el
+       * servidor contesta; si lo rechaza, el cambio se deshace y queda el
+       * mensaje en `error`. Antes se daba por bueno sin esperar y un rechazo
+       * solo se notaba al recargar, cuando el bloque ya no estaba.
        */
-      const applyAndSync = (updater: (prev: TimeSlot[]) => TimeSlot[]) => {
+      const applyAndSync = (updater: (prev: TimeSlot[]) => TimeSlot[]): Promise<boolean> => {
         const previous = get().slots;
         const next = updater(previous);
-        set({ slots: next });
 
-        if (!isApiEnabled) return;
+        if (!isApiEnabled) {
+          set({ slots: next });
+          return Promise.resolve(true);
+        }
 
-        set({ status: 'loading', error: null });
-        void syncSlots(previous, next)
-          .then((idMap) => {
+        const previousById = new Map(previous.map((slot) => [slot.id, slot]));
+        const afectados = next
+          .filter((slot) => previousById.get(slot.id) !== slot)
+          .map((slot) => slot.id);
+
+        set((state) => ({
+          slots: next,
+          pendientes: [...state.pendientes, ...afectados],
+          status: 'loading',
+          error: null,
+        }));
+
+        const tarea = cola.then(async () => {
+          const progress = emptyProgress();
+          try {
+            await syncSlots(previous, next, progress);
             set((state) => ({
               status: 'ready',
               lastSyncedAt: new Date().toISOString(),
-              slots: Object.keys(idMap).length
-                ? state.slots.map((slot) =>
-                    idMap[slot.id] ? { ...slot, id: idMap[slot.id] } : slot
-                  )
-                : state.slots,
+              slots: aplicarIdsReales(state.slots, progress.creados),
+              pendientes: quitarPendientes(state.pendientes, afectados),
             }));
-          })
-          .catch((error: unknown) => {
-            set({
+            return true;
+          } catch (error: unknown) {
+            set((state) => ({
               status: 'error',
               error: error instanceof Error ? error.message : 'No se pudo guardar el horario.',
-            });
-          });
+              slots: revertirCambio(state.slots, previous, next, progress),
+              pendientes: quitarPendientes(state.pendientes, afectados),
+            }));
+            return false;
+          }
+        });
+        cola = tarea;
+        return tarea;
+      };
+
+      /** Red de seguridad por si alguien llama al store sin pasar por la página. */
+      const rechazarSiPendiente = (id: string): Promise<boolean> | null => {
+        if (!get().pendientes.includes(id)) return null;
+        set({ error: 'Este bloque aún se está guardando. Espera un momento e inténtalo de nuevo.' });
+        return Promise.resolve(false);
       };
 
       return {
@@ -87,28 +194,30 @@ export const useScheduleStore = create<ScheduleState>()(
         status: 'idle',
         error: null,
         lastSyncedAt: null,
+        pendientes: [],
 
         setSlots: (updater) => applyAndSync(updater),
 
-        addSlot: (slot) =>
-          applyAndSync((prev) => [...prev, { ...slot, id: `slot-${Date.now()}-${Math.random()}` }]),
+        addSlot: (slot) => applyAndSync((prev) => [...prev, { ...slot, id: provisionalId() }]),
 
         addMultipleSlots: (newSlots) =>
-          applyAndSync((prev) => [
-            ...prev,
-            ...newSlots.map((s, idx) => ({ ...s, id: `slot-${Date.now()}-${idx}` })),
-          ]),
+          applyAndSync((prev) => [...prev, ...newSlots.map((s) => ({ ...s, id: provisionalId() }))]),
 
         updateSlot: (id, updatedSlot) =>
+          rechazarSiPendiente(id) ??
           applyAndSync((prev) => prev.map((s) => (s.id === id ? { ...s, ...updatedSlot } : s))),
 
-        deleteSlot: (id) => applyAndSync((prev) => prev.filter((s) => s.id !== id)),
+        deleteSlot: (id) =>
+          rechazarSiPendiente(id) ?? applyAndSync((prev) => prev.filter((s) => s.id !== id)),
 
         hydrate: async () => {
           if (!isApiEnabled) return;
 
           set({ status: 'loading', error: null });
           try {
+            // Si hay cambios en vuelo, se espera a que terminen: si no, la
+            // respuesta del GET podría llegar sin ellos y borrarlos de la rejilla.
+            await cola;
             const slots = await fetchSlots(get().slots);
             set({ slots, status: 'ready', lastSyncedAt: new Date().toISOString() });
           } catch (error: unknown) {
@@ -127,6 +236,7 @@ export const useScheduleStore = create<ScheduleState>()(
             status: 'idle',
             error: null,
             lastSyncedAt: null,
+            pendientes: [],
           }),
       };
     },
