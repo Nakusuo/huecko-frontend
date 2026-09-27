@@ -1,5 +1,3 @@
-import type { RolSistema } from './auth.types';
-
 /** Espejo de `ResumenAdminResponse` del backend. Solo cifras agregadas. */
 
 export type EstadoPlanAdmin = 'PROPUESTO' | 'CONFIRMADO' | 'CANCELADO' | 'EN_RECOORDINACION';
@@ -38,31 +36,135 @@ export interface ResumenAdmin {
   semanas: SemanaAdmin[];
 }
 
-/** Espejo de `UsuarioAdminResponse`: la cuenta y cuánto la usa, nada de su horario. */
-export interface UsuarioAdmin {
-  id: string;
+/* ------------------------------------------------------------------ *
+ * Salud (`SaludResponse`)
+ * ------------------------------------------------------------------ */
+
+/** El peor gana: con una base caída el sistema está caído aunque lo demás vaya bien. */
+export type EstadoSalud = 'OK' | 'DEGRADADO' | 'CAIDO';
+
+export interface ComponenteSalud {
+  clave: string;
   nombre: string;
-  email: string;
-  rolSistema: RolSistema;
-  creadoEn: string;
-  suspendido: boolean;
-  grupos: number;
-  planesPropuestos: number;
-  /** `null` si nunca hizo nada en la app. */
-  ultimaActividad: string | null;
+  estado: EstadoSalud;
+  /** `null` si no se llegó a medir (no respondió). */
+  latenciaMs: number | null;
+  detalle: string;
 }
 
-/** Espejo de `GrupoAdminResponse`: metadatos y actividad, sin integrantes ni planes por dentro. */
-export interface GrupoAdmin {
-  id: string;
+export interface TareaSalud {
+  clave: string;
   nombre: string;
-  creadoEn: string | null;
-  organizadores: string[];
-  miembros: number;
-  umbralDisponibilidad: number;
-  planes: number;
-  planesPorEstado: Record<EstadoPlanAdmin, number>;
-  imprevistos: number;
-  /** `null` si nunca pasó nada en el grupo tras crearlo. */
-  ultimaActividad: string | null;
+  descripcion: string;
+  activa: boolean;
+  intervaloMs: number;
+  estado: EstadoSalud;
+  /** Elementos que ya deberían haberse procesado y siguen ahí. Sana = 0. */
+  atrasadas: number;
+  /** Desde que arrancó el backend. */
+  ejecuciones: number;
+  ultimaEjecucion: string | null;
+  duracionMs: number | null;
+  ultimosProcesados: number;
+  fallidosTotales: number;
+  ultimoError: string | null;
+  ultimoErrorEn: string | null;
+}
+
+export interface SaludAdmin {
+  estado: EstadoSalud;
+  generadoEn: string;
+  componentes: ComponenteSalud[];
+  tareas: TareaSalud[];
+  aplicacion: {
+    version: string;
+    perfiles: string[];
+    arranque: string;
+    segundosEncendida: number;
+    java: string;
+    memoriaUsadaMb: number;
+    memoriaMaximaMb: number;
+    zonaHoraria: string;
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Fallos y reportes
+ * ------------------------------------------------------------------ */
+
+export type EstadoRevision = 'NUEVO' | 'REVISADO' | 'RESUELTO';
+
+/** SERVIDOR = error 500 del backend; CLIENTE = error del navegador; TAREA = tarea programada. */
+export type OrigenFallo = 'SERVIDOR' | 'CLIENTE' | 'TAREA';
+
+export interface FalloAdmin {
+  id: string;
+  origen: OrigenFallo;
+  tipo: string;
+  mensaje: string;
+  /** Endpoint, página o tarea donde ocurrió, con los ids ya sustituidos por `{id}`. */
+  ubicacion: string;
+  traza: string | null;
+  navegador: string | null;
+  ocurrencias: number;
+  primeraVez: string;
+  ultimaVez: string;
+  estado: EstadoRevision;
+  /** Volvió a ocurrir después de darlo por resuelto. */
+  reabierto: boolean;
+}
+
+/** FALLO = algo de la app no funciona; CONDUCTA = problema con otra cuenta. */
+export type TipoReporte = 'FALLO' | 'CONDUCTA';
+
+export interface ReporteAdmin {
+  id: string;
+  tipo: TipoReporte;
+  descripcion: string;
+  ruta: string | null;
+  navegador: string | null;
+  autorNombre: string;
+  autorEmail: string;
+  cuentaReportadaNombre: string | null;
+  cuentaReportadaEmail: string | null;
+  /** Estado actual de la cuenta señalada. `null` si no es de conducta o ya no existe. */
+  cuentaReportadaSuspendida: boolean | null;
+  estado: EstadoRevision;
+  creadoEn: string;
+  actualizadoEn: string;
+}
+
+export interface PendientesAdmin {
+  fallosNuevos: number;
+  reportesNuevos: number;
+}
+
+/* ------------------------------------------------------------------ *
+ * Consola
+ * ------------------------------------------------------------------ */
+
+export type NivelLog = 'ERROR' | 'WARN' | 'INFO';
+
+export interface EventoLog {
+  /** Crece siempre: se pide «lo posterior a X» y nunca llega una línea dos veces. */
+  id: number;
+  momento: string;
+  nivel: NivelLog;
+  logger: string;
+  hilo: string;
+  mensaje: string;
+  excepcion: string | null;
+}
+
+export interface PaginaLogs {
+  eventos: EventoLog[];
+  ultimoId: number;
+  capacidad: number;
+}
+
+export interface PropiedadConfig {
+  grupo: string;
+  clave: string;
+  valor: string;
+  descripcion: string;
 }

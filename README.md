@@ -68,7 +68,21 @@ de un grupo:
 | Rol | Entra a | Zona |
 |---|---|---|
 | `USUARIO` | `/dashboard` | Horario, grupos, planes y perfil. |
-| `ADMIN` | `/admin` | Panel propio (resumen, usuarios, grupos). No tiene horario ni grupos. |
+| `ADMIN` | `/admin` | Panel de observación (resumen, salud, fallos, consola). No tiene horario ni grupos. |
+
+El admin **observa, no gestiona**: no navega cuentas ni grupos.
+
+| Sección | Qué muestra |
+|---|---|
+| Resumen | Cifras agregadas de uso y actividad de las últimas 8 semanas. |
+| Salud | PostgreSQL, MongoDB y tiempo real con su latencia, las tareas automáticas y el proceso. Se actualiza cada 15 s. |
+| Fallos | Los reportes de «Reportar un problema» y los errores registrados solos (500 del backend, tareas y JavaScript del navegador). Desde un reporte de conducta se puede suspender la cuenta señalada. |
+| Consola | El log del backend en vivo y la configuración activa, en solo lectura y sin secretos. |
+
+Cualquier cuenta tiene «Reportar un problema» (icono en la barra y en el perfil), y
+la app envía sola los errores de JavaScript que nadie captura (`lib/capturaErrores.ts`).
+En modo demo, reportes y errores se guardan en el navegador; Salud y Consola
+necesitan el backend.
 
 Cada rol queda redirigido fuera de la zona del otro. La interfaz solo decide qué
 se enseña: quien protege los datos es el backend, que responde 403 en

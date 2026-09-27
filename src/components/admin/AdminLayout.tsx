@@ -1,5 +1,7 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
+import { adminService } from '../../services/adminService';
 import { HueckoMark } from '../Pixel';
 import { InsigniaModo } from '../Navbar';
 
@@ -13,9 +15,54 @@ interface ItemAdmin {
    `/admin/usuarios`. */
 const ITEMS: ItemAdmin[] = [
   { to: '/admin', label: 'Resumen', icon: 'monitoring' },
-  { to: '/admin/usuarios', label: 'Usuarios', icon: 'manage_accounts' },
-  { to: '/admin/grupos', label: 'Grupos', icon: 'groups' },
+  { to: '/admin/salud', label: 'Salud', icon: 'ecg_heart' },
+  { to: '/admin/fallos', label: 'Fallos', icon: 'bug_report' },
+  { to: '/admin/consola', label: 'Consola', icon: 'terminal' },
 ];
+
+const REFRESCO_PENDIENTES_MS = 60_000;
+
+/**
+ * Fallos y reportes nuevos, para el contador de «Fallos». Se pide al cambiar
+ * de página y cada minuto: así un reporte que llega mientras se mira la
+ * consola se nota sin tener que ir a buscarlo.
+ */
+function usePendientes(): number {
+  const { pathname } = useLocation();
+  const [total, setTotal] = useState(0);
+  const [tic, setTic] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setTic((t) => t + 1), REFRESCO_PENDIENTES_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let vigente = true;
+    adminService.getPendientes().then(
+      (p) => {
+        if (vigente) setTotal(p.fallosNuevos + p.reportesNuevos);
+      },
+      () => {
+        // Sin contador no se pierde nada: la página de fallos lo dirá.
+      }
+    );
+    return () => {
+      vigente = false;
+    };
+  }, [pathname, tic]);
+
+  return total;
+}
+
+function Pendientes({ n }: { n: number }) {
+  if (n === 0) return null;
+  return (
+    <span className="ml-1.5 rounded-md bg-error px-1.5 text-2xs font-bold tabular-nums text-on-error" aria-label={`${n} nuevos`}>
+      {n > 99 ? '99+' : n}
+    </span>
+  );
+}
 
 /** Distintivo junto a la marca: que nunca haya duda de en qué panel se está. */
 function SelloAdmin() {
@@ -35,6 +82,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
   const nombre = useAuthStore((s) => s.user?.nombre ?? '');
+  const pendientes = usePendientes();
 
   const salir = () => {
     logout();
@@ -87,6 +135,7 @@ export default function AdminLayout() {
                 }
               >
                 {item.label}
+                {item.to === '/admin/fallos' && <Pendientes n={pendientes} />}
               </NavLink>
             ))}
           </div>
@@ -136,7 +185,12 @@ export default function AdminLayout() {
               }`
             }
           >
-            <span aria-hidden="true" className="material-symbols-outlined">{item.icon}</span>
+            <span className="relative">
+              <span aria-hidden="true" className="material-symbols-outlined">{item.icon}</span>
+              {item.to === '/admin/fallos' && pendientes > 0 && (
+                <span className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full border-2 border-surface-container bg-error" aria-label={`${pendientes} nuevos`} />
+              )}
+            </span>
             <span className="text-2xs">{item.label}</span>
           </NavLink>
         ))}

@@ -6,6 +6,7 @@ import { usePreferenciasLocales } from '../store/profileStore';
 import { isApiEnabled } from '../lib/apiClient';
 import { tiempoRelativo } from '../lib/tiempoRelativo';
 import { HueckoMark } from './Pixel';
+import { BotonReportar } from './ReportarProblema';
 
 export type NavTab = 'dashboard' | 'schedule' | 'groups' | 'profile';
 
@@ -275,7 +276,10 @@ export default function Navbar({ currentTab }: NavbarProps) {
         </div>
 
         <div className="flex items-center gap-4">
-          <CampanaNotificaciones variante="escritorio" />
+          <div className="flex items-center gap-1">
+            <BotonReportar />
+            <CampanaNotificaciones variante="escritorio" />
+          </div>
 
           <Link
             to="/profile"
@@ -317,6 +321,7 @@ export default function Navbar({ currentTab }: NavbarProps) {
           </Link>
           <div className="flex items-center gap-2">
             <InsigniaModo />
+            <BotonReportar />
             <CampanaNotificaciones variante="movil" />
           </div>
         </div>

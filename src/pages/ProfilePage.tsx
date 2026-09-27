@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { useProfileStore, usePreferenciasLocales } from '../store/profileStore';
 import Toggle from '../components/Toggle';
 import { useGroupsStore } from '../store/groupsStore';
+import { BotonReportar } from '../components/ReportarProblema';
 import { isApiEnabled } from '../lib/apiClient';
 
 /** Lo que se edita en «Datos personales»: lo único que guarda el servidor. */
@@ -251,7 +252,8 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="w-full pt-4 mt-2 border-t border-outline-variant/60">
+            <div className="w-full pt-4 mt-2 border-t border-outline-variant/60 flex flex-col gap-3">
+              <BotonReportar variante="fila" />
               <button
                 type="button"
                 onClick={handleLogout}
