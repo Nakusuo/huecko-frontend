@@ -98,8 +98,20 @@ export const endpoints = {
   /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */
   admin: {
     resumen: '/admin/resumen',
-    usuarios: '/admin/usuarios',
-    grupos: '/admin/grupos',
-    suspension: (usuarioId: string) => `/admin/usuarios/${usuarioId}/suspension`,
+    pendientes: '/admin/pendientes',
+    salud: '/admin/salud',
+    fallos: '/admin/fallos',
+    estadoFallo: (id: string) => `/admin/fallos/${id}/estado`,
+    reportes: '/admin/reportes',
+    estadoReporte: (id: string) => `/admin/reportes/${id}/estado`,
+    suspensionReporte: (id: string) => `/admin/reportes/${id}/suspension`,
+    logs: '/admin/consola/logs',
+    configuracion: '/admin/consola/configuracion',
+  },
+
+  /** ✅ ReporteController. Cualquier cuenta: «Reportar un problema» y errores del navegador. */
+  reportes: {
+    crear: '/reportes',
+    errores: '/reportes/errores',
   },
 } as const;
