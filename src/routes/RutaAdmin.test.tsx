@@ -41,12 +41,20 @@ describe('zona de administración', () => {
     expect(html).toContain('Navegación de administración');
     expect(html).toContain('Resumen');
     expect(html).not.toContain('Mis grupos');
+    expect(html).toContain('Consola');
   });
 
   it('las subpáginas del panel existen', () => {
     entrarComo('ADMIN');
-    expect(pintar('/admin/usuarios')).toContain('Cuentas registradas');
-    expect(pintar('/admin/grupos')).toContain('Grupos de la plataforma');
+    expect(pintar('/admin/salud')).toContain('tareas automáticas');
+    expect(pintar('/admin/fallos')).toContain('Reportes de personas');
+    expect(pintar('/admin/consola')).toContain('Solo lectura');
+  });
+
+  it('el panel ya no lista cuentas ni grupos', () => {
+    entrarComo('ADMIN');
+    expect(pintar('/admin/usuarios')).not.toContain('Cuentas registradas');
+    expect(pintar('/admin/grupos')).not.toContain('Grupos de la plataforma');
   });
 
   it('una cuenta normal no ve el panel', () => {

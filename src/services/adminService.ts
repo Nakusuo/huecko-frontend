@@ -1,64 +1,38 @@
 import { apiClient, isApiEnabled } from '../lib/apiClient';
 import { endpoints } from '../lib/endpoints';
 import { resumenDemo } from '../lib/adminDemo';
-import { cambiarSuspensionDemo, leerCuentasDemo, leerSuspendidasDemo } from './authService';
-import { useGroupsStore } from '../store/groupsStore';
-import type { EstadoPlanAdmin, GrupoAdmin, ResumenAdmin, UsuarioAdmin } from '../types/admin.types';
+import {
+  cambiarEstadoFalloDemo,
+  cambiarEstadoReporteDemo,
+  leerFallosDemo,
+  leerReportesDemo,
+  suspensionDesdeReporteDemo,
+} from '../lib/bandejaDemo';
+import type {
+  EstadoRevision,
+  FalloAdmin,
+  NivelLog,
+  PaginaLogs,
+  PendientesAdmin,
+  PropiedadConfig,
+  ReporteAdmin,
+  ResumenAdmin,
+  SaludAdmin,
+} from '../types/admin.types';
 
 const SIMULATED_NETWORK_DELAY_MS = 400;
 const esperar = () => new Promise((resolve) => setTimeout(resolve, SIMULATED_NETWORK_DELAY_MS));
 
-/**
- * Cuentas del modo demo vistas como en el panel. Son las de este navegador, así
- * que no hay actividad ni grupos que contar: salen a cero.
- */
-function usuariosDemo(): UsuarioAdmin[] {
-  const suspendidas = leerSuspendidasDemo();
-  return leerCuentasDemo()
-    .map((c) => ({
-      id: c.id,
-      nombre: c.nombre,
-      email: c.email,
-      rolSistema: c.rolSistema ?? 'USUARIO',
-      creadoEn: c.creado_en,
-      suspendido: suspendidas.has(c.id),
-      grupos: 0,
-      planesPropuestos: 0,
-      ultimaActividad: null,
-    }))
-    .sort((a, b) => b.creadoEn.localeCompare(a.creadoEn));
+/** Salud y consola miden un servidor: sin él no hay nada honesto que enseñar. */
+export class SinServidorError extends Error {
+  constructor() {
+    super('Esta sección necesita el backend conectado.');
+    this.name = 'SinServidorError';
+  }
 }
 
-/**
- * Grupos del modo demo: los que hay en este navegador. Sin servidor no hay
- * fechas de actividad ni imprevistos guardados que contar.
- */
-function gruposDemo(): GrupoAdmin[] {
-  const { groups, groupProposals } = useGroupsStore.getState();
-  return groups.map((g) => {
-    const planes = groupProposals.filter((p) => p.groupId === g.id);
-    const planesPorEstado: Record<EstadoPlanAdmin, number> = {
-      PROPUESTO: 0,
-      CONFIRMADO: 0,
-      CANCELADO: 0,
-      EN_RECOORDINACION: 0,
-    };
-    planes.forEach((p) => {
-      planesPorEstado[p.estado.toUpperCase() as EstadoPlanAdmin] += 1;
-    });
-    return {
-      id: g.id,
-      nombre: g.nombre,
-      creadoEn: null,
-      organizadores: g.miembros.filter((m) => m.rol === 'ORGANIZADOR' || m.rol === 'ADMIN').map((m) => m.nombre),
-      miembros: g.miembros.length,
-      umbralDisponibilidad: g.umbralDisponibilidad,
-      planes: planes.length,
-      planesPorEstado,
-      imprevistos: 0,
-      ultimaActividad: null,
-    };
-  });
+function exigirServidor(): void {
+  if (!isApiEnabled) throw new SinServidorError();
 }
 
 export const adminService = {
@@ -72,34 +46,73 @@ export const adminService = {
     return data;
   },
 
-  async getUsuarios(): Promise<UsuarioAdmin[]> {
+  /** Fallos y reportes nuevos, para los contadores de la barra. */
+  async getPendientes(): Promise<PendientesAdmin> {
     if (!isApiEnabled) {
-      await esperar();
-      return usuariosDemo();
+      return {
+        fallosNuevos: leerFallosDemo().filter((f) => f.estado === 'NUEVO').length,
+        reportesNuevos: leerReportesDemo().filter((r) => r.estado === 'NUEVO').length,
+      };
     }
-    const { data } = await apiClient.get<UsuarioAdmin[]>(endpoints.admin.usuarios);
+    const { data } = await apiClient.get<PendientesAdmin>(endpoints.admin.pendientes);
     return data;
   },
 
-  async getGrupos(): Promise<GrupoAdmin[]> {
-    if (!isApiEnabled) {
-      await esperar();
-      return gruposDemo();
-    }
-    const { data } = await apiClient.get<GrupoAdmin[]>(endpoints.admin.grupos);
+  async getSalud(): Promise<SaludAdmin> {
+    exigirServidor();
+    const { data } = await apiClient.get<SaludAdmin>(endpoints.admin.salud);
     return data;
   },
 
-  /** Devuelve la cuenta ya actualizada. Lanza con el motivo si no se pudo. */
-  async cambiarSuspension(usuarioId: string, suspendido: boolean): Promise<UsuarioAdmin> {
+  async getFallos(): Promise<FalloAdmin[]> {
     if (!isApiEnabled) {
       await esperar();
-      cambiarSuspensionDemo(usuarioId, suspendido);
-      const cuenta = usuariosDemo().find((u) => u.id === usuarioId);
-      if (!cuenta) throw new Error('Esa cuenta no existe.');
-      return cuenta;
+      return leerFallosDemo();
     }
-    const { data } = await apiClient.patch<UsuarioAdmin>(endpoints.admin.suspension(usuarioId), { suspendido });
+    const { data } = await apiClient.get<FalloAdmin[]>(endpoints.admin.fallos);
+    return data;
+  },
+
+  async cambiarEstadoFallo(id: string, estado: EstadoRevision): Promise<FalloAdmin> {
+    if (!isApiEnabled) return cambiarEstadoFalloDemo(id, estado);
+    const { data } = await apiClient.patch<FalloAdmin>(endpoints.admin.estadoFallo(id), { estado });
+    return data;
+  },
+
+  async getReportes(): Promise<ReporteAdmin[]> {
+    if (!isApiEnabled) {
+      await esperar();
+      return leerReportesDemo();
+    }
+    const { data } = await apiClient.get<ReporteAdmin[]>(endpoints.admin.reportes);
+    return data;
+  },
+
+  async cambiarEstadoReporte(id: string, estado: EstadoRevision): Promise<ReporteAdmin> {
+    if (!isApiEnabled) return cambiarEstadoReporteDemo(id, estado);
+    const { data } = await apiClient.patch<ReporteAdmin>(endpoints.admin.estadoReporte(id), { estado });
+    return data;
+  },
+
+  /** La única acción sobre una cuenta: la que señala un reporte de conducta. */
+  async suspensionDesdeReporte(id: string, suspendido: boolean): Promise<ReporteAdmin> {
+    if (!isApiEnabled) {
+      await esperar();
+      return suspensionDesdeReporteDemo(id, suspendido);
+    }
+    const { data } = await apiClient.patch<ReporteAdmin>(endpoints.admin.suspensionReporte(id), { suspendido });
+    return data;
+  },
+
+  async getLogs(desde: number, nivel: NivelLog): Promise<PaginaLogs> {
+    exigirServidor();
+    const { data } = await apiClient.get<PaginaLogs>(endpoints.admin.logs, { params: { desde, nivel } });
+    return data;
+  },
+
+  async getConfiguracion(): Promise<PropiedadConfig[]> {
+    exigirServidor();
+    const { data } = await apiClient.get<PropiedadConfig[]>(endpoints.admin.configuracion);
     return data;
   },
 };

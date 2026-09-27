@@ -9,8 +9,9 @@ import ProfilePage from '../pages/ProfilePage';
 import GroupsListPage from '../pages/GroupsListPage';
 import GroupDetailPage from '../pages/GroupDetailPage';
 import AdminResumenPage from '../pages/admin/AdminResumenPage';
-import AdminUsuariosPage from '../pages/admin/AdminUsuariosPage';
-import AdminGruposPage from '../pages/admin/AdminGruposPage';
+import AdminSaludPage from '../pages/admin/AdminSaludPage';
+import AdminFallosPage from '../pages/admin/AdminFallosPage';
+import AdminConsolaPage from '../pages/admin/AdminConsolaPage';
 import { useAuthStore } from '../store/authStore';
 import { inicioDe } from '../lib/rol';
 
@@ -45,11 +46,12 @@ export default function AppRouter() {
         <Route path="/groups/:groupId" element={<GroupDetailPage />} />
       </Route>
 
-      {/* Panel de administración: su propio marco, sin horario ni grupos. */}
+      {/* Panel de administración: observa la plataforma, no participa en ella. */}
       <Route path="/admin" element={<RutaAdmin />}>
         <Route index element={<AdminResumenPage />} />
-        <Route path="usuarios" element={<AdminUsuariosPage />} />
-        <Route path="grupos" element={<AdminGruposPage />} />
+        <Route path="salud" element={<AdminSaludPage />} />
+        <Route path="fallos" element={<AdminFallosPage />} />
+        <Route path="consola" element={<AdminConsolaPage />} />
       </Route>
 
       {/* Ruta por defecto */}
