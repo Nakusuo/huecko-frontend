@@ -67,6 +67,12 @@ export interface VotacionExpres {
   puedoVotar?: boolean;
   /** Lo que se aplica si no vota suficiente gente. Lo configura el servidor. */
   resultadoPorDefectoOpcion?: OpcionExpres;
+  /**
+   * Lo que sugiere la IA y por qué. Llega unos segundos después de abrirse la
+   * votación, por tiempo real; `null` si la IA está apagada o no respondió.
+   */
+  recomendacion?: OpcionExpres | null;
+  razonRecomendacion?: string | null;
 }
 
 /** Alguien avisó de que no irá (RF-15). Crítica o no, queda registrado. */
