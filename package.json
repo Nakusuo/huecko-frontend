@@ -10,8 +10,8 @@
     "lint": "oxlint",
     "dev:stub": "node tools/stub-backend.mjs",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "node tools/vitest.mjs run",
+    "test:watch": "node tools/vitest.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
