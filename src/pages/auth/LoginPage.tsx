@@ -9,6 +9,8 @@ import { DEMO_ADMIN_CREDENTIALS, DEMO_CREDENTIALS, loginUser } from '../../servi
 import { isApiEnabled } from '../../lib/apiClient';
 import { destinoTrasLogin } from '../../routes/destino';
 import { esAdmin } from '../../lib/rol';
+import { despertarServidor } from '../../lib/servidor';
+import AvisoServidorDespertando from '../../components/AvisoServidorDespertando';
 
 const loginSchema = z.object({
   email: z
@@ -44,6 +46,9 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     setServerError(null);
     try {
+      // Si la API está despertando, el login espera a que vuelva en vez de
+      // rendirse a los 15 s.
+      await despertarServidor();
       const res = await loginUser(data);
       login(res.user, res.token);
       // De vuelta a la página donde estaba (p. ej. si la sesión expiró ahí).
@@ -88,6 +93,8 @@ export default function LoginPage() {
                 <span>Tu sesión expiró, vuelve a entrar.</span>
               </div>
             )}
+
+            <AvisoServidorDespertando />
 
             <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
               {/* Campo Email */}

@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { registerUser } from '../../services/authService';
+import { despertarServidor } from '../../lib/servidor';
+import AvisoServidorDespertando from '../../components/AvisoServidorDespertando';
 
 const registerSchema = z
   .object({
@@ -62,6 +64,8 @@ export default function RegisterPage() {
   const onSubmit = async (data: RegisterFormValues) => {
     setServerError(null);
     try {
+      // Igual que en el login: esperar a que la API despierte.
+      await despertarServidor();
       const response = await registerUser({
         nombre: data.nombre,
         email: data.email,
@@ -91,6 +95,8 @@ export default function RegisterPage() {
                 Únete a Huecko y empieza a coordinar horarios sin esfuerzo.
               </p>
             </div>
+
+            <AvisoServidorDespertando />
 
             <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
               {/* Campo Nombre */}

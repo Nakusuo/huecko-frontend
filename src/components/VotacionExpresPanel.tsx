@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { SugerenciaIA } from './SugerenciaIA';
 import type { OrigenCriticidad } from '../types/incidents.types';
 import {
   ORDEN_OPCIONES,
@@ -125,6 +126,8 @@ export function VotacionExpresPanel({
           </div>
         </div>
       </header>
+
+      <SugerenciaIA votacion={votacion} />
 
       {/* Opciones */}
       <div className="space-y-1.5 px-3 pb-3 sm:px-4">
