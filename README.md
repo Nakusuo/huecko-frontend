@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="https://github.com/Nakusuo"><img src="https://raw.githubusercontent.com/Nakusuo/Nakusuo/main/assets/covers/huecko-frontend.svg" width="100%" alt="huecko-frontend — Nakusu"/></a>
+</p>
+
 # Huecko — Frontend
 
 SPA en React + TypeScript para coordinar disponibilidad, planes, votaciones e
