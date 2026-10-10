@@ -32,7 +32,7 @@ describe('despertarServidor (con backend)', () => {
 
     await despertarServidor();
 
-    expect(get).toHaveBeenCalledWith('/actuator/health', expect.objectContaining({ timeout: 90_000 }));
+    expect(get).toHaveBeenCalledWith('/actuator/health', expect.objectContaining({ timeout: 180_000 }));
   });
 
   it('varias llamadas a la vez comparten un único ping', async () => {

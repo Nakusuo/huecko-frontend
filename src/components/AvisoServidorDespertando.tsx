@@ -11,7 +11,7 @@ export default function AvisoServidorDespertando() {
   return (
     <div role="status" className="mb-4 px-3 py-2 rounded-xl bg-warning-container border border-warning/30 text-xs text-on-warning-container flex items-start gap-2">
       <span aria-hidden="true" className="material-symbols-outlined text-[16px] shrink-0">bedtime</span>
-      <span>El servidor se está despertando; puede tardar hasta un minuto. Puedes ir rellenando el formulario.</span>
+      <span>El servidor se está despertando; puede tardar un par de minutos. Puedes ir rellenando el formulario.</span>
     </div>
   );
 }

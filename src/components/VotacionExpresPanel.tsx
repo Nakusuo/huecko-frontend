@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SugerenciaIA } from './SugerenciaIA';
+import { sinPuntoFinal } from '../lib/sugerenciaIA';
 import type { OrigenCriticidad } from '../types/incidents.types';
 import {
   ORDEN_OPCIONES,
@@ -91,7 +92,7 @@ export function VotacionExpresPanel({
               {votacion.nombreReporta} no podrá asistir
             </h3>
             <p className="mt-0.5 text-xs text-on-surface-variant">
-              Se abrió esta votación porque {votacion.razonCriticidad}.{' '}
+              Se abrió esta votación porque {sinPuntoFinal(votacion.razonCriticidad)}.{' '}
               <SelloDeOrigen origen={votacion.origenCriticidad} />
             </p>
             {votacion.motivo && (
