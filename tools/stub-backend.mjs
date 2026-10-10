@@ -80,8 +80,13 @@ const server = http.createServer((req, res) => {
       if (req.method === 'GET') return json(res, 200, USUARIO_DEMO);
       if (req.method === 'PATCH') {
         const body = JSON.parse(raw || '{}');
+        // Como el real: cambiar el correo pide la contraseña (aquí, la de demo).
+        const cambiaCorreo = body.email && body.email.trim().toLowerCase() !== USUARIO_DEMO.email;
+        if (cambiaCorreo && body.passwordActual !== 'demo1234') {
+          return error(res, 400, 'Solicitud inválida', 'Para cambiar el correo escribe tu contraseña actual.');
+        }
         if (body.nombre) USUARIO_DEMO.nombre = body.nombre;
-        if (body.email) USUARIO_DEMO.email = body.email;
+        if (cambiaCorreo) USUARIO_DEMO.email = body.email.trim().toLowerCase();
         return json(res, 200, USUARIO_DEMO);
       }
     }

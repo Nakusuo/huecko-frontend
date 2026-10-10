@@ -22,7 +22,10 @@ export const profileService = {
    * (p. ej. «El correo ya está en uso»). En demo aplica la misma regla sobre
    * las cuentas guardadas en este navegador.
    */
-  async updateProfile(payload: Required<UpdateProfilePayload>, usuarioActual: AuthUser): Promise<AuthUser> {
+  async updateProfile(
+    payload: Required<Pick<UpdateProfilePayload, 'nombre' | 'email'>> & Pick<UpdateProfilePayload, 'passwordActual'>,
+    usuarioActual: AuthUser,
+  ): Promise<AuthUser> {
     if (!isApiEnabled) {
       return actualizarCuentaDemo(usuarioActual, payload);
     }
