@@ -14,6 +14,8 @@ export interface UserProfileData {
 export interface UpdateProfilePayload {
   nombre?: string;
   email?: string;
+  /** Solo al cambiar el correo: el servidor la exige (el correo es la llave de la cuenta). */
+  passwordActual?: string;
 }
 
 /**

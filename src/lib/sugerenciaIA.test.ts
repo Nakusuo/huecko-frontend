@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VotacionExpres } from '../types/incidents.types';
-import { sugerenciaDe } from './sugerenciaIA';
+import { sinPuntoFinal, sugerenciaDe } from './sugerenciaIA';
 
 const base: VotacionExpres = {
   id: 'v1',
@@ -51,5 +51,18 @@ describe('sugerenciaDe', () => {
     expect(
       sugerenciaDe({ ...cerrada, recomendacion: 'REAGENDAR', razonRecomendacion: 'lo que fuera aquí' }),
     ).toBeNull();
+  });
+});
+
+describe('sinPuntoFinal', () => {
+  it('quita el punto final para que «Porque {razón}.» no acabe en «..»', () => {
+    expect(sinPuntoFinal('el grupo ya compró las entradas. ')).toBe('el grupo ya compró las entradas');
+    expect(sinPuntoFinal('nadie más lleva coche...')).toBe('nadie más lleva coche');
+    expect(sinPuntoFinal('sin punto')).toBe('sin punto');
+  });
+
+  it('la razón de la sugerencia ya llega sin punto final', () => {
+    const conPunto = { ...base, recomendacion: 'MANTENER' as const, razonRecomendacion: 'faltan dos días.' };
+    expect(sugerenciaDe(conPunto)?.razon).toBe('faltan dos días');
   });
 });

@@ -1151,6 +1151,7 @@ export default function DashboardPage() {
               <textarea
                 value={incidentReason}
                 onChange={(e) => setIncidentReason(e.target.value)}
+                maxLength={300}
                 placeholder="Ej. Se me cruzó un examen de laboratorio / emergencia familiar..."
                 rows={3}
                 className="w-full p-3 rounded-xl border border-outline-variant text-xs focus:outline-none focus:border-primary resize-none"

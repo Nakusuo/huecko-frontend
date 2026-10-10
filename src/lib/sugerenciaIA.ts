@@ -21,5 +21,13 @@ export function sugerenciaDe(votacion: VotacionExpres): Sugerencia | null {
   const texto = OPCION_TEXTO[recomendacion];
   if (!texto) return null;
 
-  return { opcion: recomendacion, titulo: texto.titulo, razon: razonRecomendacion.trim() };
+  return { opcion: recomendacion, titulo: texto.titulo, razon: sinPuntoFinal(razonRecomendacion) };
+}
+
+/**
+ * Las razones (de la IA o de las reglas) se pintan dentro de una frase que ya
+ * pone su punto: «Porque {razón}.». Si la razón traía el suyo, salía «..».
+ */
+export function sinPuntoFinal(texto: string): string {
+  return texto.trim().replace(/[.。]+$/u, '').trimEnd();
 }
