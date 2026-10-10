@@ -269,3 +269,30 @@ describe('groupsStore (con backend)', () => {
     expect(useGroupsStore.getState().groups).toHaveLength(1);
   });
 });
+
+describe('voteProposalWindow (con backend)', () => {
+  it('un doble clic no manda dos peticiones: la segunda se ignora mientras la primera sigue en vuelo', async () => {
+    const { plansService } = await import('../services/plansService');
+    const abierto: PlanProposal = {
+      ...PLAN,
+      id: 'plan-voto',
+      estado: 'propuesto',
+      ventanasSugeridas: [{ id: 'v1', dia: 'Lunes', horaInicio: '10:00', horaFin: '11:00', votosUsuarios: [] } as never],
+    };
+    useGroupsStore.setState({ groupProposals: [abierto] });
+    let responder!: () => void;
+    const votar = vi.spyOn(plansService, 'vote').mockReturnValue(
+      new Promise((r) => { responder = () => r({} as never); }),
+    );
+    const quitar = vi.spyOn(plansService, 'removeVote');
+
+    const primero = useGroupsStore.getState().voteProposalWindow('plan-voto', 'v1', 'yo@huecko.com');
+    const segundo = await useGroupsStore.getState().voteProposalWindow('plan-voto', 'v1', 'yo@huecko.com');
+    responder();
+    await primero;
+
+    expect(segundo).toBe(false);
+    expect(votar).toHaveBeenCalledTimes(1);
+    expect(quitar).not.toHaveBeenCalled();
+  });
+});

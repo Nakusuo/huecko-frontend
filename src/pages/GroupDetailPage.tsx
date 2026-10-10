@@ -229,6 +229,8 @@ export default function GroupDetailPage() {
   const [proposalLugar, setProposalLugar] = useState('');
   const [proposalPlazo, setProposalPlazo] = useState('24 horas');
   const [proposalError, setProposalError] = useState('');
+  /* Sin esto un doble clic creaba dos planes iguales, y un plan no se puede borrar. */
+  const [enviandoPropuesta, setEnviandoPropuesta] = useState(false);
   const [suggestedWindows, setSuggestedWindows] = useState<TimeWindowProposal[]>([]);
   /** Plan en re-coordinación que se está reprogramando, o `null` si es uno nuevo. */
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
@@ -544,6 +546,7 @@ export default function GroupDetailPage() {
 
   const handleCreateProposalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (enviandoPropuesta) return;
     setProposalError('');
     // El número de opciones lo explica `problemasDePropuesta`; antes el
     // formulario simplemente no hacía nada con menos de dos.
@@ -575,6 +578,7 @@ export default function GroupDetailPage() {
       return;
     }
 
+    setEnviandoPropuesta(true);
     try {
       if (reschedulingId) {
         await rescheduleProposal(
@@ -609,6 +613,8 @@ export default function GroupDetailPage() {
          quedarse abierto para poder corregir las opciones. */
       setProposalError(error instanceof Error ? error.message : 'No se pudo crear el plan');
       return;
+    } finally {
+      setEnviandoPropuesta(false);
     }
 
     addNotification(
@@ -1541,9 +1547,10 @@ export default function GroupDetailPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer"
+                  disabled={enviandoPropuesta}
+                  className="px-5 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                 >
-                  {reschedulingId ? 'Volver a votar' : 'Enviar Propuesta a Todos'}
+                  {enviandoPropuesta ? 'Enviando…' : reschedulingId ? 'Volver a votar' : 'Enviar Propuesta a Todos'}
                 </button>
               </div>
             </form>
@@ -1594,6 +1601,7 @@ export default function GroupDetailPage() {
                   placeholder="Ej. Me surgió un examen de laboratorio, llegaré 30 mins tarde por tráfico..."
                   value={incidentMotivo}
                   onChange={(e) => setIncidentMotivo(e.target.value)}
+                  maxLength={300}
                   className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface placeholder-outline text-sm focus:outline-none focus:border-warning"
                 />
               </div>
