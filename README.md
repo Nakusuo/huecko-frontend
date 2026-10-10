@@ -39,6 +39,9 @@ Vite carga un archivo de variables según el modo en que se arranca:
 `.env.example` documenta todas las variables. Para cambiar algo solo en tu
 máquina, crea `.env.development.local`, que git ignora.
 
+Para publicarlo (Vercel, Render, Neon y Atlas), sigue
+[`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
+
 ### Modo conectado
 
 `npm run dev` espera el backend en `http://localhost:8080` (ver
