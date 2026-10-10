@@ -283,6 +283,9 @@ function estadoInicial() {
   };
 }
 
+/** Planes con un voto camino del servidor (ver voteProposalWindow). */
+const votosEnCurso = new Set<string>();
+
 export const useGroupsStore = create<GroupsState>()(
   persist(
     (set, get) => ({
@@ -705,6 +708,11 @@ export const useGroupsStore = create<GroupsState>()(
           ?.votosUsuarios.includes(userEmail) ?? false;
 
         if (isApiEnabled) {
+          /* Un doble clic mandaba PUT y DELETE seguidos (el segundo veía aún el
+             estado viejo) y el voto acababa al revés. Mientras uno está en
+             vuelo, los demás del mismo plan se ignoran. */
+          if (votosEnCurso.has(proposalId)) return false;
+          votosEnCurso.add(proposalId);
           const miembros = get().groups.find((g) => g.id === plan?.groupId)?.miembros ?? [];
           try {
             const actualizado = yaVotada
@@ -721,6 +729,8 @@ export const useGroupsStore = create<GroupsState>()(
               syncError: error instanceof Error ? error.message : 'No se pudo registrar tu voto',
             });
             return false;
+          } finally {
+            votosEnCurso.delete(proposalId);
           }
         }
 
