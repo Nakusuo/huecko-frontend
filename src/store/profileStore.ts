@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { profileService } from '../services/profileService';
 import { normalizarEmail } from '../services/authService';
 import { useAuthStore } from './authStore';
+import { isApiEnabled } from '../lib/apiClient';
 import type { PreferenciasLocales } from '../types/profile.types';
 
 export type { PreferenciasLocales };
@@ -36,7 +37,7 @@ interface ProfileState {
    * Guarda nombre y correo. Espera la respuesta y, si el servidor la rechaza,
    * LANZA con su mensaje: la página solo debe decir «guardado» si lo está.
    */
-  guardarPerfil: (datos: { nombre: string; email: string }) => Promise<void>;
+  guardarPerfil: (datos: { nombre: string; email: string; passwordActual?: string }) => Promise<void>;
   /** Cambia preferencias locales de la cuenta abierta. */
   setPreferencias: (cambios: Partial<PreferenciasLocales>) => void;
   /** Olvida el estado de carga y errores al cambiar de cuenta. Las preferencias se quedan: son por cuenta. */
@@ -83,9 +84,19 @@ export const useProfileStore = create<ProfileState>()(
         if (!nombre) throw new Error('El nombre no puede estar vacío.');
         if (!email) throw new Error('El correo no puede estar vacío.');
 
+        // El servidor pide la contraseña para cambiar el correo; avisar antes
+        // ahorra un viaje. Cambiar solo el nombre no la pide ni la envía.
+        const cambiaCorreo = email !== normalizarEmail(usuario.email);
+        if (cambiaCorreo && isApiEnabled && !datos.passwordActual) {
+          throw new Error('Para cambiar el correo escribe tu contraseña actual.');
+        }
+        const payload = cambiaCorreo && datos.passwordActual
+          ? { nombre, email, passwordActual: datos.passwordActual }
+          : { nombre, email };
+
         set({ isSaving: true });
         try {
-          const actualizado = await profileService.updateProfile({ nombre, email }, usuario);
+          const actualizado = await profileService.updateProfile(payload, usuario);
           // La sesión pudo cambiar mientras tanto (logout, otra cuenta).
           if (useAuthStore.getState().user?.id === usuario.id) {
             useAuthStore.getState().setUser({ ...usuario, nombre: actualizado.nombre, email: actualizado.email });
