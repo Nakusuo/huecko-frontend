@@ -13,6 +13,8 @@ import { isApiEnabled } from '../lib/apiClient';
 interface DatosCuenta {
   nombre: string;
   email: string;
+  /** Solo se pide si cambia el correo; nunca se guarda en la página. */
+  passwordActual?: string;
 }
 
 export default function ProfilePage() {
@@ -327,6 +329,27 @@ export default function ProfilePage() {
                       </div>
                     )}
                   </div>
+
+                  {/* El servidor exige la contraseña para cambiar el correo: con
+                      un token robado no basta para quedarse con la cuenta. */}
+                  {isEditing && isApiEnabled
+                    && tempProfile.email.trim().toLowerCase() !== datos.email.trim().toLowerCase() && (
+                    <div className="md:col-span-2">
+                      <label htmlFor="perfil-password-actual" className="block text-xs font-medium text-on-surface-variant mb-1.5">
+                        Contraseña actual <span className="text-on-surface-variant/70">(para cambiar el correo)</span>
+                      </label>
+                      <input
+                        id="perfil-password-actual"
+                        type="password"
+                        required
+                        maxLength={72}
+                        autoComplete="current-password"
+                        value={tempProfile.passwordActual ?? ''}
+                        onChange={(e) => setTempProfile({ ...tempProfile, passwordActual: e.target.value })}
+                        className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {isEditing && saveError && (
