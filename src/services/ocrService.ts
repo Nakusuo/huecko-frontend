@@ -1,10 +1,13 @@
 import { createWorker } from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
+// El worker de pdf.js sale del propio bundle: antes venía de unpkg, una
+// dependencia externa más en tiempo de ejecución (y en la CSP).
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { DayOfWeek } from '../store/scheduleStore';
 import { SUBJECT_COLORS, colorByIndex } from '../theme/palette';
 
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '5.4.530'}/build/pdf.worker.min.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 }
 
 export interface OcrExtractedSlot {
