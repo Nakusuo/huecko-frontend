@@ -51,7 +51,6 @@ export interface PlanIncidence {
   motivo: string;
   minutosTardanza?: number;
   fechaReporte: string;
-  criticidad?: 'BAJA' | 'MEDIA' | 'ALTA';
   /** Deja de estar abierta cuando la votación exprés decide qué hacer. */
   resuelta?: boolean;
 }

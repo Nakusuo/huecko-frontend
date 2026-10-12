@@ -304,8 +304,8 @@ function useCuentaAtras(expiraEnISO: string): CuentaAtras {
 function SelloDeOrigen({ origen }: { origen: OrigenCriticidad }) {
   const texto: Record<OrigenCriticidad, string> = {
     REGLAS: 'Según las reglas del grupo.',
-    IA: 'Evaluado automáticamente.',
-    REGLAS_POR_FALLO: 'Evaluado con las reglas del grupo: la evaluación automática no respondió.',
+    IA: 'Evaluado por la IA a partir del motivo.',
+    REGLAS_POR_FALLO: 'Evaluado con las reglas del grupo: la IA no respondió.',
   };
 
   return (

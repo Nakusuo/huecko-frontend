@@ -296,14 +296,14 @@ export async function processScheduleOcr(
   onProgress?.(10, 'Optimizando contraste y resolución de la imagen/PDF...');
   const { dataUrl, nativePdfWords } = await prepareImageSource(imageSource, onProgress);
 
-  onProgress?.(25, 'Iniciando motor neuronal OCR en español e inglés...');
+  onProgress?.(25, 'Iniciando el lector de texto (OCR) en español e inglés...');
   const worker = await createWorker('spa+eng', 1, {
     logger: (m) => {
       if (m.status === 'recognizing text') {
         const pct = Math.round(30 + m.progress * 60);
         onProgress?.(pct, `Reconociendo celdas y texto... (${Math.round(m.progress * 100)}%)`);
       } else if (m.status === 'loading tesseract core') {
-        onProgress?.(15, 'Cargando núcleos de IA...');
+        onProgress?.(15, 'Cargando el lector de texto...');
       } else if (m.status === 'loading language traineddata') {
         onProgress?.(20, 'Cargando diccionarios de español e inglés...');
       }

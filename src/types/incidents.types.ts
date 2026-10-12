@@ -90,6 +90,8 @@ export interface Ausencia {
 export interface ResultadoReporte {
   criticidad: Criticidad;
   razon: string;
+  /** Quién decidió: las reglas, la IA, o las reglas porque la IA no respondió. */
+  origen: OrigenCriticidad;
   /** `null` cuando la ausencia no es crítica (RF-19). */
   votacion: VotacionExpres | null;
 }

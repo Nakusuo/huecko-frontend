@@ -1242,7 +1242,7 @@ export default function SchedulePage() {
                       className="w-full py-3 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                     >
                       <span aria-hidden="true" className="material-symbols-outlined text-[18px]">auto_fix_high</span>
-                      <span>✨ Extraer Horarios con IA OCR</span>
+                      <span>Leer el horario de la imagen (OCR)</span>
                     </button>
                   </div>
                 ) : (

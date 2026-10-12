@@ -90,6 +90,7 @@ describe('groupsStore (con backend)', () => {
     incidentsService.reportarImprevisto = async () => ({
       criticidad: 'NO_CRITICA',
       razon: 'no es imprescindible',
+      origen: 'IA',
       votacion: null,
     });
 
@@ -97,6 +98,7 @@ describe('groupsStore (con backend)', () => {
 
     expect(resultado.replantea).toBe(false);
     expect(resultado.razon).toBe('no es imprescindible');
+    expect(resultado.origen).toBe('IA');
     expect(plan()?.estado).toBe('confirmado');
   });
 
@@ -104,6 +106,7 @@ describe('groupsStore (con backend)', () => {
     incidentsService.reportarImprevisto = async () => ({
       criticidad: 'CRITICA',
       razon: 'es imprescindible',
+      origen: 'REGLAS',
       votacion: VOTACION,
     });
 
