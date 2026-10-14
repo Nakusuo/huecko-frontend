@@ -15,7 +15,7 @@ import type {
   TimeWindowProposal,
 } from '../types/groups.types';
 import type { DayOfWeek } from '../types/schedule.types';
-import type { Criticidad } from '../types/incidents.types';
+import type { Criticidad, OrigenCriticidad } from '../types/incidents.types';
 import { colorByIndex } from '../theme/palette';
 import { useAuthStore } from './authStore';
 import { cuantosOrganizadores, miembroActual, normalizarCorreo, rolDe } from '../lib/grupos';
@@ -32,6 +32,7 @@ export interface ResultadoIncidencia {
   /** Veredicto del servidor; `null` en modo demo o si fue una tardanza. */
   criticidad: Criticidad | null;
   razon?: string;
+  origen?: OrigenCriticidad;
 }
 
 /** Resultado de dar de alta varios correos a la vez. */
@@ -849,6 +850,7 @@ export const useGroupsStore = create<GroupsState>()(
           replantea: res?.votacion != null,
           criticidad: res?.criticidad ?? null,
           razon: res?.razon,
+          origen: res?.origen,
         };
       },
 

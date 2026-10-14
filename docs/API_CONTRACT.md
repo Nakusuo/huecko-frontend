@@ -1,5 +1,9 @@
 # Contrato HTTP del frontend Huecko
 
+> **Histórico.** Este fue el contrato objetivo inicial; el backend real usa
+> otras rutas (por ejemplo `/api/planes/{planId}/imprevistos` en vez de
+> `/events/:id/incidents`). Las rutas vigentes están en `src/lib/endpoints.ts`.
+
 Prefijo: `/api/v1`. Salvo autenticación, todas las rutas requieren `Authorization: Bearer <jwt>` y responden JSON. Errores: `{ "message": "texto para el usuario" }`.
 
 ## Autenticación

@@ -17,6 +17,13 @@ export function describirAviso(
   if (resultado.replantea) {
     return `${nombre} no podrá ir a "${tituloPlan}". Se abrió una votación para decidir qué hacer.`;
   }
-  const razon = resultado.razon ? ` (${resultado.razon})` : '';
-  return `${nombre} no podrá ir a "${tituloPlan}". El plan sigue en pie${razon}.`;
+  return `${nombre} no podrá ir a "${tituloPlan}". El plan sigue en pie${porque(resultado)}.`;
+}
+
+/** La razón, con quién la dio cuando no fueron las reglas de siempre. */
+function porque({ razon, origen }: ResultadoIncidencia): string {
+  if (!razon) return '';
+  if (origen === 'IA') return ` (según la IA: ${razon})`;
+  if (origen === 'REGLAS_POR_FALLO') return ` (${razon}; la IA no respondió y se usaron las reglas)`;
+  return ` (${razon})`;
 }

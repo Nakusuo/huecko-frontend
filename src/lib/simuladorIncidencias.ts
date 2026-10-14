@@ -184,7 +184,7 @@ export function reportarImprevisto(planId: string, motivo: string): ResultadoRep
 
   if (!razon) {
     guardar();
-    return { criticidad: 'NO_CRITICA', razon: 'no cumple ninguna regla de criticidad', votacion: null };
+    return { criticidad: 'NO_CRITICA', razon: 'no cumple ninguna regla de criticidad', origen: 'REGLAS', votacion: null };
   }
 
   let votacion = estado.votaciones[planId];
@@ -209,7 +209,7 @@ export function reportarImprevisto(planId: string, motivo: string): ResultadoRep
     estado.votaciones[planId] = votacion;
   }
   guardar();
-  return { criticidad: 'CRITICA', razon, votacion: aRespuesta(votacion) };
+  return { criticidad: 'CRITICA', razon, origen: 'REGLAS', votacion: aRespuesta(votacion) };
 }
 
 export function listarAusencias(planId: string): Ausencia[] {

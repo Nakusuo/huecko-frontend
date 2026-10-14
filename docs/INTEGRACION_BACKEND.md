@@ -145,11 +145,19 @@ Cuando la votación se cierra, el plan queda confirmado en el backend, pero
 **nadie se entera hasta que vuelve a mirar**. Falta el canal de notificaciones
 (o el WebSocket de RNF-05) que avise a los integrantes.
 
-### 3.2 Módulos 4 y 5
+### 3.2 Módulos 4 y 5 (actualizado el 11 de octubre de 2026)
 
-Retrasos, imprevistos y votación exprés siguen **simulados en `groupsStore`**.
-El backend no expone nada de eso todavía: faltan las entidades y la evaluación
-de criticidad (RF-16).
+Ya no están simulados: retrasos, imprevistos y votación exprés van contra
+`/api/planes/{planId}/imprevistos` y `/api/planes/{planId}/votacion-expres`
+(ver `src/lib/endpoints.ts`). El simulador solo se usa en modo demo.
+
+La criticidad (RF-16) la decide el backend con reglas o, con
+`HUECKO_IMPREVISTOS_EVALUADOR=ia`, con el servicio `huecko-ai-service`. El
+frontend muestra quién decidió (`origen`: `REGLAS`, `IA`, `REGLAS_POR_FALLO`)
+en el aviso de quien reporta y en `VotacionExpresPanel`. Con
+`HUECKO_IA_RECOMENDACIONES=true`, la votación exprés trae además una
+sugerencia de la IA que llega tarde por el evento `VOTO_EXPRES_ACTUALIZADO`
+(`SugerenciaIA`). En modo demo nunca hay IA: no se finge una respuesta.
 
 ### 3.3 OCR en servidor
 
