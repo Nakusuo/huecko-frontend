@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import EmptyState from '../components/EmptyState';
 import type { OcrExtractedSlot } from '../services/ocrService';
+import { isApiEnabled } from '../lib/apiClient';
+import type { MotorLectura } from '../services/escaneoHorarioService';
 import { provisionalId, useScheduleStore } from '../store/scheduleStore';
 import type { DayOfWeek, TimeSlot } from '../store/scheduleStore';
 import { CATEGORY_COLORS, DEFAULT_CATEGORY_COLOR } from '../theme/palette';
@@ -103,6 +105,8 @@ export default function SchedulePage() {
   const [ocrDraftSlots, setOcrDraftSlots] = useState<OcrExtractedSlot[]>([]);
   /** Filas que el OCR leyó pero ya estaban en el horario (o repetidas en la foto). */
   const [ocrDescartadas, setOcrDescartadas] = useState(0);
+  /** Quién leyó la foto (Huecko IA o el lector del navegador) y, si la IA falló, por qué. */
+  const [ocrLectura, setOcrLectura] = useState<{ motor: MotorLectura; aviso?: string } | null>(null);
   const [ocrDraftError, setOcrDraftError] = useState<string | null>(null);
 
   // Notification Toast
@@ -341,7 +345,8 @@ export default function SchedulePage() {
     }
   };
 
-  // OCR Processing Execution (PDF.js + Tesseract Engine)
+  /* Lectura de la foto: con backend, Huecko IA; si no responde, o en modo
+     demo, el lector del navegador (PDF.js + Tesseract). */
   const handleStartOcr = async () => {
     setIsOcrProcessing(true);
     setOcrProgress(10);
@@ -353,11 +358,10 @@ export default function SchedulePage() {
     }
 
     try {
-      setOcrStatusText(`Preparando el lector de horarios...`);
-      const { processScheduleOcr } = await import('../services/ocrService');
+      setOcrStatusText(`Preparando la lectura de "${selectedOcrFile.name}"...`);
+      const { leerHorario } = await import('../services/escaneoHorarioService');
 
-      setOcrStatusText(`Iniciando escaneo de "${selectedOcrFile.name}"...`);
-      const { slots: extractedSlots } = await processScheduleOcr(
+      const { slots: extractedSlots, motor, aviso } = await leerHorario(
         selectedOcrFile,
         (progressPercent, statusMsg) => {
           setOcrProgress(progressPercent);
@@ -368,7 +372,11 @@ export default function SchedulePage() {
       if (extractedSlots.length === 0) {
         setIsOcrProcessing(false);
         setOcrProgress(0);
-        showToast('No pudimos reconocer bloques. Prueba con una imagen nítida, recta y donde se vean días y horas.');
+        showToast(
+          aviso
+            ? `${aviso} Tampoco encontró bloques: prueba con una imagen nítida o añádelos a mano.`
+            : 'No se encontraron bloques. Prueba con una imagen nítida, recta y donde se vean días y horas, o añádelos a mano.'
+        );
         return;
       }
 
@@ -396,6 +404,7 @@ export default function SchedulePage() {
       setIsOcrUploadModalOpen(false);
       setOcrDraftSlots(filas);
       setOcrDescartadas(descartados.length);
+      setOcrLectura({ motor, aviso });
       setOcrDraftError(null);
       setIsOcrDraftModalOpen(true);
       setOcrProgress(0);
@@ -495,7 +504,11 @@ export default function SchedulePage() {
       return;
     }
     setIsOcrDraftModalOpen(false);
-    showToast(`¡Se confirmaron e importaron ${importedSlots.length} asignaturas desde el OCR!`);
+    showToast(
+      importedSlots.length === 1
+        ? 'Se añadió 1 bloque a tu horario.'
+        : `Se añadieron ${importedSlots.length} bloques a tu horario.`
+    );
   };
 
   return (
@@ -523,20 +536,20 @@ export default function SchedulePage() {
               Mi horario
             </h1>
             <p className="mt-1 text-on-surface-variant text-sm md:text-base">
-              Define tus bloques recurrentes o eventos puntuales, o importa tu horario vía OCR.
+              Define tus bloques recurrentes o eventos puntuales, o escanea una foto de tu horario.
             </p>
             <p className="mt-2 text-xs text-on-surface-variant">
               {slots.length} {slots.length === 1 ? 'bloque registrado' : 'bloques registrados'}
             </p>
           </div>
           <div className="flex gap-3 w-full md:w-auto">
-            {/* Importar OCR */}
+            {/* Escanear horario (Huecko IA o lector del navegador) */}
             <button
               onClick={() => setIsOcrUploadModalOpen(true)}
               className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-all text-xs sm:text-sm font-semibold cursor-pointer elev-0 active:scale-95"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[20px] text-primary">document_scanner</span>
-              <span>Importar OCR</span>
+              <span>Escanear horario</span>
             </button>
             {/* Agregar bloque manual */}
             <button
@@ -561,7 +574,7 @@ export default function SchedulePage() {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="px-1.5 py-0.2 rounded bg-primary/15 text-primary font-bold text-2xs">OCR</span>
-            <span>Extraído por OCR</span>
+            <span>Escaneado de una foto</span>
           </div>
           <span className="ml-auto text-on-surface-variant hidden sm:inline text-2xs">
             Haz clic sobre cualquier bloque para <strong>editarlo o eliminarlo</strong>
@@ -1161,19 +1174,21 @@ export default function SchedulePage() {
 
       {/* Modal de carga por OCR */}
       {isOcrUploadModalOpen && (
-        <div role="dialog" aria-modal="true" aria-label="Autocompletar horario por OCR" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="Escanear horario" className="fixed inset-0 z-50 bg-scrim/50 flex items-center justify-center p-4">
           <div className="bg-surface rounded-3xl p-6 sm:p-8 w-full max-w-md elev-3 animate-modal-in text-center">
             <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 shadow-xs">
               <span aria-hidden="true" className="material-symbols-outlined text-3xl">document_scanner</span>
             </div>
             <span className="text-2xs font-bold uppercase tracking-wider text-primary">
-              OCR inteligente de horarios
+              {isApiEnabled ? 'Escaneo con Huecko IA' : 'Lector del navegador'}
             </span>
             <h2 className="text-xl font-bold text-on-surface mt-1 mb-2">
-              Autocompletar Horario por OCR
+              Escanear mi horario
             </h2>
             <p className="text-xs text-on-surface-variant mb-6">
-              Sube una foto o PDF de tu horario universitario/laboral. El sistema identificará asignaturas, días y rangos horarios.
+              {isApiEnabled
+                ? 'Sube una foto, captura o PDF de tu horario. Huecko IA leerá los cursos, días y horas, y podrás revisarlos antes de guardarlos.'
+                : 'Sube una foto, captura o PDF de tu horario. El lector del navegador buscará cursos, días y horas, y podrás revisarlos antes de guardarlos.'}
             </p>
 
             {isOcrProcessing ? (
@@ -1241,8 +1256,10 @@ export default function SchedulePage() {
                       onClick={handleStartOcr}
                       className="w-full py-3 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                     >
-                      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">auto_fix_high</span>
-                      <span>✨ Extraer Horarios con IA OCR</span>
+                      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+                        {isApiEnabled ? 'auto_awesome' : 'document_scanner'}
+                      </span>
+                      <span>{isApiEnabled ? 'Leer con Huecko IA' : 'Leer horario'}</span>
                     </button>
                   </div>
                 ) : (
@@ -1268,7 +1285,7 @@ export default function SchedulePage() {
                     <p className="text-xs font-bold text-on-surface">
                       Arrastra una foto o PDF de tu horario aquí
                     </p>
-                    <p className="text-2xs text-on-surface-variant">Admite PDF, JPG, PNG y WEBP, hasta 10 MB</p>
+                    <p className="text-2xs text-on-surface-variant">JPG, PNG, WEBP o PDF (se lee la primera página)</p>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -1310,10 +1327,10 @@ export default function SchedulePage() {
                   Revisión de borrador
                 </span>
                 <h2 className="text-xl font-bold text-on-surface">
-                  Revisar y Editar Bloques Extraídos por OCR
+                  Revisa los bloques leídos
                 </h2>
                 <p className="text-xs text-on-surface-variant mt-0.5">
-                  Toda la información permanece en <strong>estado borrador</strong> hasta que la confirmes. Corrige títulos, días u horarios según sea necesario.
+                  Nada se guarda hasta que lo confirmes: se sumarán a tu horario y afectarán a los huecos que vean tus grupos. Corrige lo que se haya leído mal o desmárcalo.
                 </p>
               </div>
               <button aria-label="Cerrar"
@@ -1324,6 +1341,20 @@ export default function SchedulePage() {
                 <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
+
+            {ocrLectura && (
+              <p className="mt-1 mb-2 flex items-start gap-2 text-xs rounded-xl bg-surface-container border border-outline-variant px-3 py-2 text-on-surface-variant">
+                <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-primary">
+                  {ocrLectura.motor === 'ia' ? 'auto_awesome' : 'document_scanner'}
+                </span>
+                <span>
+                  {ocrLectura.aviso ??
+                    (ocrLectura.motor === 'ia'
+                      ? 'Leído con Huecko IA. También se equivoca: revisa cada bloque.'
+                      : 'Leído con el lector del navegador, sin IA. Revisa cada bloque con cuidado.')}
+                </span>
+              </p>
+            )}
 
             {ocrDescartadas > 0 && (
               <p className="text-xs rounded-xl bg-surface-container border border-outline-variant px-3 py-2 text-on-surface-variant">
@@ -1435,7 +1466,7 @@ export default function SchedulePage() {
                 className="w-full py-2 border-2 border-dashed border-secondary hover:border-primary hover:bg-surface-container text-primary text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add_circle</span>
-                <span>+ Agregar Fila Manual al Borrador</span>
+                <span>Añadir un bloque a mano</span>
               </button>
             </div>
 
@@ -1460,7 +1491,7 @@ export default function SchedulePage() {
                   onClick={() => setIsOcrDraftModalOpen(false)}
                   className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-outline-variant text-xs font-bold text-on-surface-variant hover:bg-surface-container cursor-pointer"
                 >
-                  Descartar Borrador
+                  Descartar
                 </button>
                 <button
                   type="button"
@@ -1469,7 +1500,7 @@ export default function SchedulePage() {
                   className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check</span>
-                  <span>{isSaving ? 'Importando…' : 'Confirmar e Importar'}</span>
+                  <span>{isSaving ? 'Guardando…' : 'Añadir a mi horario'}</span>
                 </button>
               </div>
             </div>

@@ -95,6 +95,17 @@ export const endpoints = {
     topicGrupo: (grupoId: string) => `/topic/grupos/${grupoId}`,
   },
 
+  /**
+   * ✅ IaController: funciones de IA que pide la persona (traídas de la app
+   * móvil). Cada una gasta cupo; si la IA no responde llega un 503 y la
+   * pantalla sigue sin ella.
+   */
+  ia: {
+    estado: '/ia/estado',
+    /** Multipart con el campo `imagen`. No guarda nada. */
+    escaneoHorario: '/ia/horario/escaneo',
+  },
+
   /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */
   admin: {
     resumen: '/admin/resumen',
