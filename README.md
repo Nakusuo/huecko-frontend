@@ -121,7 +121,7 @@ se enseña: quien protege los datos es el backend, que responde 403 en
 | Peticiones HTTP | **Axios** | Interceptores para el JWT y para traducir los errores del servidor. |
 | Formularios | **React Hook Form + Zod** | Validación declarativa, con el mismo esquema para tipos y reglas. |
 | Tiempo real | **STOMP sobre SockJS** | Avisos del servidor sin sondeo, con reserva a *long polling*. |
-| OCR | **Tesseract.js + pdf.js** | Importar el horario desde una captura o un PDF. |
+| Escaneo del horario | **Huecko IA** (vía `huecko-backend`) + **Tesseract.js / pdf.js** | Leer el horario de una foto, captura o PDF. Con backend lo lee la IA; si no responde, o en modo demo, el lector del navegador. |
 | Pruebas | **Vitest** | Mismo motor que Vite, sin configuración aparte. |
 | Análisis estático | **Oxlint** | Reglas de React y TypeScript. |
 
@@ -143,7 +143,7 @@ src/
 ## Alcance implementado
 
 - Autenticación, registro, rutas protegidas y perfil/preferencias.
-- Bloques recurrentes y puntuales, edición, eliminación e importación OCR en borrador.
+- Bloques recurrentes y puntuales, edición, eliminación y escaneo de una foto del horario con Huecko IA (con el lector del navegador como respaldo), revisable antes de guardar.
 - Grupos, código de invitación, umbral de disponibilidad y heatmap semanal.
 - Propuestas con 2–5 ventanas, votación, confirmación, retrasos e imprevistos/votación exprés.
 - Notificaciones y UI responsiva para móvil y escritorio.

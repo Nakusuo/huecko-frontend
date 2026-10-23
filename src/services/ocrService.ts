@@ -288,6 +288,36 @@ async function prepareImageSource(
   });
 }
 
+/**
+ * Primera página de un PDF como JPEG, para mandarla a la IA (que solo acepta
+ * imágenes). Se dibuja con el lado mayor en `ladoMaximo`: más no mejora la
+ * lectura y sí el peso de la subida.
+ */
+export async function primeraPaginaComoImagen(pdf: File, ladoMaximo = 2000): Promise<Blob> {
+  const documento = await pdfjsLib.getDocument({ data: await pdf.arrayBuffer() }).promise;
+  const pagina = await documento.getPage(1);
+  const base = pagina.getViewport({ scale: 1 });
+  const viewport = pagina.getViewport({ scale: ladoMaximo / Math.max(base.width, base.height) });
+
+  const lienzo = document.createElement('canvas');
+  lienzo.width = Math.round(viewport.width);
+  lienzo.height = Math.round(viewport.height);
+  const ctx = lienzo.getContext('2d');
+  if (!ctx) throw new Error('El navegador no pudo dibujar el PDF.');
+  // Fondo blanco: un PDF sin fondo sale transparente y en JPEG queda negro.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, lienzo.width, lienzo.height);
+  await pagina.render({ canvasContext: ctx, canvas: lienzo, viewport } as any).promise;
+
+  return new Promise((resolver, rechazar) =>
+    lienzo.toBlob(
+      (imagen) => (imagen ? resolver(imagen) : rechazar(new Error('No se pudo convertir el PDF en imagen.'))),
+      'image/jpeg',
+      0.9
+    )
+  );
+}
+
 // Ejecuta el OCR del horario.
 export async function processScheduleOcr(
   imageSource: File | string,
@@ -296,14 +326,14 @@ export async function processScheduleOcr(
   onProgress?.(10, 'Optimizando contraste y resolución de la imagen/PDF...');
   const { dataUrl, nativePdfWords } = await prepareImageSource(imageSource, onProgress);
 
-  onProgress?.(25, 'Iniciando motor neuronal OCR en español e inglés...');
+  onProgress?.(25, 'Iniciando el lector de texto (español e inglés)...');
   const worker = await createWorker('spa+eng', 1, {
     logger: (m) => {
       if (m.status === 'recognizing text') {
         const pct = Math.round(30 + m.progress * 60);
         onProgress?.(pct, `Reconociendo celdas y texto... (${Math.round(m.progress * 100)}%)`);
       } else if (m.status === 'loading tesseract core') {
-        onProgress?.(15, 'Cargando núcleos de IA...');
+        onProgress?.(15, 'Cargando el lector de texto...');
       } else if (m.status === 'loading language traineddata') {
         onProgress?.(20, 'Cargando diccionarios de español e inglés...');
       }
