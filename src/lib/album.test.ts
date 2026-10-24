@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cuantasFotos, fechaDelPlan } from './album';
+import { alternarReaccion, cuantasFotos, fechaDelPlan, totalReacciones } from './album';
 import { enEnvios } from './fotos';
 
 describe('fechaDelPlan', () => {
@@ -32,5 +32,15 @@ describe('enEnvios', () => {
 
   it('una sola foto grande va sola', () => {
     expect(enEnvios([foto(6000)]).map((e) => e.length)).toEqual([1]);
+  });
+});
+
+describe('reacciones', () => {
+  it('alternar pone y quita la tuya sin dejar contadores en cero', () => {
+    const foto = { reacciones: { RISA: 1 }, misReacciones: [] as ('CORAZON' | 'RISA')[] };
+    const conCorazon = alternarReaccion(foto, 'CORAZON');
+    expect(conCorazon).toEqual({ reacciones: { RISA: 1, CORAZON: 1 }, misReacciones: ['CORAZON'] });
+    expect(alternarReaccion(conCorazon, 'CORAZON')).toEqual({ reacciones: { RISA: 1 }, misReacciones: [] });
+    expect(totalReacciones({ RISA: 2, FUEGO: 3 })).toBe(5);
   });
 });

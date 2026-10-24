@@ -30,13 +30,33 @@ export interface AlbumPlan {
   fotos: FotoAlbum[];
 }
 
-export interface FotoAlbum {
+/** Espejo de `ReaccionFoto.Reaccion`: ❤️ 😂 🔥 😮 👏. */
+export type Reaccion = 'CORAZON' | 'RISA' | 'FUEGO' | 'ASOMBRO' | 'APLAUSO';
+
+/** Reacciones (contadas por nombre), las tuyas y el número de comentarios. */
+export interface Interacciones {
+  reacciones: Partial<Record<Reaccion, number>>;
+  misReacciones: Reaccion[];
+  comentarios: number;
+}
+
+export interface FotoAlbum extends Interacciones {
   id: string;
   autorId: string;
   autorNombre: string;
   ancho: number;
   alto: number;
   subidaEn: string;
+  puedeBorrar: boolean;
+}
+
+export interface ComentarioFoto {
+  id: string;
+  autorId: string;
+  autorNombre: string;
+  autorFotoActualizadaEn: string | null;
+  texto: string;
+  creadoEn: string;
   puedeBorrar: boolean;
 }
 

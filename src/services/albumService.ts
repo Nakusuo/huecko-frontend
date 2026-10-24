@@ -3,7 +3,8 @@ import { endpoints } from '../lib/endpoints';
 import { blobADataUrl, enEnvios, olvidarFotoDeAlbum } from '../lib/fotos';
 import { useAuthStore } from '../store/authStore';
 import { useGroupsStore } from '../store/groupsStore';
-import type { AlbumGrupo, AlbumPlan, FotoAlbum } from '../types/album.types';
+import { alternarReaccion } from '../lib/album';
+import type { AlbumGrupo, AlbumPlan, ComentarioFoto, FotoAlbum, Interacciones, Reaccion } from '../types/album.types';
 import type { PlanProposal } from '../types/groups.types';
 
 /* ------------------------------------------------------------------ *
@@ -13,6 +14,15 @@ import type { PlanProposal } from '../types/groups.types';
 
 export const MAX_DEMO = { porPersona: 10, porGrupo: 60 };
 const fotosDemo = new Map<string, { foto: FotoAlbum; url: string; grupoId: string }[]>();
+const comentariosDemo = new Map<string, ComentarioFoto[]>();
+
+function fotoDemoPorId(fotoId: string) {
+  for (const lista of fotosDemo.values()) {
+    const encontrada = lista.find((f) => f.foto.id === fotoId);
+    if (encontrada) return encontrada;
+  }
+  throw new Error('Esa foto no existe.');
+}
 
 /** La URL de una foto del modo demo (una data URL), o `undefined`. */
 export function fotoDemo(fotoId: string): string | undefined {
@@ -101,6 +111,9 @@ export const albumService = {
             alto: 0,
             subidaEn: new Date().toISOString(),
             puedeBorrar: true,
+            reacciones: {},
+            misReacciones: [],
+            comentarios: 0,
           },
         });
         alAvanzar?.(i + 1);
@@ -125,6 +138,55 @@ export const albumService = {
     }
     if (!resultado) throw new Error('Elige al menos una foto.');
     return resultado;
+  },
+
+  async reaccionar(fotoId: string, reaccion: Reaccion, poner: boolean): Promise<Interacciones> {
+    if (!isApiEnabled) {
+      const guardada = fotoDemoPorId(fotoId);
+      if (guardada.foto.misReacciones.includes(reaccion) !== poner) guardada.foto = alternarReaccion(guardada.foto, reaccion);
+      return guardada.foto;
+    }
+    const ruta = endpoints.album.reaccion(fotoId, reaccion);
+    const { data } = poner ? await apiClient.put<Interacciones>(ruta) : await apiClient.delete<Interacciones>(ruta);
+    return data;
+  },
+
+  async comentarios(fotoId: string): Promise<ComentarioFoto[]> {
+    if (!isApiEnabled) return comentariosDemo.get(fotoId) ?? [];
+    const { data } = await apiClient.get<ComentarioFoto[]>(endpoints.album.comentarios(fotoId));
+    return data;
+  },
+
+  async comentar(fotoId: string, texto: string): Promise<ComentarioFoto[]> {
+    if (!isApiEnabled) {
+      const yo = useAuthStore.getState().user;
+      const guardada = fotoDemoPorId(fotoId);
+      const lista = [...(comentariosDemo.get(fotoId) ?? []), {
+        id: `demo-${Date.now()}`,
+        autorId: yo?.id ?? 'demo',
+        autorNombre: yo?.nombre ?? 'Tú',
+        autorFotoActualizadaEn: null,
+        texto: texto.trim(),
+        creadoEn: new Date().toISOString(),
+        puedeBorrar: true,
+      }];
+      comentariosDemo.set(fotoId, lista);
+      guardada.foto = { ...guardada.foto, comentarios: lista.length };
+      return lista;
+    }
+    const { data } = await apiClient.post<ComentarioFoto[]>(endpoints.album.comentarios(fotoId), { texto: texto.trim() });
+    return data;
+  },
+
+  async borrarComentario(fotoId: string, comentarioId: string): Promise<void> {
+    if (!isApiEnabled) {
+      const lista = (comentariosDemo.get(fotoId) ?? []).filter((c) => c.id !== comentarioId);
+      comentariosDemo.set(fotoId, lista);
+      const guardada = fotoDemoPorId(fotoId);
+      guardada.foto = { ...guardada.foto, comentarios: lista.length };
+      return;
+    }
+    await apiClient.delete(endpoints.album.comentario(comentarioId));
   },
 
   async borrar(fotoId: string): Promise<void> {

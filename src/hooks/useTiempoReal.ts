@@ -74,7 +74,7 @@ export function useTiempoReal(): void {
 
       /* Lo que hice yo no me lo notifico: ya lo vi al hacerlo. Antes quien
          avisaba de un retraso recibía además «Alguien llega tarde: <yo>…». */
-      const aviso = d.usuarioId && d.usuarioId === miUsuarioId ? null : avisoDeEvento(evento);
+      const aviso = d.usuarioId && d.usuarioId === miUsuarioId ? null : avisoDeEvento(evento, miUsuarioId);
       // Silenciar los retrasos solo quita el aviso: el evento se aplica igual.
       if (aviso && (alertasRetrasos || aviso.type !== 'incident')) {
         addNotification({ ...aviso, groupId: evento.grupoId });

@@ -17,8 +17,11 @@ export interface AvisoDeEvento {
   description: string;
 }
 
-/** `null` = este tipo no produce aviso (o no se reconoce). */
-export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
+/**
+ * `null` = este tipo no produce aviso (o no se reconoce). `yo` hace falta
+ * para los avisos que son solo para una persona del grupo.
+ */
+export function avisoDeEvento(evento: RealtimeEvent, yo?: string): AvisoDeEvento | null {
   const d = evento.datos as Record<string, unknown>;
 
   switch (evento.tipo) {
@@ -61,6 +64,15 @@ export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
         description: `Al álbum de «${String(d.titulo ?? 'un plan')}».`,
       };
     }
+
+    case 'FOTO_CONVERSACION':
+      // Una reacción solo refresca; un comentario avisa a quien subió la foto.
+      if (d.comentario !== true || !yo || d.autorFotoId !== yo) return null;
+      return {
+        type: 'system',
+        title: `${String(d.nombre ?? 'Alguien')} comentó tu foto`,
+        description: `En el álbum de «${String(d.titulo ?? 'un plan')}».`,
+      };
 
     case 'MIEMBRO_UNIDO':
       return {
