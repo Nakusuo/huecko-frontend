@@ -34,6 +34,9 @@ export const endpoints = {
   /** ✅ LibreAhoraController: GET el estado, PUT «Estoy libre», DELETE para quitarlo. */
   libreAhora: '/me/libre-ahora',
 
+  /** ✅ MuroController: `?antes=` con el `siguiente` de la página anterior. */
+  muro: (grupoId: string) => `/grupos/${grupoId}/muro`,
+
   /** ✅ LlegadaController: GET el estado, PUT «Llegué», DELETE para deshacerlo. */
   llegadas: (planId: string) => `/planes/${planId}/llegadas`,
 
