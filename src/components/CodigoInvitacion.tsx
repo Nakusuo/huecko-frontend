@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { QrInvitacion } from './QrInvitacion';
 import { useGroupsStore } from '../store/groupsStore';
 import type { Group } from '../types/groups.types';
 
@@ -14,6 +15,7 @@ export function CodigoInvitacion({ grupo }: { grupo: Group }) {
   const [cambiando, setCambiando] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verQr, setVerQr] = useState(false);
   const codigo = grupo.codigoInvitacion ?? null;
 
   const cambiar = async (activar: boolean) => {
@@ -59,6 +61,14 @@ export function CodigoInvitacion({ grupo }: { grupo: Group }) {
               <span aria-hidden="true" className="material-symbols-outlined text-[16px]">{copiado ? 'check' : 'content_copy'}</span>
               {copiado ? 'Copiado' : 'Copiar'}
             </button>
+            <button
+              type="button"
+              onClick={() => setVerQr(true)}
+              className="px-3 py-1.5 rounded-lg border border-outline-variant text-xs font-semibold text-on-surface hover:bg-surface-container cursor-pointer flex items-center gap-1"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[16px]">qr_code_2</span>
+              Mostrar QR
+            </button>
           </div>
           <p className="text-2xs text-on-surface-variant">
             Quien lo tenga entra al grupo con «Unirme con código» y todos reciben un aviso. Solo tú lo ves: compártelo
@@ -87,6 +97,7 @@ export function CodigoInvitacion({ grupo }: { grupo: Group }) {
           {error}
         </p>
       )}
+      {verQr && codigo && <QrInvitacion codigo={codigo} nombreGrupo={grupo.nombre} onCerrar={() => setVerQr(false)} />}
     </section>
   );
 }
