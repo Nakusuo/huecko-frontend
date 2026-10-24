@@ -21,13 +21,16 @@ const TIPOS: { valor: TipoReporte; titulo: string; detalle: string; icon: string
 /**
  * Diálogo para avisar al equipo de Huecko. Va con la página en la que se está,
  * para que quien lo lea sepa dónde mirar sin tener que preguntar.
+ *
+ * Con `cuentaReportada` (un correo) se abre ya como problema con esa persona:
+ * es lo que usa el botón «Reportar» de la tarjeta de perfil.
  */
-function ReportarProblemaModal({ onClose }: { onClose: () => void }) {
+export function ReportarProblemaModal({ onClose, cuentaReportada }: { onClose: () => void; cuentaReportada?: string }) {
   const user = useAuthStore((s) => s.user);
   const { pathname } = useLocation();
-  const [tipo, setTipo] = useState<TipoReporte>('FALLO');
+  const [tipo, setTipo] = useState<TipoReporte>(cuentaReportada ? 'CONDUCTA' : 'FALLO');
   const [descripcion, setDescripcion] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(cuentaReportada ?? '');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enviado, setEnviado] = useState(false);

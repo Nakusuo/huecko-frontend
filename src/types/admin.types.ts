@@ -129,6 +129,8 @@ export interface ReporteAdmin {
   cuentaReportadaEmail: string | null;
   /** Estado actual de la cuenta señalada. `null` si no es de conducta o ya no existe. */
   cuentaReportadaSuspendida: boolean | null;
+  /** Si la cuenta señalada tiene foto, para poder revisarla. Opcional: el modo demo no tiene fotos. */
+  cuentaReportadaConFoto?: boolean | null;
   estado: EstadoRevision;
   creadoEn: string;
   actualizadoEn: string;

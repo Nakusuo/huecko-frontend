@@ -54,6 +54,7 @@ function toMember(miembro: MiembroResponse, index: number): GroupMember {
     color: colorByIndex(index),
     // El backend no tiene invitaciones pendientes: o eres miembro o no estás.
     rol: miembro.rol,
+    fotoActualizadaEn: miembro.fotoActualizadaEn ?? null,
   };
 }
 
