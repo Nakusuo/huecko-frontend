@@ -10,6 +10,7 @@ import { isApiEnabled } from '../lib/apiClient';
 import { useNotificationStore } from '../store/notificationStore';
 import { avisarAltasPendientes } from '../lib/avisosAltas';
 import { AvisoError } from '../components/AvisoError';
+import { codigoDelEnlace } from '../lib/invitacion';
 import { AvatarMiembro } from '../components/Avatar';
 import type { GroupMember } from '../types/groups.types';
 
@@ -42,12 +43,15 @@ export default function GroupsListPage() {
      volver atrás no vuelva a abrir el modal. */
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreateOpen, setIsCreateOpen] = useState(() => searchParams.get('crear') === '1');
-  const [isJoinOpen, setIsJoinOpen] = useState(false);
+  /* `?unirse=CÓDIGO` llega del QR de invitación: abre «Unirme con código» ya relleno. */
+  const [codigoDelQr] = useState(() => (isApiEnabled ? codigoDelEnlace(searchParams.get('unirse')) : null));
+  const [isJoinOpen, setIsJoinOpen] = useState(() => codigoDelQr !== null);
   const [eligiendoParaProponer] = useState(() => searchParams.get('proponer') === '1');
   useEffect(() => {
-    if (searchParams.has('crear')) {
+    if (searchParams.has('crear') || searchParams.has('unirse')) {
       const resto = new URLSearchParams(searchParams);
       resto.delete('crear');
+      resto.delete('unirse');
       setSearchParams(resto, { replace: true });
     }
   }, [searchParams, setSearchParams]);
@@ -168,6 +172,7 @@ export default function GroupsListPage() {
 
       {isJoinOpen && (
         <UnirseConCodigo
+          codigoInicial={codigoDelQr ?? undefined}
           onCerrar={() => setIsJoinOpen(false)}
           onUnido={(grupo, yaEstabas) => {
             setIsJoinOpen(false);
