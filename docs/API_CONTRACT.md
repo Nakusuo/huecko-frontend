@@ -21,6 +21,8 @@ Prefijo: `/api/v1`. Salvo autenticación, todas las rutas requieren `Authorizati
 | `PUT /me/foto`, `DELETE /me/foto` | Sube (multipart, campo `foto`) o quita la foto de perfil. |
 | `GET /me/logros` | Planes vividos, a tiempo, propuestos e insignias. Solo para ti. |
 | `GET /usuarios/:id/perfil`, `GET /usuarios/:id/foto` | Tarjeta y foto de alguien con quien compartes un grupo; si no, `404`. |
+| `GET /me/libre-ahora` | Tu aviso, si tienes clase ahora, hasta cuándo estás libre según tu horario y, por grupo, cuántos no tienen clase y quiénes avisaron. |
+| `PUT /me/libre-ahora`, `DELETE /me/libre-ahora` | «Estoy libre» (`{hasta?, nota?}`) y quitarlo. |
 | `GET /schedule/blocks` | Devuelve los bloques del usuario. |
 | `POST /schedule/blocks` | Crea bloque manual. |
 | `PATCH /schedule/blocks/:id` | Edita bloque. |

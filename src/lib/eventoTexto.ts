@@ -1,6 +1,7 @@
 import type { AppNotification } from '../store/notificationStore';
 import type { PlanConfirmadoDatos, RealtimeEvent } from '../types/realtime.types';
 import { normalizeTime } from './formatoBackend';
+import { horaCorta } from './libreAhora';
 
 /**
  * De un evento del canal en tiempo real al aviso que ve el usuario.
@@ -37,6 +38,17 @@ export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
         description: d.motivo
           ? `"${String(d.titulo ?? 'El plan')}" se canceló: ${String(d.motivo).charAt(0).toLowerCase()}${String(d.motivo).slice(1)}.`
           : `"${String(d.titulo ?? 'El plan')}" se canceló.`,
+      };
+
+    case 'LIBRE_AHORA':
+      /* La hora y la nota las escribió esa persona: no salen de su horario (RNF-02). */
+      return {
+        type: 'system',
+        title: `${String(d.nombre ?? 'Alguien')} está libre`,
+        description:
+          (typeof d.hasta === 'string' ? `Hasta las ${horaCorta(d.hasta)}` : 'Ahora mismo')
+          + (typeof d.nota === 'string' && d.nota ? ` · ${d.nota}` : '')
+          + '.',
       };
 
     case 'MIEMBRO_UNIDO':
