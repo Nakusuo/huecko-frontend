@@ -104,6 +104,8 @@ export const endpoints = {
     estado: '/ia/estado',
     /** Multipart con el campo `imagen`. No guarda nada. */
     escaneoHorario: '/ia/horario/escaneo',
+    /** `{texto}` → borrador para «Proponer plan». No guarda nada. */
+    borradorPlan: (grupoId: string) => `/grupos/${grupoId}/ia/borrador-plan`,
   },
 
   /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */

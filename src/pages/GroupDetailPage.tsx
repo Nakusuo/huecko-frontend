@@ -35,10 +35,15 @@ import { useScheduleStore } from '../store/scheduleStore';
 import { describirAviso } from '../lib/avisosIncidencia';
 import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
+import { BorradorConIA } from '../components/BorradorConIA';
+import { useOfrecerIA } from '../hooks/useOfrecerIA';
+import { completarOpciones } from '../services/planesIaService';
+import type { BorradorPlan } from '../services/planesIaService';
 import {
   estadoVisible,
   formatearPlazo,
   formatearVentana,
+  inicioDeVentana,
   problemasDePropuesta,
   ventanaGanadora,
 } from '../lib/planes';
@@ -71,6 +76,9 @@ function lunesDeEstaSemana(): string {
  * esta funcion, y por eso el caso por defecto son 24 horas en vez de un fallo.
  */
 function plazoAInstante(plazo: string): string {
+  // El plazo exacto que sugirió Huecko IA ya es un instante.
+  if (esInstante(plazo)) return plazo;
+
   const horas = /^(\d+)\s*horas?$/i.exec(plazo.trim());
   if (horas) {
     return new Date(Date.now() + Number(horas[1]) * 3_600_000).toISOString();
@@ -88,6 +96,8 @@ function plazoAInstante(plazo: string): string {
 
   return new Date(Date.now() + 24 * 3_600_000).toISOString();
 }
+
+const esInstante = (plazo: string) => /^\d{4}-\d{2}-\d{2}T/.test(plazo);
 
 /** Porcentaje desconocido: todavía no llegó el cruce del servidor. */
 const SIN_DATO = -1;
@@ -234,6 +244,7 @@ export default function GroupDetailPage() {
   const [suggestedWindows, setSuggestedWindows] = useState<TimeWindowProposal[]>([]);
   /** Plan en re-coordinación que se está reprogramando, o `null` si es uno nuevo. */
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
+  const ofrecerIA = useOfrecerIA();
 
   // Form window input temporary
   const [tempDay, setTempDay] = useState<DayOfWeek>('Mié');
@@ -518,6 +529,22 @@ export default function GroupDetailPage() {
     setProposalError('');
     setSuggestedWindows(ventanasIniciales(group));
     setIsProposeModalOpen(true);
+  };
+
+  /**
+   * Un borrador de Huecko IA sustituye lo escrito: título, lugar, opciones y
+   * plazo. Si trae menos de dos opciones se completa con las sugeridas, y su
+   * plazo solo se usa si sigue cerrando antes de la primera opción final.
+   */
+  const aplicarBorrador = (borrador: BorradorPlan) => {
+    if (!selectedGroup) return;
+    const opciones = completarOpciones(borrador.ventanas, ventanasIniciales(selectedGroup));
+    const primera = Math.min(...opciones.map((o) => inicioDeVentana(o).getTime()));
+    setProposalTitle(borrador.titulo);
+    setProposalLugar(borrador.lugar ?? '');
+    setSuggestedWindows(opciones);
+    if (new Date(borrador.plazoVotacion).getTime() < primera) setProposalPlazo(borrador.plazoVotacion);
+    setProposalError('');
   };
 
   const handleAddWindowToProposal = () => {
@@ -1405,6 +1432,10 @@ export default function GroupDetailPage() {
             </div>
 
             <form onSubmit={handleCreateProposalSubmit} className="space-y-4">
+              {ofrecerIA && !reschedulingId && (
+                <BorradorConIA grupoId={selectedGroup.id} onBorrador={aplicarBorrador} />
+              )}
+
               <div>
                 <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Título del Plan *</label>
                 <input
@@ -1435,6 +1466,9 @@ export default function GroupDetailPage() {
                   onChange={(e) => setProposalPlazo(e.target.value)}
                   className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
                 >
+                  {esInstante(proposalPlazo) && (
+                    <option value={proposalPlazo}>Sugerido por Huecko IA: {formatearPlazo(proposalPlazo)}</option>
+                  )}
                   <option value="12 horas">12 horas (Cierre rápido)</option>
                   <option value="24 horas">24 horas (Recomendado)</option>
                   <option value="48 horas">48 horas</option>
