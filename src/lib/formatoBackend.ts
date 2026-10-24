@@ -22,6 +22,13 @@ export function numberToDay(diaSemana: number | null | undefined): DayOfWeek {
   return DAY_ORDER[diaSemana - 1];
 }
 
+/** Día de la semana de una fecha ISO (`YYYY-MM-DD`), leída como fecha de calendario y no como instante UTC. */
+export function dayFromIsoDate(fecha: string): DayOfWeek {
+  const [year, month, day] = fecha.split('-').map(Number);
+  const jsDay = new Date(year, (month ?? 1) - 1, day ?? 1).getDay(); // 0 = domingo
+  return DAY_ORDER[(jsDay + 6) % 7];
+}
+
 /** El backend serializa `LocalTime` como "HH:mm" o "HH:mm:ss"; la interfaz usa "HH:mm". */
 export function normalizeTime(value: string | null | undefined): string {
   if (!value) return '00:00';

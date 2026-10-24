@@ -164,3 +164,13 @@ describe('avisoDeEvento', () => {
     }
   });
 });
+
+describe('MIEMBRO_UNIDO', () => {
+  it('avisa al grupo de quién entró con el código', () => {
+    expect(avisoDeEvento(evento('MIEMBRO_UNIDO', { usuarioId: 'u-9', nombre: 'Luis' }))).toEqual({
+      type: 'system',
+      title: 'Alguien se unió al grupo',
+      description: 'Luis entró con el código de invitación.',
+    });
+  });
+});

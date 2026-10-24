@@ -37,7 +37,11 @@ export const endpoints = {
   groups: {
     list: '/grupos',
     detail: (grupoId: string) => `/grupos/${grupoId}`,
-    /** Alta de integrante por correo. Sustituye a `/grupos/unirse`. */
+    /** Entrar con el código de invitación (`{codigo}`). */
+    unirse: '/grupos/unirse',
+    /** POST: código nuevo; DELETE: desactivarlo. Solo quien organiza. */
+    codigo: (grupoId: string) => `/grupos/${grupoId}/codigo`,
+    /** Alta de integrante por correo, decidida por quien organiza. */
     miembros: (grupoId: string) => `/grupos/${grupoId}/miembros`,
     member: (grupoId: string, usuarioId: string) => `/grupos/${grupoId}/miembros/${usuarioId}`,
     availability: (grupoId: string) => `/grupos/${grupoId}/disponibilidad`,
@@ -95,9 +99,28 @@ export const endpoints = {
     topicGrupo: (grupoId: string) => `/topic/grupos/${grupoId}`,
   },
 
+  /**
+   * ✅ IaController: funciones de IA que pide la persona (traídas de la app
+   * móvil). Cada una gasta cupo; si la IA no responde llega un 503 y la
+   * pantalla sigue sin ella.
+   */
+  ia: {
+    estado: '/ia/estado',
+    /** Multipart con el campo `imagen`. No guarda nada. */
+    escaneoHorario: '/ia/horario/escaneo',
+    /** `{texto}` → borrador para «Proponer plan». No guarda nada. */
+    borradorPlan: (grupoId: string) => `/grupos/${grupoId}/ia/borrador-plan`,
+    /** Sin cuerpo → 3 ideas de plan para los huecos del grupo. No guarda nada. */
+    ideasPlan: (grupoId: string) => `/grupos/${grupoId}/ia/ideas-plan`,
+    /** Sin cuerpo → cómo va la votación de un plan. No cambia nada. */
+    resumenVotacion: (planId: string) => `/planes/${planId}/ia/resumen`,
+  },
+
   /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */
   admin: {
     resumen: '/admin/resumen',
+    /** Uso de Huecko IA por función en el último mes. */
+    ia: '/admin/ia',
     pendientes: '/admin/pendientes',
     salud: '/admin/salud',
     fallos: '/admin/fallos',

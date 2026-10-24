@@ -5,10 +5,9 @@ import { colorByIndex } from '../theme/palette';
 import type {
   BloqueHorarioRequest,
   BloqueHorarioResponse,
-  DayOfWeek,
   TimeSlot,
 } from '../types/schedule.types';
-import { DAY_ORDER, dayToNumber, normalizeTime, numberToDay } from '../lib/formatoBackend';
+import { dayFromIsoDate, dayToNumber, normalizeTime, numberToDay } from '../lib/formatoBackend';
 
 /**
  * Puente entre la rejilla del frontend (`TimeSlot`) y el módulo de horario del
@@ -16,13 +15,6 @@ import { DAY_ORDER, dayToNumber, normalizeTime, numberToDay } from '../lib/forma
  * el store no sabe nada de `diaSemana` ni de mayúsculas en los enums.
  */
 
-
-/** Día de la semana (1-7) de una fecha ISO, para poder ubicar un bloque puntual. */
-function dayFromIsoDate(fecha: string): DayOfWeek {
-  const [year, month, day] = fecha.split('-').map(Number);
-  const jsDay = new Date(year, (month ?? 1) - 1, day ?? 1).getDay(); // 0 = domingo
-  return DAY_ORDER[(jsDay + 6) % 7];
-}
 
 /** Color estable a partir del título, para bloques que llegan del servidor sin metadatos locales. */
 function colorForTitle(title: string): string {

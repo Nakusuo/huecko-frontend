@@ -119,6 +119,14 @@ interface GroupsState {
   removeMember: (groupId: string, memberEmail: string) => Promise<void>;
   /** Salir del grupo: si el servidor lo acepta, el grupo desaparece de la lista. */
   leaveGroup: (groupId: string) => Promise<void>;
+  /**
+   * Entrar con el código de invitación. Devuelve el grupo y si ya estabas en
+   * él. LANZA si el código no vale (404) o hubo demasiados intentos (429):
+   * quien lo escribe tiene que ver el motivo. Solo con backend.
+   */
+  joinByCode: (codigo: string) => Promise<{ grupo: Group; yaEstabas: boolean }>;
+  /** Código nuevo (`true`) o desactivarlo (`false`). Solo quien organiza; lanza si no. */
+  changeInviteCode: (groupId: string, activar: boolean) => Promise<void>;
 
   /**
    * `backendPayload` lleva la propuesta ya en el formato del Módulo 3 (fechas
@@ -529,6 +537,26 @@ export const useGroupsStore = create<GroupsState>()(
 
         set((state) => ({
           groups: state.groups.map((g) => (g.id === groupId ? { ...g, ...cambios } : g)),
+        }));
+      },
+
+      joinByCode: async (codigo) => {
+        const grupo = await groupsService.joinByCode(codigo);
+        const yaEstabas = get().groups.some((g) => g.id === grupo.id);
+        generacionGrupos++;
+        set((state) => ({
+          groups: yaEstabas ? state.groups.map((g) => (g.id === grupo.id ? grupo : g)) : [...state.groups, grupo],
+        }));
+        // Con una persona más cambia el denominador del cruce.
+        if (!yaEstabas) void get().fetchAvailability(grupo.id);
+        return { grupo, yaEstabas };
+      },
+
+      changeInviteCode: async (groupId, activar) => {
+        const actualizado = await groupsService.changeInviteCode(groupId, activar);
+        generacionGrupos++;
+        set((state) => ({
+          groups: state.groups.map((g) => (g.id === groupId ? actualizado : g)),
         }));
       },
 
