@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
-import { usePreferenciasLocales } from '../store/profileStore';
+import { useTengoFoto } from '../hooks/useFoto';
 import { isApiEnabled } from '../lib/apiClient';
 import { tiempoRelativo } from '../lib/tiempoRelativo';
 import { HueckoMark } from './Pixel';
 import { BotonReportar } from './ReportarProblema';
+import { MiAvatar } from './Avatar';
 
 export type NavTab = 'dashboard' | 'schedule' | 'groups' | 'profile';
 
@@ -204,22 +205,11 @@ function CampanaNotificaciones({ variante }: { variante: 'escritorio' | 'movil' 
   );
 }
 
-/** Foto de la cuenta si hay una guardada en este dispositivo; si no, la inicial. */
-function AvatarCuenta({ nombre, avatarUrl, className }: { nombre: string; avatarUrl?: string; className: string }) {
-  return avatarUrl ? (
-    <img src={avatarUrl} alt="" className={`${className} rounded-full object-cover`} />
-  ) : (
-    <span aria-hidden="true" className={`${className} rounded-full bg-olive text-ink font-headline flex items-center justify-center`}>
-      {nombre.charAt(0).toUpperCase() || '?'}
-    </span>
-  );
-}
-
 export default function Navbar({ currentTab }: NavbarProps) {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
-  const { avatarUrl } = usePreferenciasLocales();
+  const tengoFoto = useTengoFoto();
   const nombre = user?.nombre ?? '';
 
   const handleLogout = () => {
@@ -285,14 +275,14 @@ export default function Navbar({ currentTab }: NavbarProps) {
             to="/profile"
             aria-current={currentTab === 'profile' ? 'page' : undefined}
             className={`flex items-center gap-2 text-sm font-semibold transition-colors rounded-lg py-1.5 ${
-              avatarUrl ? 'pl-1.5 pr-4' : 'px-5 py-2'
+              tengoFoto ? 'pl-1.5 pr-4' : 'px-5 py-2'
             } ${
               currentTab === 'profile'
                 ? 'bg-primary text-on-primary shadow-sm'
                 : 'bg-primary-container text-on-primary-container hover:bg-secondary-container'
             }`}
           >
-            {avatarUrl && <AvatarCuenta nombre={nombre} avatarUrl={avatarUrl} className="w-7 h-7" />}
+            {tengoFoto && <MiAvatar className="w-7 h-7 text-xs" />}
             {nombre.split(' ')[0] || 'Mi Perfil'}
           </Link>
 
@@ -353,8 +343,8 @@ export default function Navbar({ currentTab }: NavbarProps) {
           aria-current={currentTab === 'profile' ? 'page' : undefined}
           className={mobileLinkClass('profile')}
         >
-          {avatarUrl ? (
-            <AvatarCuenta nombre={nombre} avatarUrl={avatarUrl} className="w-6 h-6" />
+          {tengoFoto ? (
+            <MiAvatar className="w-6 h-6 text-2xs" />
           ) : (
             <span aria-hidden="true" className="material-symbols-outlined">person</span>
           )}

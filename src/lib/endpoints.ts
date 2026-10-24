@@ -19,6 +19,18 @@ export const endpoints = {
   /** ✅ MeController. */
   me: '/me',
 
+  /**
+   * ✅ MeController y UsuarioController: perfil social, foto y logros. La foto
+   * y la tarjeta de otra persona solo responden si compartes un grupo con ella.
+   */
+  perfil: {
+    social: '/me/perfil',
+    miFoto: '/me/foto',
+    logros: '/me/logros',
+    publico: (usuarioId: string) => `/usuarios/${usuarioId}/perfil`,
+    foto: (usuarioId: string) => `/usuarios/${usuarioId}/foto`,
+  },
+
   /** ✅ BloqueHorarioController. */
   schedule: {
     blocks: (usuarioId: string) => `/usuarios/${usuarioId}/bloques-horario`,
@@ -128,6 +140,8 @@ export const endpoints = {
     reportes: '/admin/reportes',
     estadoReporte: (id: string) => `/admin/reportes/${id}/estado`,
     suspensionReporte: (id: string) => `/admin/reportes/${id}/suspension`,
+    /** GET para verla, DELETE para quitarla: la foto de la cuenta que señala un reporte de conducta. */
+    fotoReporte: (id: string) => `/admin/reportes/${id}/foto`,
     logs: '/admin/consola/logs',
     configuracion: '/admin/consola/configuracion',
   },

@@ -15,8 +15,12 @@ Prefijo: `/api/v1`. Salvo autenticación, todas las rutas requieren `Authorizati
 
 | Método y ruta | Propósito |
 | --- | --- |
-| `GET /me` | Perfil y preferencias del usuario. |
-| `PATCH /me` | Actualiza nombre, zona horaria, privacidad y preferencias de notificación. |
+| `GET /me` | Cuenta, perfil social y fecha de la última foto. |
+| `PATCH /me` | Actualiza nombre y correo (el correo pide la contraseña actual). |
+| `PUT /me/perfil` | Carrera, ciclo, frase e intereses; reemplaza todo. |
+| `PUT /me/foto`, `DELETE /me/foto` | Sube (multipart, campo `foto`) o quita la foto de perfil. |
+| `GET /me/logros` | Planes vividos, a tiempo, propuestos e insignias. Solo para ti. |
+| `GET /usuarios/:id/perfil`, `GET /usuarios/:id/foto` | Tarjeta y foto de alguien con quien compartes un grupo; si no, `404`. |
 | `GET /schedule/blocks` | Devuelve los bloques del usuario. |
 | `POST /schedule/blocks` | Crea bloque manual. |
 | `PATCH /schedule/blocks/:id` | Edita bloque. |

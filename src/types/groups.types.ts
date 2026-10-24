@@ -9,6 +9,8 @@ export interface GroupMember {
   color: string;
   /** `ADMIN` es el valor histórico del modo demo; el backend dice `ORGANIZADOR`. */
   rol?: 'ADMIN' | 'ORGANIZADOR' | 'MIEMBRO';
+  /** Cuándo cambió su foto; nulo si no tiene. En demo no viene: allí nadie más tiene foto. */
+  fotoActualizadaEn?: string | null;
 }
 
 export interface Group {
@@ -113,6 +115,7 @@ export interface MiembroResponse {
   email: string;
   rol: RolMiembro;
   esImprescindible: boolean;
+  fotoActualizadaEn?: string | null;
 }
 
 /** Espejo de `GrupoResponse`. */

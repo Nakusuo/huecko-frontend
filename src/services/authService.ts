@@ -1,4 +1,4 @@
-import type { LoginPayload, RegisterPayload, AuthResponse, AuthUser } from '../types/auth.types';
+import type { LoginPayload, RegisterPayload, AuthResponse, AuthUser, PerfilSocial } from '../types/auth.types';
 import { apiClient, isApiEnabled } from '../lib/apiClient';
 
 const SIMULATED_NETWORK_DELAY_MS = 1000;
@@ -48,13 +48,21 @@ export interface CuentaDemo extends AuthUser {
   clave?: string;
 }
 
+/* El mismo perfil que el seed del backend, para que la tarjeta no salga vacía en una demo. */
 const CUENTA_EJEMPLO: CuentaDemo = {
   id: ID_CUENTA_EJEMPLO,
   nombre: 'Alex Rodríguez',
   email: DEMO_CREDENTIALS.email,
   creado_en: '2026-01-01T00:00:00.000Z',
   rolSistema: 'USUARIO',
+  carrera: 'Ingeniería de Software',
+  ciclo: 6,
+  bio: 'Organizo los avances del grupo. Si hay café, voy.',
+  intereses: ['Café', 'Fútbol', 'Videojuegos'],
 };
+
+/** Si la sesión es la de la cuenta de ejemplo del modo demo. */
+export const esCuentaEjemplo = (usuario: Pick<AuthUser, 'id'>): boolean => usuario.id === ID_CUENTA_EJEMPLO;
 
 const CUENTA_ADMIN: CuentaDemo = {
   id: ID_CUENTA_ADMIN,
@@ -142,6 +150,15 @@ export function actualizarCuentaDemo(usuario: AuthUser, cambios: { nombre: strin
 
   const actual = cuentas.find((c) => c.id === usuario.id) ?? { ...usuario };
   const actualizada: CuentaDemo = { ...actual, nombre: cambios.nombre.trim(), email };
+  guardarCuentasDemo([...cuentas.filter((c) => c.id !== usuario.id), actualizada]);
+  return sinClave(actualizada);
+}
+
+/** Guarda el perfil social de una cuenta demo en este navegador. */
+export function actualizarPerfilSocialDemo(usuario: AuthUser, perfil: PerfilSocial): AuthUser {
+  const cuentas = leerCuentasDemo();
+  const actual = cuentas.find((c) => c.id === usuario.id) ?? { ...usuario };
+  const actualizada: CuentaDemo = { ...actual, ...perfil };
   guardarCuentasDemo([...cuentas.filter((c) => c.id !== usuario.id), actualizada]);
   return sinClave(actualizada);
 }

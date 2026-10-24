@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import CabeceraAdmin from '../../components/admin/CabeceraAdmin';
 import { AccionesRevision, ErrorCarga, Filtro, InsigniaRevision } from '../../components/admin/Estados';
 import { AvisoError } from '../../components/AvisoError';
@@ -88,16 +88,87 @@ function AccionCuenta({
   );
 }
 
+/**
+ * La foto de la cuenta reportada: se enseña solo al pedirla, y quitarla pide
+ * confirmación. La persona puede subir otra; si insiste, se la suspende.
+ */
+function FotoReportada({ reporteId, ocupado, onQuitar }: { reporteId: string; ocupado: boolean; onQuitar: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+
+  // La URL de objeto ocupa memoria hasta que se libera.
+  useEffect(() => () => {
+    if (url) URL.revokeObjectURL(url);
+  }, [url]);
+
+  const ver = async () => {
+    setCargando(true);
+    setError(null);
+    try {
+      setUrl(await adminService.verFotoReportada(reporteId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar la foto.');
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {url ? (
+        <img src={url} alt="Foto de perfil de la cuenta reportada" className="size-16 rounded-xl object-cover" />
+      ) : (
+        <button
+          type="button"
+          onClick={() => void ver()}
+          disabled={cargando}
+          className="rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface hover:bg-surface-container-high disabled:opacity-60"
+        >
+          {cargando ? 'Cargando…' : 'Ver su foto'}
+        </button>
+      )}
+      {confirmando ? (
+        <span className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Confirmar que se quita la foto">
+          <button
+            type="button"
+            disabled={ocupado}
+            onClick={onQuitar}
+            className="rounded-lg bg-error px-3 py-1.5 text-xs font-semibold text-on-error disabled:opacity-60"
+          >
+            {ocupado ? 'Quitando…' : 'Sí, quitarla'}
+          </button>
+          <button type="button" onClick={() => setConfirmando(false)} className="px-2 py-1.5 text-xs font-semibold text-on-surface-variant">
+            No
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirmando(true)}
+          className="rounded-lg border border-error/30 px-3 py-1.5 text-xs font-semibold text-error hover:bg-error-container"
+        >
+          Quitar foto
+        </button>
+      )}
+      {error && <span role="alert" className="text-2xs font-medium text-error">{error}</span>}
+    </div>
+  );
+}
+
 function TarjetaReporte({
   reporte,
   ocupado,
   onEstado,
   onSuspension,
+  onQuitarFoto,
 }: {
   reporte: ReporteAdmin;
   ocupado: boolean;
   onEstado: (estado: EstadoRevision) => void;
   onSuspension: (suspendido: boolean) => void;
+  onQuitarFoto: () => void;
 }) {
   const conducta = reporte.tipo === 'CONDUCTA';
   return (
@@ -128,6 +199,11 @@ function TarjetaReporte({
             {reporte.cuentaReportadaSuspendida && <span className="ml-1 font-semibold text-error">· suspendida</span>}
           </span>
           <AccionCuenta reporte={reporte} ocupado={ocupado} onCambiar={onSuspension} />
+          {reporte.cuentaReportadaConFoto && (
+            <div className="w-full border-t border-outline-variant/60 pt-2">
+              <FotoReportada reporteId={reporte.id} ocupado={ocupado} onQuitar={onQuitarFoto} />
+            </div>
+          )}
         </div>
       )}
 
@@ -319,6 +395,7 @@ export default function AdminFallosPage() {
               ocupado={ocupado === r.id}
               onEstado={(estado) => void actuar(r.id, () => adminService.cambiarEstadoReporte(r.id, estado), reportes.setDatos)}
               onSuspension={(s) => void actuar(r.id, () => adminService.suspensionDesdeReporte(r.id, s), reportes.setDatos)}
+              onQuitarFoto={() => void actuar(r.id, () => adminService.quitarFotoReportada(r.id), reportes.setDatos)}
             />
           ))}
         </ul>
