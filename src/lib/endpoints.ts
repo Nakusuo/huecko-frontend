@@ -34,6 +34,9 @@ export const endpoints = {
   /** ✅ LibreAhoraController: GET el estado, PUT «Estoy libre», DELETE para quitarlo. */
   libreAhora: '/me/libre-ahora',
 
+  /** ✅ LlegadaController: GET el estado, PUT «Llegué», DELETE para deshacerlo. */
+  llegadas: (planId: string) => `/planes/${planId}/llegadas`,
+
   /** ✅ AlbumController: solo para la gente del grupo (si no, 404). */
   album: {
     grupo: (grupoId: string) => `/grupos/${grupoId}/album`,
