@@ -102,6 +102,15 @@ function plazoAInstante(plazo: string): string {
 
 const esInstante = (plazo: string) => /^\d{4}-\d{2}-\d{2}T/.test(plazo);
 
+/** Opción del selector de plazo para elegir fecha y hora exactas, como en la app móvil. */
+const PLAZO_A_MANO = 'A mano';
+
+/** «YYYY-MM-DDTHH:mm» en hora local, el formato de `<input type="datetime-local">`. */
+function aFechaHoraLocal(fecha: Date): string {
+  const dd = (n: number) => String(n).padStart(2, '0');
+  return `${fecha.getFullYear()}-${dd(fecha.getMonth() + 1)}-${dd(fecha.getDate())}T${dd(fecha.getHours())}:${dd(fecha.getMinutes())}`;
+}
+
 /** Porcentaje desconocido: todavía no llegó el cruce del servidor. */
 const SIN_DATO = -1;
 
@@ -241,6 +250,10 @@ export default function GroupDetailPage() {
   const [proposalTitle, setProposalTitle] = useState('');
   const [proposalLugar, setProposalLugar] = useState('');
   const [proposalPlazo, setProposalPlazo] = useState('24 horas');
+  /** Fecha y hora de cierre elegidas a mano (`datetime-local`), si el plazo es PLAZO_A_MANO. */
+  const [plazoAMano, setPlazoAMano] = useState('');
+  /** Lo más pronto que se puede elegir a mano: se fija al abrir esa opción, no en cada render. */
+  const [minimoAMano, setMinimoAMano] = useState('');
   const [proposalError, setProposalError] = useState('');
   /* Sin esto un doble clic creaba dos planes iguales, y un plan no se puede borrar. */
   const [enviandoPropuesta, setEnviandoPropuesta] = useState(false);
@@ -496,33 +509,57 @@ export default function GroupDetailPage() {
     return minimo;
   };
 
-  /**
-   * Las dos primeras franjas en las que cabe el grupo y que aún no han pasado.
-   * Antes se precargaban siempre Mié 11–13 y Jue 16–18, cayeran donde cayeran.
-   */
-  const ventanasIniciales = (group: Group): TimeWindowProposal[] => {
+  /** Cada franja libre del grupo como opción de 2 horas, con su fecha y lo larga que es la franja entera. */
+  const opcionesDeLosHuecos = (group: Group): { ventana: TimeWindowProposal; horasLibres: number }[] => {
     if (isApiEnabled && !availability[group.id]) return [];
     const lunes = availability[group.id]?.weekFrom ?? lunesDeEstaSemana();
-    const candidatas: TimeWindowProposal[] = [];
+    const opciones: { ventana: TimeWindowProposal; horasLibres: number }[] = [];
     for (const dia of days) {
       for (const franja of getRecommendedWindows(group, dia)) {
         const horaInicio = aHora(franja.start);
         const horaFin = aHora(Math.min(franja.end, franja.start + 2));
-        candidatas.push({
-          id: `sugerida-${dia}-${horaInicio}`,
-          dia,
-          fecha: fechaParaDia(lunes, dia, horaInicio),
-          horaInicio,
-          horaFin,
-          disponibilidadPorcentaje: franja.minimumAvailability,
-          votosUsuarios: [],
+        opciones.push({
+          ventana: {
+            id: `sugerida-${dia}-${horaInicio}`,
+            dia,
+            fecha: fechaParaDia(lunes, dia, horaInicio),
+            horaInicio,
+            horaFin,
+            disponibilidadPorcentaje: franja.minimumAvailability,
+            votosUsuarios: [],
+          },
+          horasLibres: franja.end - franja.start,
         });
       }
     }
-    return candidatas
-      .sort((x, y) => `${x.fecha}${x.horaInicio}`.localeCompare(`${y.fecha}${y.horaInicio}`))
-      .slice(0, 2);
+    return opciones;
   };
+
+  const porFecha = (x: TimeWindowProposal, y: TimeWindowProposal) =>
+    `${x.fecha}${x.horaInicio}`.localeCompare(`${y.fecha}${y.horaInicio}`);
+
+  /**
+   * Las dos primeras franjas en las que cabe el grupo y que aún no han pasado.
+   * Antes se precargaban siempre Mié 11–13 y Jue 16–18, cayeran donde cayeran.
+   */
+  const ventanasIniciales = (group: Group): TimeWindowProposal[] =>
+    opcionesDeLosHuecos(group).map((o) => o.ventana).sort(porFecha).slice(0, 2);
+
+  /**
+   * «Que Huecko proponga las 3 mejores», como en la app móvil: donde más gente
+   * está libre, luego en las franjas más largas y, a igualdad, las primeras.
+   */
+  const mejoresVentanas = (group: Group): TimeWindowProposal[] =>
+    opcionesDeLosHuecos(group)
+      .sort(
+        (a, b) =>
+          b.ventana.disponibilidadPorcentaje - a.ventana.disponibilidadPorcentaje ||
+          b.horasLibres - a.horasLibres ||
+          porFecha(a.ventana, b.ventana)
+      )
+      .slice(0, 3)
+      .map((o) => o.ventana)
+      .sort(porFecha);
 
   // Acciones de propuestas y votaciones.
   const openProposePlanModal = (group: Group, reprogramar?: PlanProposal) => {
@@ -531,6 +568,7 @@ export default function GroupDetailPage() {
     setProposalTitle(reprogramar?.titulo ?? '');
     setProposalLugar(reprogramar?.lugar ?? '');
     setProposalPlazo('24 horas');
+    setPlazoAMano('');
     setProposalError('');
     setSuggestedWindows(ventanasIniciales(group));
     setIsProposeModalOpen(true);
@@ -607,7 +645,19 @@ export default function GroupDetailPage() {
       horaInicio: w.horaInicio,
       horaFin: w.horaFin,
     }));
-    const plazoISO = plazoAInstante(proposalPlazo);
+    let plazoISO: string;
+    if (proposalPlazo === PLAZO_A_MANO) {
+      const elegido = new Date(plazoAMano);
+      if (!plazoAMano || Number.isNaN(elegido.getTime())) {
+        setProposalError('Elige la fecha y la hora en que cierra la votación.');
+        return;
+      }
+      plazoISO = elegido.toISOString();
+    } else {
+      plazoISO = plazoAInstante(proposalPlazo);
+    }
+    // Lo que se guarda para mostrar: el instante, si se eligió a mano.
+    const plazoTexto = proposalPlazo === PLAZO_A_MANO ? plazoISO : proposalPlazo;
 
     /* Lo que el backend rechazaría (opciones pasadas, solapadas, un plazo que
        cierra después de la primera opción) se dice aquí, antes de enviar. */
@@ -627,7 +677,7 @@ export default function GroupDetailPage() {
           reschedulingId,
           ventanasConFecha,
           { plazoVotacion: plazoISO, ventanas: ventanasPayload },
-          proposalPlazo
+          plazoTexto
         );
       } else {
         await addProposal(
@@ -636,7 +686,7 @@ export default function GroupDetailPage() {
             titulo: proposalTitle,
             lugar: proposalLugar,
             creadoPor: userName,
-            plazoVotacion: proposalPlazo,
+            plazoVotacion: plazoTexto,
             estado: 'propuesto',
             ventanasSugeridas: ventanasConFecha,
           },
@@ -981,9 +1031,19 @@ export default function GroupDetailPage() {
                             <div className="flex items-center gap-2">
                               <h3 className="text-base font-bold text-on-surface">{proposal.titulo}</h3>
                               {proposal.lugar && (
-                                <span className="text-2xs text-on-surface-variant font-normal">
+                                /* Un enlace y no un mapa incrustado: no pide permisos
+                                   ni abre la CSP a otro dominio. */
+                                <a
+                                  href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(proposal.lugar)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Abrir en el mapa"
+                                  className="text-2xs text-on-surface-variant font-normal hover:text-primary hover:underline inline-flex items-center gap-0.5"
+                                >
                                   • {proposal.lugar}
-                                </span>
+                                  <span aria-hidden="true" className="material-symbols-outlined text-[13px]">map</span>
+                                  <span className="sr-only">(abrir en el mapa)</span>
+                                </a>
                               )}
                             </div>
                             <span
@@ -1500,7 +1560,11 @@ export default function GroupDetailPage() {
                 <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Plazo de votación</label>
                 <select
                   value={proposalPlazo}
-                  onChange={(e) => setProposalPlazo(e.target.value)}
+                  onChange={(e) => {
+                    // El backend pide al menos 5 minutos para votar (PlanService).
+                    if (e.target.value === PLAZO_A_MANO) setMinimoAMano(aFechaHoraLocal(new Date(Date.now() + 5 * 60_000)));
+                    setProposalPlazo(e.target.value);
+                  }}
                   className="w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
                 >
                   {esInstante(proposalPlazo) && (
@@ -1510,14 +1574,40 @@ export default function GroupDetailPage() {
                   <option value="24 horas">24 horas (Recomendado)</option>
                   <option value="48 horas">48 horas</option>
                   <option value="Hasta el viernes 20:00">Hasta el viernes 20:00</option>
+                  <option value={PLAZO_A_MANO}>Elegir fecha y hora…</option>
                 </select>
+                {proposalPlazo === PLAZO_A_MANO && (
+                  <input
+                    type="datetime-local"
+                    aria-label="Fecha y hora de cierre de la votación"
+                    value={plazoAMano}
+                    min={minimoAMano}
+                    onChange={(e) => setPlazoAMano(e.target.value)}
+                    className="mt-2 w-full px-3.5 py-2.5 border border-outline-variant rounded-xl bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:border-secondary"
+                  />
+                )}
+                <p className="mt-1 text-2xs text-on-surface-variant">
+                  Después de esa hora ya no se puede votar, y tiene que ser antes de la primera opción.
+                </p>
               </div>
 
               {/* Ventanas de tiempo sugeridas para el plan */}
               <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-2">
-                  Ventanas de Tiempo Sugeridas (De 2 a 5 opciones)
-                </label>
+                <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+                  <label className="block text-xs font-medium text-on-surface-variant">
+                    Ventanas de Tiempo Sugeridas (De 2 a 5 opciones)
+                  </label>
+                  {mejoresVentanas(selectedGroup).length >= 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setSuggestedWindows(mejoresVentanas(selectedGroup))}
+                      className="text-2xs font-bold text-primary hover:text-primary-hover cursor-pointer flex items-center gap-1"
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined text-[14px]">star</span>
+                      Usar los 3 mejores huecos
+                    </button>
+                  )}
+                </div>
 
                 {/* Formulario para agregar una opción de horario */}
                 <div className="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/60 mb-3 space-y-2">
