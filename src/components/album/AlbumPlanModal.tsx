@@ -9,7 +9,9 @@ import { isApiEnabled } from '../../lib/apiClient';
 import { MAX_BYTES_ORIGINAL, reducirParaAlbum } from '../../lib/fotos';
 import { alRecibirEvento } from '../../lib/realtime';
 import { albumService } from '../../services/albumService';
+import { llegadasService } from '../../services/llegadasService';
 import type { AlbumPlan, FotoAlbum } from '../../types/album.types';
+import type { Llegadas } from '../../types/llegada.types';
 
 type Progreso = { fase: 'preparando' | 'subiendo'; hechas: number; total: number };
 
@@ -23,6 +25,8 @@ function motivoSinSubir(album: AlbumPlan): string {
 /** El álbum de un plan: subir fotos, verlas en cuadrícula y abrirlas en grande. */
 export function AlbumPlanModal({ planId, onCerrar }: { planId: string; onCerrar: () => void }) {
   const { datos: album, setDatos, error, cargando, recargar } = useCarga<AlbumPlan>(() => albumService.delPlan(planId));
+  // Quiénes marcaron «Llegué»: el álbum dice quiénes estuvieron.
+  const { datos: llegadas } = useCarga<Llegadas>(() => llegadasService.ver(planId));
   const [visor, setVisor] = useState<number | null>(null);
   const [progreso, setProgreso] = useState<Progreso | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -113,6 +117,11 @@ export function AlbumPlanModal({ planId, onCerrar }: { planId: string; onCerrar:
             {album && (
               <p className="text-xs text-on-surface-variant">
                 {fechaDelPlan(album.fecha, album.horaInicio)} · {cuantasFotos(album.fotos.length)}
+              </p>
+            )}
+            {llegadas && llegadas.llegadas.length > 0 && (
+              <p className="text-2xs text-on-surface-variant">
+                Estuvieron: {llegadas.llegadas.map((l) => l.nombre).join(', ')}
               </p>
             )}
           </div>

@@ -221,3 +221,22 @@ describe('FOTO_CONVERSACION', () => {
     expect(avisoDeEvento(evento('FOTO_CONVERSACION', { autorFotoId: 'u-1', comentario: false }), 'u-1')).toBeNull();
   });
 });
+
+describe('LLEGADA y recordatorios', () => {
+  it('quien llega avisa al grupo', () => {
+    expect(avisoDeEvento(evento('LLEGADA', { nombre: 'Ana', titulo: 'Pichanga', aTiempo: true }))).toMatchObject({
+      title: 'Ana llegó',
+      description: 'A «Pichanga».',
+    });
+  });
+
+  it('el recordatorio dice a qué hora y dónde', () => {
+    const aviso = avisoDeEvento(evento('RECORDATORIO_PLAN', { titulo: 'Pichanga', lugar: 'Losa', cuando: new Date(2026, 9, 24, 18, 0).toISOString() }));
+    expect(aviso).toMatchObject({ title: '«Pichanga» empieza en una hora', description: 'A las 18:00 · Losa.' });
+  });
+
+  it('la votación por cerrar dice a qué hora cierra', () => {
+    const aviso = avisoDeEvento(evento('VOTACION_POR_CERRAR', { titulo: 'Cine', cuando: new Date(2026, 9, 24, 17, 30).toISOString() }));
+    expect(aviso?.description).toBe('Cierra a las 17:30. Aún no votaste.');
+  });
+});

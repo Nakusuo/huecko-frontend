@@ -42,6 +42,7 @@ import { ResumenVotacionIA } from '../components/ResumenVotacionIA';
 import { AvatarMiembro } from '../components/Avatar';
 import { TarjetaPerfil } from '../components/TarjetaPerfil';
 import { AlbumPlanModal } from '../components/album/AlbumPlanModal';
+import { LlegadaPlan } from '../components/LlegadaPlan';
 import { RecuerdosDelGrupo } from '../components/album/RecuerdosDelGrupo';
 import { useOfrecerIA } from '../hooks/useOfrecerIA';
 import { completarOpciones } from '../services/planesIaService';
@@ -1157,6 +1158,9 @@ export default function GroupDetailPage() {
                               );
                             })}
                           </div>
+
+                          {/* «Llegué» y quién llegó: solo hay a dónde llegar con el plan confirmado. */}
+                          {isClosed && <LlegadaPlan planId={proposal.id} />}
 
                           {/* Un plan cancelado no tiene votación que resumir. */}
                           {ofrecerIA && proposal.estado !== 'cancelado' && <ResumenVotacionIA planId={proposal.id} />}

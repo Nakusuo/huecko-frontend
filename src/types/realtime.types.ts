@@ -28,6 +28,12 @@ export type RealtimeEventType =
   | 'ALBUM_ACTUALIZADO'
   /** Cambiaron las reacciones o los comentarios de una foto; con `comentario` hay uno nuevo. */
   | 'FOTO_CONVERSACION'
+  /** Alguien marcó «Llegué» en un plan. */
+  | 'LLEGADA'
+  /** El plan confirmado empieza en una hora. */
+  | 'RECORDATORIO_PLAN'
+  /** La votación cierra en una hora (el aviso solo se enseña a quien no votó). */
+  | 'VOTACION_POR_CERRAR'
   /** RF-08: alguien propuso un plan nuevo en el grupo. */
   | 'PLAN_PROPUESTO'
   /** Un plan en re-coordinación vuelve a votarse con fechas nuevas. */

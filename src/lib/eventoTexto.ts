@@ -74,6 +74,32 @@ export function avisoDeEvento(evento: RealtimeEvent, yo?: string): AvisoDeEvento
         description: `En el álbum de «${String(d.titulo ?? 'un plan')}».`,
       };
 
+    case 'LLEGADA':
+      return {
+        type: 'system',
+        title: `${String(d.nombre ?? 'Alguien')} llegó`,
+        description: `A «${String(d.titulo ?? 'el plan')}».`,
+      };
+
+    case 'RECORDATORIO_PLAN':
+      return {
+        type: 'confirmation',
+        title: `«${String(d.titulo ?? 'El plan')}» empieza en una hora`,
+        description:
+          (typeof d.cuando === 'string' ? `A las ${horaCorta(d.cuando)}` : 'Muy pronto')
+          + (typeof d.lugar === 'string' && d.lugar ? ` · ${d.lugar}` : '')
+          + '.',
+      };
+
+    case 'VOTACION_POR_CERRAR':
+      return {
+        type: 'proposal',
+        title: `La votación de «${String(d.titulo ?? 'un plan')}» cierra pronto`,
+        description:
+          (typeof d.cuando === 'string' ? `Cierra a las ${horaCorta(d.cuando)}.` : 'Cierra en menos de una hora.')
+          + ' Aún no votaste.',
+      };
+
     case 'MIEMBRO_UNIDO':
       return {
         type: 'system',

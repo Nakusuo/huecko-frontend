@@ -27,6 +27,13 @@ import { avisoDeEvento } from '../lib/eventoTexto';
  * esos avisos en la campana. Antes desconectaba el canal entero, y con él
  * dejaban de actualizarse en vivo los votos y los planes.
  */
+/** «La votación cierra pronto» solo le sirve a quien aún no votó en ese plan. */
+function yaVote(planId: unknown): boolean {
+  const email = useAuthStore.getState().user?.email;
+  const plan = useGroupsStore.getState().groupProposals.find((p) => p.id === planId);
+  return Boolean(email && plan?.ventanasSugeridas.some((v) => v.votosUsuarios.includes(email)));
+}
+
 export function useTiempoReal(): void {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { alertasRetrasos } = usePreferenciasLocales();
@@ -74,7 +81,9 @@ export function useTiempoReal(): void {
 
       /* Lo que hice yo no me lo notifico: ya lo vi al hacerlo. Antes quien
          avisaba de un retraso recibía además «Alguien llega tarde: <yo>…». */
-      const aviso = d.usuarioId && d.usuarioId === miUsuarioId ? null : avisoDeEvento(evento, miUsuarioId);
+      const aviso = (d.usuarioId && d.usuarioId === miUsuarioId) || (evento.tipo === 'VOTACION_POR_CERRAR' && yaVote(d.planId))
+        ? null
+        : avisoDeEvento(evento, miUsuarioId);
       // Silenciar los retrasos solo quita el aviso: el evento se aplica igual.
       if (aviso && (alertasRetrasos || aviso.type !== 'incident')) {
         addNotification({ ...aviso, groupId: evento.grupoId });
