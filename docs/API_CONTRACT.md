@@ -23,6 +23,9 @@ Prefijo: `/api/v1`. Salvo autenticación, todas las rutas requieren `Authorizati
 | `GET /usuarios/:id/perfil`, `GET /usuarios/:id/foto` | Tarjeta y foto de alguien con quien compartes un grupo; si no, `404`. |
 | `GET /me/libre-ahora` | Tu aviso, si tienes clase ahora, hasta cuándo estás libre según tu horario y, por grupo, cuántos no tienen clase y quiénes avisaron. |
 | `PUT /me/libre-ahora`, `DELETE /me/libre-ahora` | «Estoy libre» (`{hasta?, nota?}`) y quitarlo. |
+| `GET /grupos/:id/album` | Planes vividos del grupo con su número de fotos y portada; uso del tope del grupo. |
+| `GET /planes/:id/fotos`, `POST /planes/:id/fotos` | Álbum de un plan; subir fotos (multipart, partes `fotos`, hasta 10). |
+| `GET /fotos/:id`, `GET /fotos/:id/miniatura`, `DELETE /fotos/:id` | Una foto (1280 px) o su miniatura (320 px); borrarla. |
 | `GET /schedule/blocks` | Devuelve los bloques del usuario. |
 | `POST /schedule/blocks` | Crea bloque manual. |
 | `PATCH /schedule/blocks/:id` | Edita bloque. |

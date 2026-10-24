@@ -41,6 +41,8 @@ import { CodigoInvitacion } from '../components/CodigoInvitacion';
 import { ResumenVotacionIA } from '../components/ResumenVotacionIA';
 import { AvatarMiembro } from '../components/Avatar';
 import { TarjetaPerfil } from '../components/TarjetaPerfil';
+import { AlbumPlanModal } from '../components/album/AlbumPlanModal';
+import { RecuerdosDelGrupo } from '../components/album/RecuerdosDelGrupo';
 import { useOfrecerIA } from '../hooks/useOfrecerIA';
 import { completarOpciones } from '../services/planesIaService';
 import type { BorradorPlan, IdeaPlan } from '../services/planesIaService';
@@ -281,6 +283,8 @@ export default function GroupDetailPage() {
   const [membersList, setMembersList] = useState<GroupMember[]>([]);
   /** La persona cuya tarjeta de perfil está abierta. */
   const [personaTarjeta, setPersonaTarjeta] = useState<GroupMember | null>(null);
+  /** El plan cuyo álbum está abierto desde su tarjeta. */
+  const [albumAbierto, setAlbumAbierto] = useState<string | null>(null);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [isEssentialNewMember, setIsEssentialNewMember] = useState(false);
   /** Por qué no se pudo añadir el correo escrito (formato, repetido, el propio). */
@@ -1174,6 +1178,17 @@ export default function GroupDetailPage() {
                               </button>
                             )}
 
+                            {/* El álbum dice él mismo si aún no se pueden subir fotos. */}
+                            {isClosed && (
+                              <button
+                                onClick={() => setAlbumAbierto(proposal.id)}
+                                className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer flex items-center gap-0.5"
+                              >
+                                <span aria-hidden="true" className="material-symbols-outlined text-[14px]">photo_library</span>
+                                Álbum
+                              </button>
+                            )}
+
                             {/* Solo hay algo a lo que faltar o llegar tarde cuando el
                                 plan está confirmado. Un retraso se puede retirar;
                                 una ausencia no, porque ya avisó a todo el grupo. */}
@@ -1224,6 +1239,9 @@ export default function GroupDetailPage() {
               </div>
             )}
           </section>
+
+          <RecuerdosDelGrupo key={grp.id} grupoId={grp.id} />
+
           {(() => {
             const cruce = estadoDelCruce(grp);
             return (
@@ -1485,6 +1503,8 @@ export default function GroupDetailPage() {
           />
         )}
       </main>
+
+      {albumAbierto && <AlbumPlanModal planId={albumAbierto} onCerrar={() => setAlbumAbierto(null)} />}
 
       {personaTarjeta && (
         <TarjetaPerfil

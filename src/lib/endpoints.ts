@@ -34,6 +34,16 @@ export const endpoints = {
   /** ✅ LibreAhoraController: GET el estado, PUT «Estoy libre», DELETE para quitarlo. */
   libreAhora: '/me/libre-ahora',
 
+  /** ✅ AlbumController: solo para la gente del grupo (si no, 404). */
+  album: {
+    grupo: (grupoId: string) => `/grupos/${grupoId}/album`,
+    /** GET el álbum del plan; POST multipart (partes «fotos») para subir. */
+    plan: (planId: string) => `/planes/${planId}/fotos`,
+    /** GET la foto, DELETE para borrarla. */
+    foto: (fotoId: string) => `/fotos/${fotoId}`,
+    miniatura: (fotoId: string) => `/fotos/${fotoId}/miniatura`,
+  },
+
   /** ✅ BloqueHorarioController. */
   schedule: {
     blocks: (usuarioId: string) => `/usuarios/${usuarioId}/bloques-horario`,

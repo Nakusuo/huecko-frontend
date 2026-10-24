@@ -51,6 +51,17 @@ export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
           + '.',
       };
 
+    case 'ALBUM_ACTUALIZADO': {
+      // Borrar una foto solo refresca el álbum; subir avisa al grupo.
+      const subidas = Number(d.subidas ?? 0);
+      if (!(subidas > 0)) return null;
+      return {
+        type: 'system',
+        title: `${String(d.nombre ?? 'Alguien')} subió ${subidas} ${subidas === 1 ? 'foto' : 'fotos'}`,
+        description: `Al álbum de «${String(d.titulo ?? 'un plan')}».`,
+      };
+    }
+
     case 'MIEMBRO_UNIDO':
       return {
         type: 'system',

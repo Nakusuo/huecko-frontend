@@ -24,6 +24,8 @@ export type RealtimeEventType =
   | 'MIEMBRO_UNIDO'
   /** Alguien avisó de que está libre: su nombre, hasta cuándo y su nota. */
   | 'LIBRE_AHORA'
+  /** Cambió el álbum de un plan: con `subidas` > 0 alguien subió fotos. */
+  | 'ALBUM_ACTUALIZADO'
   /** RF-08: alguien propuso un plan nuevo en el grupo. */
   | 'PLAN_PROPUESTO'
   /** Un plan en re-coordinación vuelve a votarse con fechas nuevas. */

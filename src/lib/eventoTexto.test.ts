@@ -194,3 +194,15 @@ describe('LIBRE_AHORA', () => {
     expect(aviso?.description).toBe('Hasta las 09:05.');
   });
 });
+
+describe('ALBUM_ACTUALIZADO', () => {
+  it('avisa de cuántas fotos subió alguien y a qué plan', () => {
+    const aviso = avisoDeEvento(evento('ALBUM_ACTUALIZADO', { usuarioId: 'u-2', nombre: 'Ana', titulo: 'Pichanga', subidas: 3, planId: 'p-1' }));
+
+    expect(aviso).toMatchObject({ title: 'Ana subió 3 fotos', description: 'Al álbum de «Pichanga».' });
+  });
+
+  it('borrar una foto no avisa: solo refresca el álbum', () => {
+    expect(avisoDeEvento(evento('ALBUM_ACTUALIZADO', { planId: 'p-1', subidas: 0 }))).toBeNull();
+  });
+});

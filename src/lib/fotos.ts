@@ -7,55 +7,92 @@ export const LADO_FOTO = 256;
 export const MAX_BYTES_ORIGINAL = 15 * 1024 * 1024;
 
 /**
- * Reduce la foto elegida a un cuadrado de 256 px en JPEG.
+ * Redibuja la foto elegida en un canvas y la devuelve en JPEG.
  *
- * Recortar al centro evita que las fotos verticales salgan deformadas en el
- * círculo del avatar. Redibujarla en un canvas deja fuera sus metadatos (el
- * GPS de una foto de celular), aunque el servidor vuelve a hacerlo por si acaso.
+ * Redibujarla deja fuera sus metadatos (el GPS de una foto de celular) y la
+ * pone derecha según cómo se tomó; el servidor la vuelve a rehacer igual, por
+ * si acaso. Con `cuadrada` recorta al centro, para que las fotos verticales
+ * no salgan deformadas en el círculo del avatar.
  */
-export function reducirFoto(file: File): Promise<Blob> {
+function redibujar(file: File, opciones: { lado: number; cuadrada: boolean; calidad: number }): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const image = new Image();
 
     image.onload = () => {
       URL.revokeObjectURL(objectUrl);
+      const recorte = Math.min(image.width, image.height);
+      const [origenAncho, origenAlto] = opciones.cuadrada ? [recorte, recorte] : [image.width, image.height];
+      const escala = Math.min(1, opciones.lado / Math.max(origenAncho, origenAlto));
       const canvas = document.createElement('canvas');
-      canvas.width = LADO_FOTO;
-      canvas.height = LADO_FOTO;
+      canvas.width = opciones.cuadrada ? opciones.lado : Math.max(1, Math.round(origenAncho * escala));
+      canvas.height = opciones.cuadrada ? opciones.lado : Math.max(1, Math.round(origenAlto * escala));
 
       const context = canvas.getContext('2d');
       if (!context) {
         reject(new Error('El navegador no pudo procesar la imagen.'));
         return;
       }
-
-      const recorte = Math.min(image.width, image.height);
       context.drawImage(
         image,
-        (image.width - recorte) / 2,
-        (image.height - recorte) / 2,
-        recorte,
-        recorte,
+        (image.width - origenAncho) / 2,
+        (image.height - origenAlto) / 2,
+        origenAncho,
+        origenAlto,
         0,
         0,
-        LADO_FOTO,
-        LADO_FOTO
+        canvas.width,
+        canvas.height
       );
       canvas.toBlob(
         (blob) => (blob ? resolve(blob) : reject(new Error('No se pudo preparar la foto.'))),
         'image/jpeg',
-        0.85
+        opciones.calidad
       );
     };
 
     image.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      reject(new Error('No se pudo leer la imagen. Prueba con una foto en JPG o PNG.'));
+      reject(new Error(`No se pudo leer «${file.name}». Prueba con una foto en JPG o PNG.`));
     };
 
     image.src = objectUrl;
   });
+}
+
+/** Foto de perfil: un cuadrado de 256 px. */
+export function reducirFoto(file: File): Promise<Blob> {
+  return redibujar(file, { lado: LADO_FOTO, cuadrada: true, calidad: 0.85 });
+}
+
+/** Lado largo de una foto de álbum al subirla. El servidor la deja en 1280. */
+export const LADO_ALBUM = 1600;
+
+/** Foto de álbum: entera, con el lado largo a 1600 px (unos 300 KB). */
+export function reducirParaAlbum(file: File): Promise<Blob> {
+  return redibujar(file, { lado: LADO_ALBUM, cuadrada: false, calidad: 0.82 });
+}
+
+/* Los mismos topes que el servidor: 10 fotos por envío y 6 MB por petición. */
+export const FOTOS_POR_ENVIO = 10;
+const BYTES_POR_ENVIO = 4.5 * 1024 * 1024;
+
+/** Reparte las fotos en envíos que el servidor acepta: diez como mucho y sin pasar de 4,5 MB. */
+export function enEnvios<T extends { size: number }>(fotos: T[]): T[][] {
+  const envios: T[][] = [];
+  let actual: T[] = [];
+  let bytes = 0;
+  for (const foto of fotos) {
+    if (actual.length > 0 && (actual.length >= FOTOS_POR_ENVIO || bytes + foto.size > BYTES_POR_ENVIO)) {
+      envios.push(actual);
+      actual = [];
+      bytes = 0;
+    }
+    actual.push(foto);
+    bytes += foto.size;
+  }
+  if (actual.length > 0) envios.push(actual);
+  return envios;
 }
 
 /** Para el modo demo, que guarda la foto en este navegador como data URL. */
@@ -133,4 +170,43 @@ function olvidarVersionesViejas(usuarioId: string, actual: string) {
 export function olvidarFotos(): void {
   enCurso.clear();
   listas.clear();
+  albumEnCurso.clear();
+  albumListas.clear();
+}
+
+/* ------------------------------------------------------------------ *
+ * Fotos de álbum: no cambian nunca (si se borran, desaparecen), así que
+ * cada una se descarga una vez por sesión.
+ * ------------------------------------------------------------------ */
+
+const albumEnCurso = new Map<string, Promise<string>>();
+const albumListas = new Map<string, string>();
+
+/** La URL si ya se descargó, para pintarla sin parpadeo. */
+export function fotoDeAlbumYaCargada(ruta: string): string | undefined {
+  return albumListas.get(ruta);
+}
+
+/** `ruta` es la de la API (`endpoints.album.foto` o `.miniatura`). */
+export function urlDeFotoDeAlbum(ruta: string): Promise<string> {
+  const existente = albumEnCurso.get(ruta);
+  if (existente) return existente;
+  const peticion = apiClient.get<Blob>(ruta, { responseType: 'blob' }).then(({ data }) => {
+    const url = URL.createObjectURL(data);
+    albumListas.set(ruta, url);
+    return url;
+  });
+  peticion.catch(() => albumEnCurso.delete(ruta));
+  albumEnCurso.set(ruta, peticion);
+  return peticion;
+}
+
+/** Al borrar una foto: que no se quede ocupando memoria. */
+export function olvidarFotoDeAlbum(...rutas: string[]): void {
+  for (const ruta of rutas) {
+    const url = albumListas.get(ruta);
+    if (url) URL.revokeObjectURL(url);
+    albumListas.delete(ruta);
+    albumEnCurso.delete(ruta);
+  }
 }

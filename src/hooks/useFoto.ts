@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { isApiEnabled } from '../lib/apiClient';
-import { fotoYaCargada, urlDeFoto } from '../lib/fotos';
+import { endpoints } from '../lib/endpoints';
+import { fotoDeAlbumYaCargada, fotoYaCargada, urlDeFoto, urlDeFotoDeAlbum } from '../lib/fotos';
+import { fotoDemo } from '../services/albumService';
+import type { VarianteFoto } from '../types/album.types';
 import { useAuthStore } from '../store/authStore';
 import { usePreferenciasLocales } from '../store/profileStore';
 
@@ -34,4 +37,32 @@ export function useTengoFoto(): boolean {
   const version = useAuthStore((s) => s.user?.fotoActualizadaEn);
   const { avatarUrl } = usePreferenciasLocales();
   return isApiEnabled ? Boolean(version) : Boolean(avatarUrl);
+}
+
+/**
+ * Una foto de álbum (o su miniatura), descargada con el token. En demo es la
+ * data URL guardada en memoria. Mientras no llega, `undefined`.
+ */
+export function useFotoDeAlbum(fotoId: string | null, variante: VarianteFoto): string | undefined {
+  const ruta = fotoId && isApiEnabled
+    ? variante === 'miniatura' ? endpoints.album.miniatura(fotoId) : endpoints.album.foto(fotoId)
+    : null;
+  const [cargada, setCargada] = useState<{ ruta: string; url: string } | null>(null);
+
+  useEffect(() => {
+    if (!ruta) return;
+    let vigente = true;
+    urlDeFotoDeAlbum(ruta).then(
+      (url) => vigente && setCargada({ ruta, url }),
+      () => undefined
+    );
+    return () => {
+      vigente = false;
+    };
+  }, [ruta]);
+
+  if (!fotoId) return undefined;
+  if (!isApiEnabled) return fotoDemo(fotoId);
+  if (!ruta) return undefined;
+  return cargada?.ruta === ruta ? cargada.url : fotoDeAlbumYaCargada(ruta);
 }
