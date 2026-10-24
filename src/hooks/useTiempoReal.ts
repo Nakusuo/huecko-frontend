@@ -131,6 +131,12 @@ export function useTiempoReal(): void {
           void aplicarVotacionAbierta(d.planId);
           break;
 
+        case 'MIEMBRO_UNIDO':
+          // Cambian los integrantes y, con ellos, el cruce de horarios.
+          void useGroupsStore.getState().fetchGroupsFromServer();
+          void useGroupsStore.getState().fetchAvailability(evento.grupoId);
+          break;
+
         case 'VOTACION_EXPRES_CERRADA':
           if (typeof d.planId === 'string') aplicarVotacionCerrada(d.planId);
           void fetchProposals(evento.grupoId);

@@ -37,6 +37,7 @@ import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
 import { BorradorConIA } from '../components/BorradorConIA';
 import { IdeasConIA } from '../components/IdeasConIA';
+import { CodigoInvitacion } from '../components/CodigoInvitacion';
 import { ResumenVotacionIA } from '../components/ResumenVotacionIA';
 import { useOfrecerIA } from '../hooks/useOfrecerIA';
 import { completarOpciones } from '../services/planesIaService';
@@ -1873,6 +1874,10 @@ function GroupFormModal({
                   className="w-full accent-secondary cursor-pointer mt-1"
                 />
               </div>
+
+              {/* Dos formas de sumar gente: el código, que se reparte, y el
+                  correo, persona a persona. El código solo existe con backend. */}
+              {isApiEnabled && <CodigoInvitacion grupo={grupo} />}
 
               {/* Alta por correo. Sin campo de nombre: el backend usa el de la cuenta. */}
               <div>

@@ -37,7 +37,11 @@ export const endpoints = {
   groups: {
     list: '/grupos',
     detail: (grupoId: string) => `/grupos/${grupoId}`,
-    /** Alta de integrante por correo. Sustituye a `/grupos/unirse`. */
+    /** Entrar con el código de invitación (`{codigo}`). */
+    unirse: '/grupos/unirse',
+    /** POST: código nuevo; DELETE: desactivarlo. Solo quien organiza. */
+    codigo: (grupoId: string) => `/grupos/${grupoId}/codigo`,
+    /** Alta de integrante por correo, decidida por quien organiza. */
     miembros: (grupoId: string) => `/grupos/${grupoId}/miembros`,
     member: (grupoId: string, usuarioId: string) => `/grupos/${grupoId}/miembros/${usuarioId}`,
     availability: (grupoId: string) => `/grupos/${grupoId}/disponibilidad`,

@@ -144,7 +144,7 @@ src/
 
 - Autenticación, registro, rutas protegidas y perfil/preferencias.
 - Bloques recurrentes y puntuales, edición, eliminación y escaneo de una foto del horario con Huecko IA (con el lector del navegador como respaldo), revisable antes de guardar.
-- Grupos, código de invitación, umbral de disponibilidad y heatmap semanal.
+- Grupos con alta por correo o con código de invitación (solo lo ve quien organiza, que puede cambiarlo o desactivarlo; cada entrada avisa al grupo en vivo), umbral de disponibilidad y heatmap semanal.
 - Propuestas con 2–5 ventanas, votación, confirmación, retrasos e imprevistos/votación exprés.
 - «Redactar con Huecko IA»: un borrador de plan a partir de una frase («repaso de 2 horas el viernes en la tarde»), con opciones dentro de los huecos reales del grupo.
 - «Ideas con IA»: tres planes pensados para los huecos libres del grupo; «Usar» abre «Proponer plan» con la idea escrita.

@@ -18,6 +18,11 @@ export interface Group {
   creadoPor: string;
   umbralDisponibilidad: number;
   miembros: GroupMember[];
+  /**
+   * Para entrar con «Unirme con código». Solo llega a quien organiza; para el
+   * resto (o si está desactivado) es `null`.
+   */
+  codigoInvitacion?: string | null;
 }
 
 export interface CreateGroupPayload {
@@ -119,6 +124,8 @@ export interface GrupoResponse {
   umbralDisponibilidad: number;
   creadoEn: string;
   miembros: MiembroResponse[];
+  /** Solo para quien organiza; `null` para el resto o si está desactivado. */
+  codigoInvitacion?: string | null;
 }
 
 /** Espejo de `CeldaDisponibilidadResponse`. Solo recuentos: nunca etiquetas (RNF-02). */
