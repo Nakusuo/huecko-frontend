@@ -5,6 +5,8 @@ import EmptyState from '../components/EmptyState';
 import { useGroupsStore } from '../store/groupsStore';
 import { useAuthStore } from '../store/authStore';
 import { CrearGrupoModal } from '../components/CrearGrupoModal';
+import { UnirseConCodigo } from '../components/UnirseConCodigo';
+import { isApiEnabled } from '../lib/apiClient';
 import { useNotificationStore } from '../store/notificationStore';
 import { avisarAltasPendientes } from '../lib/avisosAltas';
 import { AvisoError } from '../components/AvisoError';
@@ -38,6 +40,7 @@ export default function GroupsListPage() {
      volver atrás no vuelva a abrir el modal. */
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreateOpen, setIsCreateOpen] = useState(() => searchParams.get('crear') === '1');
+  const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [eligiendoParaProponer] = useState(() => searchParams.get('proponer') === '1');
   useEffect(() => {
     if (searchParams.has('crear')) {
@@ -74,16 +77,31 @@ export default function GroupsListPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsCreateOpen(true)}
-            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-secondary px-5 py-2.5 text-sm font-semibold text-on-secondary transition-colors hover:bg-secondary-hover active:scale-95 md:w-auto"
-          >
-            <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
-              group_add
-            </span>
-            Crear grupo
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {/* Unirse con código necesita el servidor: en demo no hay más grupos que los propios. */}
+            {isApiEnabled && (
+              <button
+                type="button"
+                onClick={() => setIsJoinOpen(true)}
+                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-surface-container px-5 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high active:scale-95 md:w-auto"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
+                  vpn_key
+                </span>
+                Unirme con código
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsCreateOpen(true)}
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-secondary px-5 py-2.5 text-sm font-semibold text-on-secondary transition-colors hover:bg-secondary-hover active:scale-95 md:w-auto"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
+                group_add
+              </span>
+              Crear grupo
+            </button>
+          </div>
         </header>
 
         {eligiendoParaProponer && groups.length > 0 && (
@@ -145,6 +163,22 @@ export default function GroupsListPage() {
           </ul>
         )}
       </main>
+
+      {isJoinOpen && (
+        <UnirseConCodigo
+          onCerrar={() => setIsJoinOpen(false)}
+          onUnido={(grupo, yaEstabas) => {
+            setIsJoinOpen(false);
+            addNotification({
+              title: yaEstabas ? 'Ya eras parte del grupo' : 'Te uniste a un grupo',
+              description: yaEstabas ? `Ya estabas en «${grupo.nombre}».` : `Ahora eres parte de «${grupo.nombre}».`,
+              type: 'system',
+              groupId: grupo.id,
+            });
+            navigate(`/groups/${grupo.id}`);
+          }}
+        />
+      )}
 
       {isCreateOpen && (
         <CrearGrupoModal

@@ -66,6 +66,7 @@ function toGroup(grupo: GrupoResponse): Group {
     creadoPor: grupo.creadoPor,
     umbralDisponibilidad: grupo.umbralDisponibilidad,
     miembros: grupo.miembros.map(toMember),
+    codigoInvitacion: grupo.codigoInvitacion ?? null,
   };
 }
 
@@ -126,10 +127,30 @@ export const groupsService = {
   },
 
   /**
+   * Entrar a un grupo con el código que pasó quien organiza. Si ya estabas,
+   * devuelve el grupo igual. 404 si el código no existe o está desactivado.
+   */
+  async joinByCode(codigo: string): Promise<Group> {
+    if (!isApiEnabled) throw new Error('API no habilitada.');
+
+    const { data } = await apiClient.post<GrupoResponse>(endpoints.groups.unirse, { codigo });
+    return toGroup(data);
+  },
+
+  /** Código nuevo (el anterior deja de servir) o desactivarlo. Solo quien organiza. */
+  async changeInviteCode(groupId: string, activar: boolean): Promise<Group> {
+    if (!isApiEnabled) throw new Error('API no habilitada.');
+
+    const { data } = activar
+      ? await apiClient.post<GrupoResponse>(endpoints.groups.codigo(groupId))
+      : await apiClient.delete<GrupoResponse>(endpoints.groups.codigo(groupId));
+    return toGroup(data);
+  },
+
+  /**
    * Da de alta a alguien en el grupo, por correo. Solo lo acepta al organizador.
-   *
-   * Sustituye a `joinGroup`, que unia por codigo de invitacion. La entrada ya
-   * no la decide quien tiene la cadena, sino quien organiza el grupo.
+   * Convive con el código de invitación: aquí la entrada la decide quien
+   * organiza persona a persona.
    */
   async addMember(groupId: string, email: string): Promise<Group> {
     if (!isApiEnabled) throw new Error("API no habilitada.");

@@ -39,6 +39,13 @@ export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
           : `"${String(d.titulo ?? 'El plan')}" se canceló.`,
       };
 
+    case 'MIEMBRO_UNIDO':
+      return {
+        type: 'system',
+        title: 'Alguien se unió al grupo',
+        description: `${String(d.nombre ?? 'Alguien')} entró con el código de invitación.`,
+      };
+
     case 'PLAN_PROPUESTO':
       return {
         type: 'proposal',

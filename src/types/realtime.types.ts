@@ -20,6 +20,8 @@ export type RealtimeEventType =
   | 'VOTO_EXPRES_ACTUALIZADO'
   /** RF-17 y RF-18: la votación exprés terminó. */
   | 'VOTACION_EXPRES_CERRADA'
+  /** Alguien entró al grupo con el código de invitación. */
+  | 'MIEMBRO_UNIDO'
   /** RF-08: alguien propuso un plan nuevo en el grupo. */
   | 'PLAN_PROPUESTO'
   /** Un plan en re-coordinación vuelve a votarse con fechas nuevas. */
