@@ -31,8 +31,10 @@ export default function AppRouter() {
           la URL—, pero siguen existiendo como direcciones propias, con su enlace
           compartible y su entrada en el historial. */}
       <Route element={<AuthPage />}>
-        <Route path="/login" />
-        <Route path="/register" />
+        {/* `element={null}` y no nada: sin él React Router avisa en cada visita
+            de que la ruta no tiene componente, aunque sea a propósito. */}
+        <Route path="/login" element={null} />
+        <Route path="/register" element={null} />
       </Route>
 
       {/* Rutas Protegidas */}
