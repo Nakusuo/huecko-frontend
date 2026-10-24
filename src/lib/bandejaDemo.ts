@@ -43,6 +43,8 @@ export interface DatosReporte {
   descripcion: string;
   ruta: string;
   emailReportado?: string;
+  /** Solo en FOTO: la foto del álbum de la que se informa. */
+  fotoId?: string;
 }
 
 export function guardarReporteDemo(datos: DatosReporte, autor: AuthUser, ahora: Date = new Date()): void {
