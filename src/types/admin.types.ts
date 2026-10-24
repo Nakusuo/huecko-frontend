@@ -168,3 +168,19 @@ export interface PropiedadConfig {
   valor: string;
   descripcion: string;
 }
+
+/** Espejo de `UsoIAResponse`: cuánto se usa Huecko IA, sin datos de nadie. */
+export type FuncionIA = 'ESCANEO_HORARIO' | 'BORRADOR_PLAN' | 'IDEAS_PLAN' | 'RESUMEN_VOTACION';
+
+export interface UsoIAAdmin {
+  dias: number;
+  llamadas: number;
+  funciones: {
+    funcion: FuncionIA;
+    llamadas: number;
+    exitosas: number;
+    /** Entre 0 y 1; `null` sin llamadas. */
+    tasaExito: number | null;
+    msPromedio: number | null;
+  }[];
+}

@@ -119,6 +119,8 @@ export const endpoints = {
   /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */
   admin: {
     resumen: '/admin/resumen',
+    /** Uso de Huecko IA por función en el último mes. */
+    ia: '/admin/ia',
     pendientes: '/admin/pendientes',
     salud: '/admin/salud',
     fallos: '/admin/fallos',

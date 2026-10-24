@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import CabeceraAdmin from '../../components/admin/CabeceraAdmin';
 import Indicador from '../../components/admin/Indicador';
+import UsoIA from '../../components/admin/UsoIA';
 import { BarrasHorizontales, ColumnasSemanales } from '../../components/admin/Graficos';
 import { adminService } from '../../services/adminService';
 import { isApiEnabled } from '../../lib/apiClient';
@@ -221,6 +222,9 @@ export default function AdminResumenPage() {
           </p>
         </div>
       )}
+
+      {/* Con su propia carga: en demo no hay IA, y si falla no tapa el resumen. */}
+      {isApiEnabled && <UsoIA key={version} />}
     </>
   );
 }
