@@ -69,19 +69,23 @@ function readServerMessage(data: unknown): string | null {
   return null;
 }
 
+/* Axios da por buena una respuesta con estado 0 (lo permite para archivos
+   locales), pero en la web es una conexión cortada: pasa, por ejemplo, con una
+   petición en curso al recargar o salir de la página. Se trataba como un éxito
+   con el cuerpo vacío y el contador de pendientes del admin pintaba «NaN». */
+const MENSAJE_SIN_RESPUESTA = (detalle: string) =>
+  `No fue posible conectar con el backend en ${apiBaseUrl || '/api'} (${detalle}). ` +
+  'Verifica que huecko-backend esté levantado.';
+
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) =>
+    response.status === 0
+      ? Promise.reject(new ApiError(MENSAJE_SIN_RESPUESTA('conexión cortada'), 0, true))
+      : response,
   (error: AxiosError) => {
     if (!error.response) {
       const detail = error.code === 'ECONNABORTED' ? 'la petición tardó demasiado' : 'sin respuesta';
-      return Promise.reject(
-        new ApiError(
-          `No fue posible conectar con el backend en ${apiBaseUrl || '/api'} (${detail}). ` +
-            'Verifica que huecko-backend esté levantado.',
-          0,
-          true
-        )
-      );
+      return Promise.reject(new ApiError(MENSAJE_SIN_RESPUESTA(detail), 0, true));
     }
 
     const { status, data } = error.response;
