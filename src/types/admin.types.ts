@@ -115,7 +115,8 @@ export interface FalloAdmin {
 }
 
 /** FALLO = algo de la app no funciona; CONDUCTA = problema con otra cuenta. */
-export type TipoReporte = 'FALLO' | 'CONDUCTA';
+/** FOTO = una foto de un álbum que no debería estar ahí. */
+export type TipoReporte = 'FALLO' | 'CONDUCTA' | 'FOTO';
 
 export interface ReporteAdmin {
   id: string;
@@ -129,6 +130,12 @@ export interface ReporteAdmin {
   cuentaReportadaEmail: string | null;
   /** Estado actual de la cuenta señalada. `null` si no es de conducta o ya no existe. */
   cuentaReportadaSuspendida: boolean | null;
+  /**
+   * Si sigue existiendo la foto en juego, para poder revisarla: la del álbum
+   * en un reporte de FOTO, la de perfil en uno de CONDUCTA. El modo demo no
+   * tiene fotos que revisar.
+   */
+  hayFotoQueRevisar?: boolean | null;
   estado: EstadoRevision;
   creadoEn: string;
   actualizadoEn: string;

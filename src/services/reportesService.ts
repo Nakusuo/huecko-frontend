@@ -20,6 +20,7 @@ export const reportesService = {
     await apiClient.post(endpoints.reportes.crear, {
       ...datos,
       emailReportado: datos.tipo === 'CONDUCTA' ? datos.emailReportado?.trim() : undefined,
+      fotoId: datos.tipo === 'FOTO' ? datos.fotoId : undefined,
     });
   },
 

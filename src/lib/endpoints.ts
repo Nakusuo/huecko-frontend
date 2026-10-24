@@ -19,6 +19,42 @@ export const endpoints = {
   /** ✅ MeController. */
   me: '/me',
 
+  /**
+   * ✅ MeController y UsuarioController: perfil social, foto y logros. La foto
+   * y la tarjeta de otra persona solo responden si compartes un grupo con ella.
+   */
+  perfil: {
+    social: '/me/perfil',
+    miFoto: '/me/foto',
+    logros: '/me/logros',
+    publico: (usuarioId: string) => `/usuarios/${usuarioId}/perfil`,
+    foto: (usuarioId: string) => `/usuarios/${usuarioId}/foto`,
+  },
+
+  /** ✅ LibreAhoraController: GET el estado, PUT «Estoy libre», DELETE para quitarlo. */
+  libreAhora: '/me/libre-ahora',
+
+  /** ✅ MuroController: `?antes=` con el `siguiente` de la página anterior. */
+  muro: (grupoId: string) => `/grupos/${grupoId}/muro`,
+
+  /** ✅ LlegadaController: GET el estado, PUT «Llegué», DELETE para deshacerlo. */
+  llegadas: (planId: string) => `/planes/${planId}/llegadas`,
+
+  /** ✅ AlbumController: solo para la gente del grupo (si no, 404). */
+  album: {
+    grupo: (grupoId: string) => `/grupos/${grupoId}/album`,
+    /** GET el álbum del plan; POST multipart (partes «fotos») para subir. */
+    plan: (planId: string) => `/planes/${planId}/fotos`,
+    /** GET la foto, DELETE para borrarla. */
+    foto: (fotoId: string) => `/fotos/${fotoId}`,
+    miniatura: (fotoId: string) => `/fotos/${fotoId}/miniatura`,
+    /** PUT para poner la reacción, DELETE para quitarla. */
+    reaccion: (fotoId: string, reaccion: string) => `/fotos/${fotoId}/reacciones/${reaccion}`,
+    /** GET los comentarios, POST `{texto}` para comentar. */
+    comentarios: (fotoId: string) => `/fotos/${fotoId}/comentarios`,
+    comentario: (comentarioId: string) => `/comentarios/${comentarioId}`,
+  },
+
   /** ✅ BloqueHorarioController. */
   schedule: {
     blocks: (usuarioId: string) => `/usuarios/${usuarioId}/bloques-horario`,
@@ -128,6 +164,8 @@ export const endpoints = {
     reportes: '/admin/reportes',
     estadoReporte: (id: string) => `/admin/reportes/${id}/estado`,
     suspensionReporte: (id: string) => `/admin/reportes/${id}/suspension`,
+    /** GET para verla, DELETE para quitarla: la foto de la cuenta que señala un reporte de conducta. */
+    fotoReporte: (id: string) => `/admin/reportes/${id}/foto`,
     logs: '/admin/consola/logs',
     configuracion: '/admin/consola/configuracion',
   },

@@ -174,3 +174,69 @@ describe('MIEMBRO_UNIDO', () => {
     });
   });
 });
+
+describe('LIBRE_AHORA', () => {
+  it('dice quién está libre, hasta cuándo y dónde, con lo que escribió esa persona', () => {
+    const aviso = avisoDeEvento(evento('LIBRE_AHORA', {
+      usuarioId: 'u-2',
+      nombre: 'Ana',
+      hasta: new Date(2026, 9, 22, 16, 0).toISOString(),
+      nota: 'En la biblioteca',
+    }));
+
+    expect(aviso?.title).toBe('Ana está libre');
+    expect(aviso?.description).toBe('Hasta las 16:00 · En la biblioteca.');
+  });
+
+  it('sin nota no deja un separador colgando', () => {
+    const aviso = avisoDeEvento(evento('LIBRE_AHORA', { nombre: 'Ana', hasta: new Date(2026, 9, 22, 9, 5).toISOString() }));
+
+    expect(aviso?.description).toBe('Hasta las 09:05.');
+  });
+});
+
+describe('ALBUM_ACTUALIZADO', () => {
+  it('avisa de cuántas fotos subió alguien y a qué plan', () => {
+    const aviso = avisoDeEvento(evento('ALBUM_ACTUALIZADO', { usuarioId: 'u-2', nombre: 'Ana', titulo: 'Pichanga', subidas: 3, planId: 'p-1' }));
+
+    expect(aviso).toMatchObject({ title: 'Ana subió 3 fotos', description: 'Al álbum de «Pichanga».' });
+  });
+
+  it('borrar una foto no avisa: solo refresca el álbum', () => {
+    expect(avisoDeEvento(evento('ALBUM_ACTUALIZADO', { planId: 'p-1', subidas: 0 }))).toBeNull();
+  });
+});
+
+describe('FOTO_CONVERSACION', () => {
+  const comentario = evento('FOTO_CONVERSACION', {
+    usuarioId: 'u-2', nombre: 'Beto', titulo: 'Pichanga', fotoId: 'f-1', autorFotoId: 'u-1', comentario: true,
+  });
+
+  it('un comentario avisa solo a quien subió la foto', () => {
+    expect(avisoDeEvento(comentario, 'u-1')).toMatchObject({ title: 'Beto comentó tu foto', description: 'En el álbum de «Pichanga».' });
+    expect(avisoDeEvento(comentario, 'u-3')).toBeNull();
+  });
+
+  it('una reacción no avisa a nadie', () => {
+    expect(avisoDeEvento(evento('FOTO_CONVERSACION', { autorFotoId: 'u-1', comentario: false }), 'u-1')).toBeNull();
+  });
+});
+
+describe('LLEGADA y recordatorios', () => {
+  it('quien llega avisa al grupo', () => {
+    expect(avisoDeEvento(evento('LLEGADA', { nombre: 'Ana', titulo: 'Pichanga', aTiempo: true }))).toMatchObject({
+      title: 'Ana llegó',
+      description: 'A «Pichanga».',
+    });
+  });
+
+  it('el recordatorio dice a qué hora y dónde', () => {
+    const aviso = avisoDeEvento(evento('RECORDATORIO_PLAN', { titulo: 'Pichanga', lugar: 'Losa', cuando: new Date(2026, 9, 24, 18, 0).toISOString() }));
+    expect(aviso).toMatchObject({ title: '«Pichanga» empieza en una hora', description: 'A las 18:00 · Losa.' });
+  });
+
+  it('la votación por cerrar dice a qué hora cierra', () => {
+    const aviso = avisoDeEvento(evento('VOTACION_POR_CERRAR', { titulo: 'Cine', cuando: new Date(2026, 9, 24, 17, 30).toISOString() }));
+    expect(aviso?.description).toBe('Cierra a las 17:30. Aún no votaste.');
+  });
+});

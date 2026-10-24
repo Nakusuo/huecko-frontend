@@ -1,6 +1,7 @@
 import type { AppNotification } from '../store/notificationStore';
 import type { PlanConfirmadoDatos, RealtimeEvent } from '../types/realtime.types';
 import { normalizeTime } from './formatoBackend';
+import { horaCorta } from './libreAhora';
 
 /**
  * De un evento del canal en tiempo real al aviso que ve el usuario.
@@ -16,8 +17,11 @@ export interface AvisoDeEvento {
   description: string;
 }
 
-/** `null` = este tipo no produce aviso (o no se reconoce). */
-export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
+/**
+ * `null` = este tipo no produce aviso (o no se reconoce). `yo` hace falta
+ * para los avisos que son solo para una persona del grupo.
+ */
+export function avisoDeEvento(evento: RealtimeEvent, yo?: string): AvisoDeEvento | null {
   const d = evento.datos as Record<string, unknown>;
 
   switch (evento.tipo) {
@@ -37,6 +41,63 @@ export function avisoDeEvento(evento: RealtimeEvent): AvisoDeEvento | null {
         description: d.motivo
           ? `"${String(d.titulo ?? 'El plan')}" se canceló: ${String(d.motivo).charAt(0).toLowerCase()}${String(d.motivo).slice(1)}.`
           : `"${String(d.titulo ?? 'El plan')}" se canceló.`,
+      };
+
+    case 'LIBRE_AHORA':
+      /* La hora y la nota las escribió esa persona: no salen de su horario (RNF-02). */
+      return {
+        type: 'system',
+        title: `${String(d.nombre ?? 'Alguien')} está libre`,
+        description:
+          (typeof d.hasta === 'string' ? `Hasta las ${horaCorta(d.hasta)}` : 'Ahora mismo')
+          + (typeof d.nota === 'string' && d.nota ? ` · ${d.nota}` : '')
+          + '.',
+      };
+
+    case 'ALBUM_ACTUALIZADO': {
+      // Borrar una foto solo refresca el álbum; subir avisa al grupo.
+      const subidas = Number(d.subidas ?? 0);
+      if (!(subidas > 0)) return null;
+      return {
+        type: 'system',
+        title: `${String(d.nombre ?? 'Alguien')} subió ${subidas} ${subidas === 1 ? 'foto' : 'fotos'}`,
+        description: `Al álbum de «${String(d.titulo ?? 'un plan')}».`,
+      };
+    }
+
+    case 'FOTO_CONVERSACION':
+      // Una reacción solo refresca; un comentario avisa a quien subió la foto.
+      if (d.comentario !== true || !yo || d.autorFotoId !== yo) return null;
+      return {
+        type: 'system',
+        title: `${String(d.nombre ?? 'Alguien')} comentó tu foto`,
+        description: `En el álbum de «${String(d.titulo ?? 'un plan')}».`,
+      };
+
+    case 'LLEGADA':
+      return {
+        type: 'system',
+        title: `${String(d.nombre ?? 'Alguien')} llegó`,
+        description: `A «${String(d.titulo ?? 'el plan')}».`,
+      };
+
+    case 'RECORDATORIO_PLAN':
+      return {
+        type: 'confirmation',
+        title: `«${String(d.titulo ?? 'El plan')}» empieza en una hora`,
+        description:
+          (typeof d.cuando === 'string' ? `A las ${horaCorta(d.cuando)}` : 'Muy pronto')
+          + (typeof d.lugar === 'string' && d.lugar ? ` · ${d.lugar}` : '')
+          + '.',
+      };
+
+    case 'VOTACION_POR_CERRAR':
+      return {
+        type: 'proposal',
+        title: `La votación de «${String(d.titulo ?? 'un plan')}» cierra pronto`,
+        description:
+          (typeof d.cuando === 'string' ? `Cierra a las ${horaCorta(d.cuando)}.` : 'Cierra en menos de una hora.')
+          + ' Aún no votaste.',
       };
 
     case 'MIEMBRO_UNIDO':

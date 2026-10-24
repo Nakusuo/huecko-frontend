@@ -7,7 +7,13 @@ import { useProfileStore, usePreferenciasLocales } from '../store/profileStore';
 import Toggle from '../components/Toggle';
 import { useGroupsStore } from '../store/groupsStore';
 import { BotonReportar } from '../components/ReportarProblema';
+import { MiAvatar } from '../components/Avatar';
+import { useTengoFoto } from '../hooks/useFoto';
+import { TarjetaPerfil } from '../components/TarjetaPerfil';
+import { PerfilSocialCard } from '../components/perfil/PerfilSocialCard';
+import { MisLogros } from '../components/perfil/MisLogros';
 import { isApiEnabled } from '../lib/apiClient';
+import { MAX_BYTES_ORIGINAL } from '../lib/fotos';
 
 /** Lo que se edita en «Datos personales»: lo único que guarda el servidor. */
 interface DatosCuenta {
@@ -26,7 +32,13 @@ export default function ProfilePage() {
   const isSaving = useProfileStore((s) => s.isSaving);
   const syncError = useProfileStore((s) => s.syncError);
   const setPreferencias = useProfileStore((s) => s.setPreferencias);
+  const cambiarFoto = useProfileStore((s) => s.cambiarFoto);
+  const quitarFoto = useProfileStore((s) => s.quitarFoto);
+  const subirFotoDeEsteDispositivo = useProfileStore((s) => s.subirFotoDeEsteDispositivo);
   const { avatarUrl, alertasRetrasos } = usePreferenciasLocales();
+  const tengoFoto = useTengoFoto();
+  /* Una foto de antes de que el servidor guardara fotos: solo la ve este navegador. */
+  const fotoSoloAqui = isApiEnabled && Boolean(avatarUrl) && !user?.fotoActualizadaEn;
   const activeGroupsCount = useGroupsStore((s) => s.groups.length);
 
   /* Nombre y correo salen de la sesión: es lo mismo que pintan la barra y el
@@ -53,55 +65,21 @@ export default function ProfilePage() {
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarError, setAvatarError] = useState('');
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [verTarjeta, setVerTarjeta] = useState(false);
 
-  /**
-   * Reduce la imagen elegida a un cuadrado de 256 px antes de guardarla.
-   *
-   * La foto se persiste como data URL en las preferencias locales, que viven en
-   * `localStorage` (el servidor no guarda fotos): una foto de cámara sin reescalar (varios MB en base64)
-   * revienta la cuota del navegador. Recortar al centro además evita que las
-   * fotos verticales salgan deformadas en el círculo del avatar.
-   */
-  const shrinkToDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const objectUrl = URL.createObjectURL(file);
-      const image = new Image();
-
-      image.onload = () => {
-        URL.revokeObjectURL(objectUrl);
-        const LADO = 256;
-        const canvas = document.createElement('canvas');
-        canvas.width = LADO;
-        canvas.height = LADO;
-
-        const context = canvas.getContext('2d');
-        if (!context) {
-          reject(new Error('El navegador no pudo procesar la imagen.'));
-          return;
-        }
-
-        const recorte = Math.min(image.width, image.height);
-        context.drawImage(
-          image,
-          (image.width - recorte) / 2,
-          (image.height - recorte) / 2,
-          recorte,
-          recorte,
-          0,
-          0,
-          LADO,
-          LADO
-        );
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
-      };
-
-      image.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        reject(new Error('No se pudo leer la imagen.'));
-      };
-
-      image.src = objectUrl;
-    });
+  /** Mientras se sube o se quita, el botón no admite otra foto. */
+  const conFoto = async (accion: () => Promise<void>) => {
+    setAvatarError('');
+    setSubiendoFoto(true);
+    try {
+      await accion();
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : 'No se pudo guardar la foto.');
+    } finally {
+      setSubiendoFoto(false);
+    }
+  };
 
   const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -109,22 +87,16 @@ export default function ProfilePage() {
     event.target.value = '';
     if (!file) return;
 
-    setAvatarError('');
-
     if (!file.type.startsWith('image/')) {
       setAvatarError('Elige un archivo de imagen.');
       return;
     }
-    if (file.size > 8 * 1024 * 1024) {
-      setAvatarError('La imagen no puede pesar más de 8 MB.');
+    if (file.size > MAX_BYTES_ORIGINAL) {
+      setAvatarError('La imagen no puede pesar más de 15 MB.');
       return;
     }
-
-    try {
-      setPreferencias({ avatarUrl: await shrinkToDataUrl(file) });
-    } catch (error) {
-      setAvatarError(error instanceof Error ? error.message : 'No se pudo cargar la imagen.');
-    }
+    // Se reduce a 256 px en el navegador antes de enviarla (ver `reducirFoto`).
+    await conFoto(() => cambiarFoto(file));
   };
 
   const startEdit = () => {
@@ -164,7 +136,7 @@ export default function ProfilePage() {
         <header className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold text-on-surface mb-2 font-headline">Perfil de usuario</h1>
           <p className="text-on-surface-variant text-sm md:text-base">
-            Administra los datos de tu cuenta y las preferencias de este dispositivo.
+            Tu cuenta, lo que ven tus grupos de ti y las preferencias de este dispositivo.
           </p>
         </header>
 
@@ -186,54 +158,62 @@ export default function ProfilePage() {
           {/* Card: Avatar e Información básica */}
           <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6 flex flex-col items-center text-center">
             <div className="relative mb-4">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={`Foto de perfil de ${datos.nombre}`}
-                  className="w-24 h-24 rounded-full object-cover shadow-md shadow-secondary/20"
-                />
-              ) : (
-                <div className="w-24 h-24 rounded-full bg-olive flex items-center justify-center text-ink font-headline text-3xl shadow-md">
-                  {datos.nombre.charAt(0).toUpperCase()}
-                </div>
-              )}
+              <MiAvatar className={`w-24 h-24 text-3xl shadow-md ${subiendoFoto ? 'opacity-50' : ''}`} />
               <input
                 ref={avatarInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/*"
                 className="sr-only"
                 onChange={handleAvatarChange}
               />
               <button
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
-                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-surface-container-lowest flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface transition-all cursor-pointer elev-0"
-                aria-label={avatarUrl ? 'Cambiar foto de perfil' : 'Subir foto de perfil'}
-                title={avatarUrl ? 'Cambiar foto' : 'Subir foto'}
+                disabled={subiendoFoto}
+                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-surface-container-lowest flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface transition-all cursor-pointer elev-0 disabled:cursor-wait"
+                aria-label={tengoFoto ? 'Cambiar foto de perfil' : 'Subir foto de perfil'}
+                title={tengoFoto ? 'Cambiar foto' : 'Subir foto'}
               >
-                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">photo_camera</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">
+                  {subiendoFoto ? 'hourglass_top' : 'photo_camera'}
+                </span>
               </button>
             </div>
             <h2 className="text-xl font-bold text-on-surface">{datos.nombre}</h2>
             <p className="text-xs text-on-surface-variant">{datos.email}</p>
 
-            {/* El servidor no guarda fotos: decirlo evita que alguien crea que su
-                grupo la ve o que la encontrará en otro dispositivo. */}
+            {/* Decir quién la ve: con backend, tus grupos; en demo, solo este navegador. */}
             <p className="mt-2 text-2xs text-on-surface-variant flex items-center gap-1">
-              <span aria-hidden="true" className="material-symbols-outlined text-[14px]">devices</span>
-              La foto se guarda solo en este dispositivo.
+              <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
+                {isApiEnabled ? 'group' : 'devices'}
+              </span>
+              {isApiEnabled
+                ? 'Tu foto la ven las personas de tus grupos.'
+                : 'En modo demo la foto se guarda solo en este dispositivo.'}
             </p>
 
-            {avatarError && <p className="mt-2 text-xs text-error font-medium">{avatarError}</p>}
+            {fotoSoloAqui && (
+              <div className="mt-3 w-full rounded-xl bg-warning-container border border-warning/30 p-3 text-left text-2xs text-on-warning-container">
+                <p>Tienes una foto guardada solo en este navegador. Tus grupos todavía no la ven.</p>
+                <button
+                  type="button"
+                  onClick={() => void conFoto(subirFotoDeEsteDispositivo)}
+                  disabled={subiendoFoto}
+                  className="mt-2 font-semibold underline cursor-pointer disabled:cursor-wait"
+                >
+                  Subirla para que la vean
+                </button>
+              </div>
+            )}
 
-            {avatarUrl && (
+            {avatarError && <p role="alert" className="mt-2 text-xs text-error font-medium">{avatarError}</p>}
+
+            {tengoFoto && (
               <button
                 type="button"
-                onClick={() => {
-                  setAvatarError('');
-                  setPreferencias({ avatarUrl: undefined });
-                }}
-                className="mt-2 text-2xs text-on-surface-variant hover:text-error underline cursor-pointer"
+                onClick={() => void conFoto(quitarFoto)}
+                disabled={subiendoFoto}
+                className="mt-2 text-2xs text-on-surface-variant hover:text-error underline cursor-pointer disabled:cursor-wait"
               >
                 Quitar foto
               </button>
@@ -381,6 +361,10 @@ export default function ProfilePage() {
               </form>
             </div>
 
+            <PerfilSocialCard onVerTarjeta={() => setVerTarjeta(true)} />
+
+            <MisLogros />
+
             {/* Sección: Notificaciones */}
             <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6">
               <h3 className="text-lg font-bold text-on-surface flex items-center gap-2 mb-4 pb-3 border-b border-outline-variant/60">
@@ -406,6 +390,13 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
+
+      {verTarjeta && user && (
+        <TarjetaPerfil
+          persona={{ nombre: user.nombre, email: user.email, usuarioId: user.id, fotoActualizadaEn: user.fotoActualizadaEn }}
+          onClose={() => setVerTarjeta(false)}
+        />
+      )}
     </div>
   );
 }

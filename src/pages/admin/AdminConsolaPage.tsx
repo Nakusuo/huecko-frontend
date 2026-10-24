@@ -176,12 +176,14 @@ function Configuracion({ propiedades }: { propiedades: PropiedadConfig[] }) {
           <h3 className="mb-3 text-sm font-semibold text-on-surface">{grupo}</h3>
           <dl className="flex flex-col gap-3">
             {lista.map((p) => (
-              <div key={p.clave}>
-                <dt className="flex flex-wrap items-baseline justify-between gap-x-3">
+              /* dt y dd hermanos (un <dd> dentro de un <dt> no es HTML válido):
+                 la clave a la izquierda, el valor a la derecha y la descripción debajo. */
+              <div key={p.clave} className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3">
+                <dt>
                   <code className="text-2xs text-on-surface-variant">{p.clave}</code>
-                  <dd className="break-all text-right font-mono text-xs font-semibold text-on-surface">{p.valor}</dd>
                 </dt>
-                <p className="text-2xs text-on-surface-variant">{p.descripcion}</p>
+                <dd className="break-all text-right font-mono text-xs font-semibold text-on-surface">{p.valor}</dd>
+                <dd className="col-span-2 text-2xs text-on-surface-variant">{p.descripcion}</dd>
               </div>
             ))}
           </dl>

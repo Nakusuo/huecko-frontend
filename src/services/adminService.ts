@@ -112,6 +112,22 @@ export const adminService = {
     return data;
   },
 
+  /**
+   * La foto de la cuenta que señala un reporte, como URL de objeto (la ruta
+   * pide el token). Quien la pide la libera con `URL.revokeObjectURL`.
+   */
+  async verFotoReportada(id: string): Promise<string> {
+    exigirServidor();
+    const { data } = await apiClient.get<Blob>(endpoints.admin.fotoReporte(id), { responseType: 'blob' });
+    return URL.createObjectURL(data);
+  },
+
+  async quitarFotoReportada(id: string): Promise<ReporteAdmin> {
+    exigirServidor();
+    const { data } = await apiClient.delete<ReporteAdmin>(endpoints.admin.fotoReporte(id));
+    return data;
+  },
+
   async getLogs(desde: number, nivel: NivelLog): Promise<PaginaLogs> {
     exigirServidor();
     const { data } = await apiClient.get<PaginaLogs>(endpoints.admin.logs, { params: { desde, nivel } });

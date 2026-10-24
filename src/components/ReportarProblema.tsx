@@ -21,13 +21,26 @@ const TIPOS: { valor: TipoReporte; titulo: string; detalle: string; icon: string
 /**
  * Diálogo para avisar al equipo de Huecko. Va con la página en la que se está,
  * para que quien lo lea sepa dónde mirar sin tener que preguntar.
+ *
+ * Con `cuentaReportada` (un correo) se abre ya como problema con esa persona:
+ * es lo que usa el botón «Reportar» de la tarjeta de perfil. Con
+ * `fotoReportada` (el id de una foto de álbum) es un reporte de esa foto, y
+ * no hay tipo que elegir.
  */
-function ReportarProblemaModal({ onClose }: { onClose: () => void }) {
+export function ReportarProblemaModal({
+  onClose,
+  cuentaReportada,
+  fotoReportada,
+}: {
+  onClose: () => void;
+  cuentaReportada?: string;
+  fotoReportada?: string;
+}) {
   const user = useAuthStore((s) => s.user);
   const { pathname } = useLocation();
-  const [tipo, setTipo] = useState<TipoReporte>('FALLO');
+  const [tipo, setTipo] = useState<TipoReporte>(fotoReportada ? 'FOTO' : cuentaReportada ? 'CONDUCTA' : 'FALLO');
   const [descripcion, setDescripcion] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(cuentaReportada ?? '');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enviado, setEnviado] = useState(false);
@@ -35,7 +48,7 @@ function ReportarProblemaModal({ onClose }: { onClose: () => void }) {
   useModalDismiss(true, onClose);
 
   const largo = descripcion.trim().length;
-  const valido = largo >= MIN_DESCRIPCION && largo <= MAX_DESCRIPCION && (tipo === 'FALLO' || email.trim() !== '');
+  const valido = largo >= MIN_DESCRIPCION && largo <= MAX_DESCRIPCION && (tipo !== 'CONDUCTA' || email.trim() !== '');
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
@@ -43,7 +56,7 @@ function ReportarProblemaModal({ onClose }: { onClose: () => void }) {
     setEnviando(true);
     setError(null);
     try {
-      await reportesService.enviarReporte({ tipo, descripcion, ruta: pathname, emailReportado: email }, user);
+      await reportesService.enviarReporte({ tipo, descripcion, ruta: pathname, emailReportado: email, fotoId: fotoReportada }, user);
       setEnviado(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo enviar el reporte.');
@@ -62,7 +75,7 @@ function ReportarProblemaModal({ onClose }: { onClose: () => void }) {
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-6 elev-3 animate-modal-in">
         <div className="mb-5 flex items-center justify-between">
           <h2 id="reportar-titulo" className="font-headline text-xl font-bold text-on-surface">
-            Reportar un problema
+            {fotoReportada ? 'Reportar esta foto' : 'Reportar un problema'}
           </h2>
           <button
             type="button"
@@ -93,6 +106,11 @@ function ReportarProblemaModal({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <form onSubmit={enviar} className="space-y-5">
+            {fotoReportada ? (
+              <p className="text-sm text-on-surface-variant">
+                El equipo de Huecko la revisará y puede quitarla del álbum. Quien la subió no sabrá quién la reportó.
+              </p>
+            ) : (
             <fieldset className="grid gap-2 sm:grid-cols-2">
               <legend className="mb-1.5 text-xs font-semibold text-on-surface-variant">¿Qué pasa?</legend>
               {TIPOS.map((t) => (
@@ -122,6 +140,7 @@ function ReportarProblemaModal({ onClose }: { onClose: () => void }) {
                 </label>
               ))}
             </fieldset>
+            )}
 
             {tipo === 'CONDUCTA' && (
               <div className="space-y-1.5 animate-fade-in">
@@ -154,7 +173,9 @@ function ReportarProblemaModal({ onClose }: { onClose: () => void }) {
                 placeholder={
                   tipo === 'FALLO'
                     ? 'Qué intentabas hacer y qué pasó en su lugar.'
-                    : 'Qué hizo y en qué grupo, con el máximo detalle que puedas.'
+                    : tipo === 'FOTO'
+                      ? 'Por qué no debería estar: sale alguien que no quiere salir, es ofensiva…'
+                      : 'Qué hizo y en qué grupo, con el máximo detalle que puedas.'
                 }
                 className="w-full rounded-xl border border-outline-variant bg-surface-container-lowest px-3.5 py-2.5 text-sm text-on-surface placeholder-outline focus:border-secondary focus:outline-none"
               />

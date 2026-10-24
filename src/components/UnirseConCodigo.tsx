@@ -11,12 +11,15 @@ import type { Group } from '../types/groups.types';
 export function UnirseConCodigo({
   onUnido,
   onCerrar,
+  codigoInicial,
 }: {
   onUnido: (grupo: Group, yaEstabas: boolean) => void;
   onCerrar: () => void;
+  /** El que trae el enlace de un QR: se rellena, pero entrar sigue siendo decisión de quien lo escanea. */
+  codigoInicial?: string;
 }) {
   const joinByCode = useGroupsStore((s) => s.joinByCode);
-  const [codigo, setCodigo] = useState('');
+  const [codigo, setCodigo] = useState(codigoInicial ?? '');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useModalDismiss(true, onCerrar);

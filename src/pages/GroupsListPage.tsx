@@ -10,6 +10,9 @@ import { isApiEnabled } from '../lib/apiClient';
 import { useNotificationStore } from '../store/notificationStore';
 import { avisarAltasPendientes } from '../lib/avisosAltas';
 import { AvisoError } from '../components/AvisoError';
+import { codigoDelEnlace } from '../lib/invitacion';
+import { AvatarMiembro } from '../components/Avatar';
+import type { GroupMember } from '../types/groups.types';
 
 /**
  * «Mis grupos»: solo la lista.
@@ -40,12 +43,15 @@ export default function GroupsListPage() {
      volver atrás no vuelva a abrir el modal. */
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreateOpen, setIsCreateOpen] = useState(() => searchParams.get('crear') === '1');
-  const [isJoinOpen, setIsJoinOpen] = useState(false);
+  /* `?unirse=CÓDIGO` llega del QR de invitación: abre «Unirme con código» ya relleno. */
+  const [codigoDelQr] = useState(() => (isApiEnabled ? codigoDelEnlace(searchParams.get('unirse')) : null));
+  const [isJoinOpen, setIsJoinOpen] = useState(() => codigoDelQr !== null);
   const [eligiendoParaProponer] = useState(() => searchParams.get('proponer') === '1');
   useEffect(() => {
-    if (searchParams.has('crear')) {
+    if (searchParams.has('crear') || searchParams.has('unirse')) {
       const resto = new URLSearchParams(searchParams);
       resto.delete('crear');
+      resto.delete('unirse');
       setSearchParams(resto, { replace: true });
     }
   }, [searchParams, setSearchParams]);
@@ -166,6 +172,7 @@ export default function GroupsListPage() {
 
       {isJoinOpen && (
         <UnirseConCodigo
+          codigoInicial={codigoDelQr ?? undefined}
           onCerrar={() => setIsJoinOpen(false)}
           onUnido={(grupo, yaEstabas) => {
             setIsJoinOpen(false);
@@ -217,19 +224,15 @@ export default function GroupsListPage() {
  * Se muestran cinco como mucho: a partir de ahí las iniciales dejan de
  * distinguir a nadie y solo importa cuántos son.
  */
-function Integrantes({ miembros }: { miembros: { email: string; nombre: string }[] }) {
+function Integrantes({ miembros }: { miembros: GroupMember[] }) {
   const visibles = miembros.slice(0, 5);
 
   return (
     <div className="flex items-center gap-2">
       <div className="flex -space-x-1.5">
         {visibles.map((m) => (
-          <span
-            key={m.email}
-            title={m.nombre}
-            className="flex size-6 items-center justify-center rounded-full bg-secondary text-2xs font-bold text-on-secondary ring-2 ring-surface-container-lowest"
-          >
-            {m.nombre.charAt(0).toUpperCase()}
+          <span key={m.email} title={m.nombre} className="rounded-full ring-2 ring-surface-container-lowest">
+            <AvatarMiembro miembro={m} className="size-6 text-2xs" />
           </span>
         ))}
       </div>

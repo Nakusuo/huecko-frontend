@@ -16,6 +16,7 @@ import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
 import { ResumenPuntualidad } from '../components/ResumenPuntualidad';
 import { AccionesRapidas } from '../components/AccionesRapidas';
+import { LibreAhoraCard } from '../components/LibreAhoraCard';
 import { AvisoError } from '../components/AvisoError';
 import { isApiEnabled } from '../lib/apiClient';
 import { formatearPlazo, formatearVentana, proximoPlanConfirmado, votacionAbierta } from '../lib/planes';
@@ -532,6 +533,9 @@ export default function DashboardPage() {
             </p>
           </button>
         </section>
+
+        {/* Lo más social de Huecko: quién avisó que está libre para armar algo ya. */}
+        <LibreAhoraCard />
 
         {/* Votación exprés (RF-17). Va ANTES del próximo plan a propósito: es
             lo único de esta página con un plazo corriendo, y enterrarla bajo

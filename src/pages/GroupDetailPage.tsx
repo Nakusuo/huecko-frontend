@@ -39,6 +39,12 @@ import { BorradorConIA } from '../components/BorradorConIA';
 import { IdeasConIA } from '../components/IdeasConIA';
 import { CodigoInvitacion } from '../components/CodigoInvitacion';
 import { ResumenVotacionIA } from '../components/ResumenVotacionIA';
+import { AvatarMiembro } from '../components/Avatar';
+import { TarjetaPerfil } from '../components/TarjetaPerfil';
+import { AlbumPlanModal } from '../components/album/AlbumPlanModal';
+import { LlegadaPlan } from '../components/LlegadaPlan';
+import { MuroGrupo } from '../components/MuroGrupo';
+import { RecuerdosDelGrupo } from '../components/album/RecuerdosDelGrupo';
 import { useOfrecerIA } from '../hooks/useOfrecerIA';
 import { completarOpciones } from '../services/planesIaService';
 import type { BorradorPlan, IdeaPlan } from '../services/planesIaService';
@@ -277,6 +283,10 @@ export default function GroupDetailPage() {
   const [descripcion, setDescripcion] = useState('');
   const [umbral, setUmbral] = useState(100);
   const [membersList, setMembersList] = useState<GroupMember[]>([]);
+  /** La persona cuya tarjeta de perfil está abierta. */
+  const [personaTarjeta, setPersonaTarjeta] = useState<GroupMember | null>(null);
+  /** El plan cuyo álbum está abierto desde su tarjeta. */
+  const [albumAbierto, setAlbumAbierto] = useState<string | null>(null);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [isEssentialNewMember, setIsEssentialNewMember] = useState(false);
   /** Por qué no se pudo añadir el correo escrito (formato, repetido, el propio). */
@@ -1150,6 +1160,9 @@ export default function GroupDetailPage() {
                             })}
                           </div>
 
+                          {/* «Llegué» y quién llegó: solo hay a dónde llegar con el plan confirmado. */}
+                          {isClosed && <LlegadaPlan planId={proposal.id} />}
+
                           {/* Un plan cancelado no tiene votación que resumir. */}
                           {ofrecerIA && proposal.estado !== 'cancelado' && <ResumenVotacionIA planId={proposal.id} />}
                         </div>
@@ -1167,6 +1180,17 @@ export default function GroupDetailPage() {
                                 className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer"
                               >
                                 Proponer nuevas fechas
+                              </button>
+                            )}
+
+                            {/* El álbum dice él mismo si aún no se pueden subir fotos. */}
+                            {isClosed && (
+                              <button
+                                onClick={() => setAlbumAbierto(proposal.id)}
+                                className="text-2xs text-primary hover:text-primary-hover font-bold cursor-pointer flex items-center gap-0.5"
+                              >
+                                <span aria-hidden="true" className="material-symbols-outlined text-[14px]">photo_library</span>
+                                Álbum
                               </button>
                             )}
 
@@ -1220,6 +1244,11 @@ export default function GroupDetailPage() {
               </div>
             )}
           </section>
+
+          <RecuerdosDelGrupo key={grp.id} grupoId={grp.id} />
+
+          <MuroGrupo key={`muro-${grp.id}`} grupoId={grp.id} onAbrirAlbum={setAlbumAbierto} />
+
           {(() => {
             const cruce = estadoDelCruce(grp);
             return (
@@ -1421,6 +1450,24 @@ export default function GroupDetailPage() {
                   {selectedGroup.descripcion}
                 </p>
               )}
+              {/* Tocar a alguien abre su tarjeta: foto, carrera e intereses. */}
+              {selectedGroup && selectedGroup.miembros.length > 0 && (
+                <ul className="mt-3 flex flex-wrap items-center gap-1.5" aria-label="Integrantes">
+                  {selectedGroup.miembros.map((m) => (
+                    <li key={m.email}>
+                      <button
+                        type="button"
+                        onClick={() => setPersonaTarjeta(m)}
+                        aria-label={`Ver el perfil de ${m.nombre}`}
+                        title={m.nombre}
+                        className="block cursor-pointer rounded-full ring-2 ring-surface transition-transform hover:scale-110 hover:ring-secondary"
+                      >
+                        <AvatarMiembro miembro={m} className="size-9 text-sm" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-on-surface-variant">
                 <span className="tabular-nums">
                   {selectedGroup?.miembros.length ?? 0} integrantes
@@ -1463,6 +1510,21 @@ export default function GroupDetailPage() {
           />
         )}
       </main>
+
+      {albumAbierto && <AlbumPlanModal planId={albumAbierto} onCerrar={() => setAlbumAbierto(null)} />}
+
+      {personaTarjeta && (
+        <TarjetaPerfil
+          persona={{
+            nombre: personaTarjeta.nombre,
+            email: personaTarjeta.email,
+            usuarioId: personaTarjeta.userId,
+            fotoActualizadaEn: personaTarjeta.fotoActualizadaEn,
+            color: personaTarjeta.color,
+          }}
+          onClose={() => setPersonaTarjeta(null)}
+        />
+      )}
 
       {/* Modal: integrantes y ajustes del grupo */}
       {isEditGroupModalOpen && selectedGroup && (
@@ -2037,7 +2099,7 @@ function GroupFormModal({
                   className="p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/60 text-xs"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span aria-hidden="true" className="w-2.5 h-2.5 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
+                    <AvatarMiembro miembro={m} className="size-6 text-2xs" />
                     <span className="text-on-surface font-medium truncate">{nuevo ? m.email : m.nombre}</span>
                     {/* Los nombres del demo ya llevan «(Tú)». */}
                     {esYo && !/\(tú\)/i.test(m.nombre) && <span className="shrink-0 text-2xs text-on-surface-variant">(tú)</span>}
@@ -2050,7 +2112,7 @@ function GroupFormModal({
                       <span className="shrink-0 text-2xs text-on-surface-variant">se añadirá al guardar</span>
                     )}
                   </div>
-                  {!nuevo && <p className="mt-0.5 pl-4.5 text-2xs text-on-surface-variant break-all">{m.email}</p>}
+                  {!nuevo && <p className="mt-0.5 pl-8 text-2xs text-on-surface-variant break-all">{m.email}</p>}
 
                   <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
                     {puedeEditar ? (

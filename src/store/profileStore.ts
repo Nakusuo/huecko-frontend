@@ -4,7 +4,9 @@ import { profileService } from '../services/profileService';
 import { normalizarEmail } from '../services/authService';
 import { useAuthStore } from './authStore';
 import { isApiEnabled } from '../lib/apiClient';
-import type { PreferenciasLocales } from '../types/profile.types';
+import { blobADataUrl, dataUrlABlob, reducirFoto } from '../lib/fotos';
+import type { AuthUser, PerfilSocial } from '../types/auth.types';
+import type { PreferenciasLocales, UserProfileData } from '../types/profile.types';
 
 export type { PreferenciasLocales };
 
@@ -38,6 +40,19 @@ interface ProfileState {
    * LANZA con su mensaje: la página solo debe decir «guardado» si lo está.
    */
   guardarPerfil: (datos: { nombre: string; email: string; passwordActual?: string }) => Promise<void>;
+  /** Carrera, ciclo, frase e intereses. Lanza con el mensaje del servidor si no se pudo. */
+  guardarPerfilSocial: (perfil: PerfilSocial) => Promise<void>;
+  /**
+   * Reduce la foto y la guarda: en el servidor, donde la ven tus grupos, o en
+   * este navegador si es el modo demo. Lanza si no se pudo.
+   */
+  cambiarFoto: (archivo: File) => Promise<void>;
+  quitarFoto: () => Promise<void>;
+  /**
+   * Sube la foto que esta cuenta tenía guardada solo en este navegador, de
+   * antes de que el servidor guardara fotos, y la borra de aquí.
+   */
+  subirFotoDeEsteDispositivo: () => Promise<void>;
   /** Cambia preferencias locales de la cuenta abierta. */
   setPreferencias: (cambios: Partial<PreferenciasLocales>) => void;
   /** Olvida el estado de carga y errores al cambiar de cuenta. Las preferencias se quedan: son por cuenta. */
@@ -52,9 +67,32 @@ export function preferenciasDe(
   return { ...PREFERENCIAS_POR_DEFECTO, ...(userId ? preferencias[userId] : undefined) };
 }
 
+/** Lo que manda el servidor sobre la cuenta, copiado a la sesión si sigue siendo la misma. */
+function aplicarALaSesion(usuario: AuthUser, remoto: AuthUser | UserProfileData): void {
+  const { user, setUser } = useAuthStore.getState();
+  if (!user || user.id !== usuario.id) return;
+  setUser({
+    ...user,
+    nombre: remoto.nombre,
+    email: remoto.email,
+    carrera: remoto.carrera ?? null,
+    ciclo: remoto.ciclo ?? null,
+    bio: remoto.bio ?? null,
+    intereses: remoto.intereses ?? [],
+    // En demo la foto no viaja con la cuenta: se queda la que hubiera.
+    ...(isApiEnabled ? { fotoActualizadaEn: remoto.fotoActualizadaEn ?? null } : {}),
+  });
+}
+
+function sesionAbierta(): AuthUser {
+  const usuario = useAuthStore.getState().user;
+  if (!usuario) throw new Error('No hay ninguna sesión abierta.');
+  return usuario;
+}
+
 export const useProfileStore = create<ProfileState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       isLoading: false,
       isSaving: false,
       syncError: null,
@@ -64,9 +102,9 @@ export const useProfileStore = create<ProfileState>()(
         set({ isLoading: true, syncError: null });
         try {
           const remoto = await profileService.getProfile();
-          const { user, setUser } = useAuthStore.getState();
+          const user = useAuthStore.getState().user;
           if (remoto && user && remoto.id === user.id) {
-            setUser({ ...user, nombre: remoto.nombre, email: remoto.email });
+            aplicarALaSesion(user, remoto);
           }
           set({ isLoading: false });
         } catch (error) {
@@ -104,6 +142,43 @@ export const useProfileStore = create<ProfileState>()(
         } finally {
           set({ isSaving: false });
         }
+      },
+
+      guardarPerfilSocial: async (perfil) => {
+        const usuario = sesionAbierta();
+        set({ isSaving: true });
+        try {
+          aplicarALaSesion(usuario, await profileService.guardarPerfilSocial(perfil, usuario));
+        } finally {
+          set({ isSaving: false });
+        }
+      },
+
+      cambiarFoto: async (archivo) => {
+        const usuario = sesionAbierta();
+        const foto = await reducirFoto(archivo);
+        if (!isApiEnabled) {
+          get().setPreferencias({ avatarUrl: await blobADataUrl(foto) });
+          return;
+        }
+        aplicarALaSesion(usuario, await profileService.subirFoto(foto));
+      },
+
+      quitarFoto: async () => {
+        const usuario = sesionAbierta();
+        if (!isApiEnabled) {
+          get().setPreferencias({ avatarUrl: undefined });
+          return;
+        }
+        aplicarALaSesion(usuario, await profileService.quitarFoto());
+      },
+
+      subirFotoDeEsteDispositivo: async () => {
+        const usuario = sesionAbierta();
+        const local = preferenciasDe(get().preferencias, usuario.id).avatarUrl;
+        if (!local || !isApiEnabled) return;
+        aplicarALaSesion(usuario, await profileService.subirFoto(dataUrlABlob(local)));
+        get().setPreferencias({ avatarUrl: undefined });
       },
 
       setPreferencias: (cambios) => {
