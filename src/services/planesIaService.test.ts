@@ -6,7 +6,9 @@ vi.stubEnv('VITE_API_URL', '/api');
 instalarAlmacenamientoEnMemoria();
 
 const { apiClient, ApiError } = await import('../lib/apiClient');
-const { completarOpciones, mensajeDeFalloIA, pedirIdeas, redactarBorrador, ventanaDesdeIa } = await import('./planesIaService');
+const { completarOpciones, mensajeDeFalloIA, pedirIdeas, redactarBorrador, resumirVotacion, ventanaDesdeIa } = await import(
+  './planesIaService'
+);
 
 const opcion = (fecha: string, horaInicio: string, horaFin: string): TimeWindowProposal => ({
   id: `${fecha}-${horaInicio}`,
@@ -111,5 +113,27 @@ describe('mensajeDeFalloIA', () => {
     expect(mensajeDeFalloIA(new ApiError('Usaste mucho la IA en poco tiempo.', 429))).toBe('Usaste mucho la IA en poco tiempo.');
     expect(mensajeDeFalloIA(new ApiError('No fue posible conectar con el backend en /api', 0, true))).toMatch(/no respondió/);
     expect(mensajeDeFalloIA(new Error('raro'))).toMatch(/no respondió/);
+  });
+});
+
+describe('resumirVotacion', () => {
+  it('pide el resumen del plan con su sugerencia', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: { resumen: 'Votaron 2 de 3.', recomendacion: 'CERRAR', razon: 'el sábado tiene todos los votos' },
+    });
+
+    const resumen = await resumirVotacion('p-1');
+
+    expect(post.mock.calls[0][0]).toBe('/planes/p-1/ia/resumen');
+    expect(resumen).toEqual({ resumen: 'Votaron 2 de 3.', recomendacion: 'CERRAR', razon: 'el sábado tiene todos los votos' });
+  });
+
+  it('sin sugerencia (o una que no conoce la interfaz) enseña solo el resumen', async () => {
+    vi.spyOn(apiClient, 'post')
+      .mockResolvedValueOnce({ data: { resumen: 'Votaron 2 de 3.', recomendacion: null, razon: null } })
+      .mockResolvedValueOnce({ data: { resumen: 'Votaron 2 de 3.', recomendacion: 'CONFIRMAR', razon: 'porque sí' } });
+
+    expect(await resumirVotacion('p-1')).toEqual({ resumen: 'Votaron 2 de 3.', recomendacion: null, razon: null });
+    expect(await resumirVotacion('p-1')).toEqual({ resumen: 'Votaron 2 de 3.', recomendacion: null, razon: null });
   });
 });

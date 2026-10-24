@@ -37,6 +37,7 @@ import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
 import { BorradorConIA } from '../components/BorradorConIA';
 import { IdeasConIA } from '../components/IdeasConIA';
+import { ResumenVotacionIA } from '../components/ResumenVotacionIA';
 import { useOfrecerIA } from '../hooks/useOfrecerIA';
 import { completarOpciones } from '../services/planesIaService';
 import type { BorradorPlan, IdeaPlan } from '../services/planesIaService';
@@ -1087,6 +1088,9 @@ export default function GroupDetailPage() {
                               );
                             })}
                           </div>
+
+                          {/* Un plan cancelado no tiene votación que resumir. */}
+                          {ofrecerIA && proposal.estado !== 'cancelado' && <ResumenVotacionIA planId={proposal.id} />}
                         </div>
 
                         {/* Pie de tarjeta ultra-limpio */}

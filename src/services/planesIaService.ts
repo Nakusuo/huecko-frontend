@@ -4,8 +4,8 @@ import { dayFromIsoDate, normalizeTime } from '../lib/formatoBackend';
 import type { TimeWindowProposal } from '../types/groups.types';
 
 /**
- * Planes con Huecko IA, como en la app móvil: un borrador a partir de una frase
- * e ideas de plan para los huecos del grupo.
+ * Planes con Huecko IA, como en la app móvil: un borrador a partir de una frase,
+ * ideas de plan para los huecos del grupo y un resumen de cómo va la votación.
  *
  * El backend manda la IA a elegir entre los huecos reales del grupo y valida lo
  * que vuelve, así que cada opción del borrador cumple el umbral del grupo y el
@@ -134,6 +134,35 @@ export async function pedirIdeas(grupoId: string): Promise<IdeaPlan[]> {
     ventana: idea.ventana ? ventanaDesdeIa(idea.ventana) : null,
     razon: idea.razon,
   }));
+}
+
+/** Lo que puede hacer quien organiza; el backend solo deja pasar las que admite el estado del plan. */
+export type RecomendacionPlan = 'CERRAR' | 'ESPERAR' | 'MANTENER' | 'REPROGRAMAR';
+
+export const TEXTO_RECOMENDACION: Record<RecomendacionPlan, string> = {
+  CERRAR: 'Cerrar ya la votación',
+  ESPERAR: 'Esperar más votos',
+  MANTENER: 'Mantener el plan',
+  REPROGRAMAR: 'Buscar otra fecha',
+};
+
+export interface ResumenVotacion {
+  resumen: string;
+  /** `null` si la IA sugirió algo que el plan no admite: se enseña el resumen solo. */
+  recomendacion: RecomendacionPlan | null;
+  razon: string | null;
+}
+
+export async function resumirVotacion(planId: string): Promise<ResumenVotacion> {
+  const { data } = await apiClient.post<ResumenVotacion>(endpoints.ia.resumenVotacion(planId), undefined, {
+    timeout: ESPERA_IA_MS,
+  });
+  const conocida = data.recomendacion && data.recomendacion in TEXTO_RECOMENDACION;
+  return {
+    resumen: data.resumen,
+    recomendacion: conocida ? data.recomendacion : null,
+    razon: conocida ? data.razon : null,
+  };
 }
 
 const seSolapan = (a: TimeWindowProposal, b: TimeWindowProposal) =>

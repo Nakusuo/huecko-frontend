@@ -148,6 +148,7 @@ src/
 - Propuestas con 2–5 ventanas, votación, confirmación, retrasos e imprevistos/votación exprés.
 - «Redactar con Huecko IA»: un borrador de plan a partir de una frase («repaso de 2 horas el viernes en la tarde»), con opciones dentro de los huecos reales del grupo.
 - «Ideas con IA»: tres planes pensados para los huecos libres del grupo; «Usar» abre «Proponer plan» con la idea escrita.
+- «Resumir con Huecko IA» en cada plan: cómo va la votación y qué conviene hacer (cerrar, esperar, mantener o buscar otra fecha), sin cambiar nada.
 - Notificaciones y UI responsiva para móvil y escritorio.
 
 ## Documentación

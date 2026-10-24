@@ -108,6 +108,8 @@ export const endpoints = {
     borradorPlan: (grupoId: string) => `/grupos/${grupoId}/ia/borrador-plan`,
     /** Sin cuerpo → 3 ideas de plan para los huecos del grupo. No guarda nada. */
     ideasPlan: (grupoId: string) => `/grupos/${grupoId}/ia/ideas-plan`,
+    /** Sin cuerpo → cómo va la votación de un plan. No cambia nada. */
+    resumenVotacion: (planId: string) => `/planes/${planId}/ia/resumen`,
   },
 
   /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */
