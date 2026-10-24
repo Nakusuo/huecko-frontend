@@ -42,6 +42,11 @@ export const endpoints = {
     /** GET la foto, DELETE para borrarla. */
     foto: (fotoId: string) => `/fotos/${fotoId}`,
     miniatura: (fotoId: string) => `/fotos/${fotoId}/miniatura`,
+    /** PUT para poner la reacción, DELETE para quitarla. */
+    reaccion: (fotoId: string, reaccion: string) => `/fotos/${fotoId}/reacciones/${reaccion}`,
+    /** GET los comentarios, POST `{texto}` para comentar. */
+    comentarios: (fotoId: string) => `/fotos/${fotoId}/comentarios`,
+    comentario: (comentarioId: string) => `/comentarios/${comentarioId}`,
   },
 
   /** ✅ BloqueHorarioController. */

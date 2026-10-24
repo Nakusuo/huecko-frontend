@@ -26,6 +26,8 @@ export type RealtimeEventType =
   | 'LIBRE_AHORA'
   /** Cambió el álbum de un plan: con `subidas` > 0 alguien subió fotos. */
   | 'ALBUM_ACTUALIZADO'
+  /** Cambiaron las reacciones o los comentarios de una foto; con `comentario` hay uno nuevo. */
+  | 'FOTO_CONVERSACION'
   /** RF-08: alguien propuso un plan nuevo en el grupo. */
   | 'PLAN_PROPUESTO'
   /** Un plan en re-coordinación vuelve a votarse con fechas nuevas. */

@@ -26,6 +26,8 @@ Prefijo: `/api/v1`. Salvo autenticación, todas las rutas requieren `Authorizati
 | `GET /grupos/:id/album` | Planes vividos del grupo con su número de fotos y portada; uso del tope del grupo. |
 | `GET /planes/:id/fotos`, `POST /planes/:id/fotos` | Álbum de un plan; subir fotos (multipart, partes `fotos`, hasta 10). |
 | `GET /fotos/:id`, `GET /fotos/:id/miniatura`, `DELETE /fotos/:id` | Una foto (1280 px) o su miniatura (320 px); borrarla. |
+| `PUT /fotos/:id/reacciones/:reaccion`, `DELETE …` | Poner o quitar ❤️ 😂 🔥 😮 👏 (`CORAZON`, `RISA`, `FUEGO`, `ASOMBRO`, `APLAUSO`). |
+| `GET /fotos/:id/comentarios`, `POST …` (`{texto}`), `DELETE /comentarios/:id` | Comentarios de una foto. |
 | `GET /schedule/blocks` | Devuelve los bloques del usuario. |
 | `POST /schedule/blocks` | Crea bloque manual. |
 | `PATCH /schedule/blocks/:id` | Edita bloque. |

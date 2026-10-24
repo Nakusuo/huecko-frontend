@@ -206,3 +206,18 @@ describe('ALBUM_ACTUALIZADO', () => {
     expect(avisoDeEvento(evento('ALBUM_ACTUALIZADO', { planId: 'p-1', subidas: 0 }))).toBeNull();
   });
 });
+
+describe('FOTO_CONVERSACION', () => {
+  const comentario = evento('FOTO_CONVERSACION', {
+    usuarioId: 'u-2', nombre: 'Beto', titulo: 'Pichanga', fotoId: 'f-1', autorFotoId: 'u-1', comentario: true,
+  });
+
+  it('un comentario avisa solo a quien subió la foto', () => {
+    expect(avisoDeEvento(comentario, 'u-1')).toMatchObject({ title: 'Beto comentó tu foto', description: 'En el álbum de «Pichanga».' });
+    expect(avisoDeEvento(comentario, 'u-3')).toBeNull();
+  });
+
+  it('una reacción no avisa a nadie', () => {
+    expect(avisoDeEvento(evento('FOTO_CONVERSACION', { autorFotoId: 'u-1', comentario: false }), 'u-1')).toBeNull();
+  });
+});

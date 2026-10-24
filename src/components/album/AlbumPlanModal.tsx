@@ -4,12 +4,12 @@ import { FotoDeAlbum } from './FotoDeAlbum';
 import { VisorFotos } from './VisorFotos';
 import { useCarga } from '../../hooks/useCarga';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
-import { cuantasFotos, fechaDelPlan } from '../../lib/album';
+import { cuantasFotos, fechaDelPlan, REACCIONES, totalReacciones } from '../../lib/album';
 import { isApiEnabled } from '../../lib/apiClient';
 import { MAX_BYTES_ORIGINAL, reducirParaAlbum } from '../../lib/fotos';
 import { alRecibirEvento } from '../../lib/realtime';
 import { albumService } from '../../services/albumService';
-import type { AlbumPlan } from '../../types/album.types';
+import type { AlbumPlan, FotoAlbum } from '../../types/album.types';
 
 type Progreso = { fase: 'preparando' | 'subiendo'; hechas: number; total: number };
 
@@ -30,14 +30,20 @@ export function AlbumPlanModal({ planId, onCerrar }: { planId: string; onCerrar:
 
   useModalDismiss(visor === null, onCerrar);
 
-  // Si alguien del grupo sube o borra fotos de este plan, se ve al momento.
+  // Si alguien del grupo sube, borra, reacciona o comenta, se ve al momento.
   useEffect(
     () =>
       alRecibirEvento((evento) => {
-        if (evento.tipo === 'ALBUM_ACTUALIZADO' && (evento.datos as { planId?: string }).planId === planId) recargar();
+        const deEstePlan = (evento.datos as { planId?: string }).planId === planId;
+        if (deEstePlan && (evento.tipo === 'ALBUM_ACTUALIZADO' || evento.tipo === 'FOTO_CONVERSACION')) recargar();
       }),
     [planId, recargar]
   );
+
+  const actualizarFoto = (fotoId: string, cambios: Partial<FotoAlbum>) =>
+    setDatos((actual) =>
+      actual ? { ...actual, fotos: actual.fotos.map((f) => (f.id === fotoId ? { ...f, ...cambios } : f)) } : actual
+    );
 
   const elegir = async (e: ChangeEvent<HTMLInputElement>) => {
     const elegidas = Array.from(e.target.files ?? []);
@@ -159,18 +165,29 @@ export function AlbumPlanModal({ planId, onCerrar }: { planId: string; onCerrar:
                 </p>
               ) : (
                 <ul className="grid grid-cols-3 sm:grid-cols-4 gap-1.5" aria-label="Fotos del plan">
-                  {album.fotos.map((foto, i) => (
-                    <li key={foto.id}>
-                      <button
-                        type="button"
-                        onClick={() => setVisor(i)}
-                        aria-label={`Ver la foto ${i + 1}, de ${foto.autorNombre}`}
-                        className="block w-full overflow-hidden rounded-lg cursor-pointer focus-visible:ring-2 focus-visible:ring-secondary"
-                      >
-                        <FotoDeAlbum fotoId={foto.id} variante="miniatura" alt="" className="aspect-square w-full object-cover transition-transform hover:scale-105" />
-                      </button>
-                    </li>
-                  ))}
+                  {album.fotos.map((foto, i) => {
+                    const reacciones = totalReacciones(foto.reacciones);
+                    // Las que hay de verdad (hasta tres) y el total: «❤️🔥 2», no «❤️ 2».
+                    const emojis = REACCIONES.filter((r) => foto.reacciones[r.codigo]).slice(0, 3).map((r) => r.emoji).join('');
+                    return (
+                      <li key={foto.id}>
+                        <button
+                          type="button"
+                          onClick={() => setVisor(i)}
+                          aria-label={`Ver la foto ${i + 1}, de ${foto.autorNombre}`}
+                          className="relative block w-full overflow-hidden rounded-lg cursor-pointer focus-visible:ring-2 focus-visible:ring-secondary"
+                        >
+                          <FotoDeAlbum fotoId={foto.id} variante="miniatura" alt="" className="aspect-square w-full object-cover transition-transform hover:scale-105" />
+                          {(reacciones > 0 || foto.comentarios > 0) && (
+                            <span aria-hidden="true" className="absolute bottom-1 left-1 flex gap-1.5 rounded-full bg-ink/70 px-1.5 py-0.5 text-2xs font-semibold text-cream tabular-nums">
+                              {reacciones > 0 && <span>{emojis} {reacciones}</span>}
+                              {foto.comentarios > 0 && <span>💬 {foto.comentarios}</span>}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </>
@@ -186,6 +203,7 @@ export function AlbumPlanModal({ planId, onCerrar }: { planId: string; onCerrar:
           onCambiar={setVisor}
           onCerrar={() => setVisor(null)}
           onBorrada={borrada}
+          onActualizar={actualizarFoto}
         />
       )}
     </div>,
