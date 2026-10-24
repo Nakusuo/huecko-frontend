@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { ApiError } from '../lib/apiClient';
-import { NOMBRE_CATEGORIA, redactarBorrador } from '../services/planesIaService';
+import { mensajeDeFalloIA, NOMBRE_CATEGORIA, redactarBorrador } from '../services/planesIaService';
 import type { BorradorPlan, CategoriaPlan } from '../services/planesIaService';
 
 const MAX_TEXTO = 500;
@@ -36,13 +35,7 @@ export function BorradorConIA({
       setCategoria(borrador.categoria);
       onBorrador(borrador);
     } catch (fallo) {
-      // El 503 o el 429 del backend ya traen un mensaje para la persona; un
-      // corte de red o de tiempo, no.
-      setError(
-        fallo instanceof ApiError && !fallo.isNetworkError && fallo.message
-          ? fallo.message
-          : 'Huecko IA no respondió a tiempo. Inténtalo de nuevo o rellena el plan a mano.'
-      );
+      setError(`${mensajeDeFalloIA(fallo)} También puedes rellenar el plan a mano.`);
     } finally {
       setPensando(false);
     }
