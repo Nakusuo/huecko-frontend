@@ -18,6 +18,7 @@ import type {
   ReporteAdmin,
   ResumenAdmin,
   SaludAdmin,
+  UsoIAAdmin,
 } from '../types/admin.types';
 
 const SIMULATED_NETWORK_DELAY_MS = 400;
@@ -43,6 +44,13 @@ export const adminService = {
       return resumenDemo();
     }
     const { data } = await apiClient.get<ResumenAdmin>(endpoints.admin.resumen);
+    return data;
+  },
+
+  /** Uso de Huecko IA. Solo con servidor: en demo no hay IA que medir. */
+  async getUsoIA(): Promise<UsoIAAdmin> {
+    exigirServidor();
+    const { data } = await apiClient.get<UsoIAAdmin>(endpoints.admin.ia);
     return data;
   },
 
