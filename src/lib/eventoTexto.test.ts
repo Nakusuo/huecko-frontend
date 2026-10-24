@@ -174,3 +174,23 @@ describe('MIEMBRO_UNIDO', () => {
     });
   });
 });
+
+describe('LIBRE_AHORA', () => {
+  it('dice quién está libre, hasta cuándo y dónde, con lo que escribió esa persona', () => {
+    const aviso = avisoDeEvento(evento('LIBRE_AHORA', {
+      usuarioId: 'u-2',
+      nombre: 'Ana',
+      hasta: new Date(2026, 9, 22, 16, 0).toISOString(),
+      nota: 'En la biblioteca',
+    }));
+
+    expect(aviso?.title).toBe('Ana está libre');
+    expect(aviso?.description).toBe('Hasta las 16:00 · En la biblioteca.');
+  });
+
+  it('sin nota no deja un separador colgando', () => {
+    const aviso = avisoDeEvento(evento('LIBRE_AHORA', { nombre: 'Ana', hasta: new Date(2026, 9, 22, 9, 5).toISOString() }));
+
+    expect(aviso?.description).toBe('Hasta las 09:05.');
+  });
+});

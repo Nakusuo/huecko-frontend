@@ -31,6 +31,9 @@ export const endpoints = {
     foto: (usuarioId: string) => `/usuarios/${usuarioId}/foto`,
   },
 
+  /** ✅ LibreAhoraController: GET el estado, PUT «Estoy libre», DELETE para quitarlo. */
+  libreAhora: '/me/libre-ahora',
+
   /** ✅ BloqueHorarioController. */
   schedule: {
     blocks: (usuarioId: string) => `/usuarios/${usuarioId}/bloques-horario`,
