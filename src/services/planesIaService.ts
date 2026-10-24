@@ -1,10 +1,11 @@
-import { apiClient } from '../lib/apiClient';
+import { apiClient, ApiError } from '../lib/apiClient';
 import { endpoints } from '../lib/endpoints';
 import { dayFromIsoDate, normalizeTime } from '../lib/formatoBackend';
 import type { TimeWindowProposal } from '../types/groups.types';
 
 /**
- * Planes con Huecko IA, como en la app móvil: un borrador a partir de una frase.
+ * Planes con Huecko IA, como en la app móvil: un borrador a partir de una frase
+ * e ideas de plan para los huecos del grupo.
  *
  * El backend manda la IA a elegir entre los huecos reales del grupo y valida lo
  * que vuelve, así que cada opción del borrador cumple el umbral del grupo y el
@@ -21,6 +22,16 @@ export const NOMBRE_CATEGORIA: Record<CategoriaPlan, string> = {
   DEPORTE: 'Deporte',
   SALIDA: 'Salida',
   OTRO: 'Otro',
+};
+
+/** Icono de Material Symbols para cada categoría. */
+export const ICONO_CATEGORIA: Record<CategoriaPlan, string> = {
+  ESTUDIO: 'menu_book',
+  REUNION: 'groups',
+  COMIDA: 'restaurant',
+  DEPORTE: 'sports_soccer',
+  SALIDA: 'celebration',
+  OTRO: 'lightbulb',
 };
 
 /** Una opción tal como llega del backend (`LocalTime` puede venir con segundos). */
@@ -52,6 +63,17 @@ export interface BorradorPlan {
 /** La IA tarda más que una petición normal: el backend la espera hasta 30 s. */
 const ESPERA_IA_MS = 45_000;
 
+/**
+ * Qué decir si la IA falla. El 503 o el 429 del backend ya traen un mensaje
+ * pensado para la persona; un corte de red o de tiempo, no (el de apiClient
+ * habla de URLs y de levantar el backend).
+ */
+export function mensajeDeFalloIA(fallo: unknown): string {
+  return fallo instanceof ApiError && !fallo.isNetworkError && fallo.message
+    ? fallo.message
+    : 'Huecko IA no respondió a tiempo. Inténtalo de nuevo.';
+}
+
 export function ventanaDesdeIa(ventana: VentanaIaDto): TimeWindowProposal {
   const horaInicio = normalizeTime(ventana.horaInicio);
   const horaFin = normalizeTime(ventana.horaFin);
@@ -74,11 +96,44 @@ export async function redactarBorrador(grupoId: string, texto: string): Promise<
   );
   return {
     titulo: data.titulo,
-    categoria: data.categoria in NOMBRE_CATEGORIA ? data.categoria : 'OTRO',
+    categoria: categoriaConocida(data.categoria),
     lugar: data.lugar,
     ventanas: (data.ventanas ?? []).map(ventanaDesdeIa),
     plazoVotacion: data.plazoVotacion,
   };
+}
+
+interface IdeaPlanDto {
+  titulo: string;
+  categoria: CategoriaPlan;
+  lugar: string | null;
+  ventana: VentanaIaDto | null;
+  razon: string;
+}
+
+export interface IdeaPlan {
+  titulo: string;
+  categoria: CategoriaPlan;
+  lugar: string | null;
+  /** Las dos primeras horas de un hueco real del grupo, o `null` si la IA no eligió ninguno. */
+  ventana: TimeWindowProposal | null;
+  razon: string;
+}
+
+const categoriaConocida = (categoria: string): CategoriaPlan =>
+  categoria in NOMBRE_CATEGORIA ? (categoria as CategoriaPlan) : 'OTRO';
+
+export async function pedirIdeas(grupoId: string): Promise<IdeaPlan[]> {
+  const { data } = await apiClient.post<{ ideas?: IdeaPlanDto[] }>(endpoints.ia.ideasPlan(grupoId), undefined, {
+    timeout: ESPERA_IA_MS,
+  });
+  return (data.ideas ?? []).map((idea) => ({
+    titulo: idea.titulo,
+    categoria: categoriaConocida(idea.categoria),
+    lugar: idea.lugar,
+    ventana: idea.ventana ? ventanaDesdeIa(idea.ventana) : null,
+    razon: idea.razon,
+  }));
 }
 
 const seSolapan = (a: TimeWindowProposal, b: TimeWindowProposal) =>

@@ -5,8 +5,8 @@ import type { TimeWindowProposal } from '../types/groups.types';
 vi.stubEnv('VITE_API_URL', '/api');
 instalarAlmacenamientoEnMemoria();
 
-const { apiClient } = await import('../lib/apiClient');
-const { completarOpciones, redactarBorrador, ventanaDesdeIa } = await import('./planesIaService');
+const { apiClient, ApiError } = await import('../lib/apiClient');
+const { completarOpciones, mensajeDeFalloIA, pedirIdeas, redactarBorrador, ventanaDesdeIa } = await import('./planesIaService');
 
 const opcion = (fecha: string, horaInicio: string, horaFin: string): TimeWindowProposal => ({
   id: `${fecha}-${horaInicio}`,
@@ -78,5 +78,38 @@ describe('redactarBorrador', () => {
     });
 
     expect((await redactarBorrador('g-1', 'fiesta')).categoria).toBe('OTRO');
+  });
+});
+
+describe('pedirIdeas', () => {
+  it('pide las ideas del grupo y traduce su horario', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: {
+        ideas: [
+          {
+            titulo: 'Almuerzo',
+            categoria: 'COMIDA',
+            lugar: 'Cafetería',
+            ventana: { fecha: '2026-10-23', horaInicio: '12:00:00', horaFin: '14:00:00', disponibilidadPorcentaje: 100 },
+            razon: 'todos libres al mediodía',
+          },
+          { titulo: 'Cine', categoria: 'CINE', lugar: null, ventana: null, razon: 'es viernes por la noche' },
+        ],
+      },
+    });
+
+    const ideas = await pedirIdeas('g-1');
+
+    expect(post.mock.calls[0][0]).toBe('/grupos/g-1/ia/ideas-plan');
+    expect(ideas[0]).toMatchObject({ titulo: 'Almuerzo', categoria: 'COMIDA', ventana: { dia: 'Vie', horaInicio: '12:00' } });
+    expect(ideas[1]).toMatchObject({ categoria: 'OTRO', ventana: null });
+  });
+});
+
+describe('mensajeDeFalloIA', () => {
+  it('usa el mensaje del backend, pero no el técnico de un corte de red', () => {
+    expect(mensajeDeFalloIA(new ApiError('Usaste mucho la IA en poco tiempo.', 429))).toBe('Usaste mucho la IA en poco tiempo.');
+    expect(mensajeDeFalloIA(new ApiError('No fue posible conectar con el backend en /api', 0, true))).toMatch(/no respondió/);
+    expect(mensajeDeFalloIA(new Error('raro'))).toMatch(/no respondió/);
   });
 });

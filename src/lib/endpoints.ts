@@ -106,6 +106,8 @@ export const endpoints = {
     escaneoHorario: '/ia/horario/escaneo',
     /** `{texto}` → borrador para «Proponer plan». No guarda nada. */
     borradorPlan: (grupoId: string) => `/grupos/${grupoId}/ia/borrador-plan`,
+    /** Sin cuerpo → 3 ideas de plan para los huecos del grupo. No guarda nada. */
+    ideasPlan: (grupoId: string) => `/grupos/${grupoId}/ia/ideas-plan`,
   },
 
   /** ✅ AdminController. Solo cuentas ADMIN; una cuenta normal recibe 403. */

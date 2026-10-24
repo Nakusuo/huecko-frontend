@@ -36,9 +36,10 @@ import { describirAviso } from '../lib/avisosIncidencia';
 import { miIdentificador, useIncidentsStore } from '../store/incidentsStore';
 import { VotacionExpresPanel } from '../components/VotacionExpresPanel';
 import { BorradorConIA } from '../components/BorradorConIA';
+import { IdeasConIA } from '../components/IdeasConIA';
 import { useOfrecerIA } from '../hooks/useOfrecerIA';
 import { completarOpciones } from '../services/planesIaService';
-import type { BorradorPlan } from '../services/planesIaService';
+import type { BorradorPlan, IdeaPlan } from '../services/planesIaService';
 import {
   estadoVisible,
   formatearPlazo,
@@ -245,6 +246,8 @@ export default function GroupDetailPage() {
   /** Plan en re-coordinación que se está reprogramando, o `null` si es uno nuevo. */
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const ofrecerIA = useOfrecerIA();
+  /** Grupo cuyas «Ideas con IA» están abiertas, o `null`. */
+  const [ideasDe, setIdeasDe] = useState<Group | null>(null);
 
   // Form window input temporary
   const [tempDay, setTempDay] = useState<DayOfWeek>('Mié');
@@ -545,6 +548,16 @@ export default function GroupDetailPage() {
     setSuggestedWindows(opciones);
     if (new Date(borrador.plazoVotacion).getTime() < primera) setProposalPlazo(borrador.plazoVotacion);
     setProposalError('');
+  };
+
+  /* «Usar» una idea: abre «Proponer plan» con ella escrita. Su horario (si
+     trae) va primero y se completa con las sugeridas hasta tener dos. */
+  const usarIdea = (group: Group, idea: IdeaPlan) => {
+    setIdeasDe(null);
+    openProposePlanModal(group);
+    setProposalTitle(idea.titulo);
+    setProposalLugar(idea.lugar ?? '');
+    setSuggestedWindows(completarOpciones(idea.ventana ? [idea.ventana] : [], ventanasIniciales(group)));
   };
 
   const handleAddWindowToProposal = () => {
@@ -900,13 +913,24 @@ export default function GroupDetailPage() {
                 </h2>
               </div>
 
-              <button
-                onClick={() => openProposePlanModal(grp)}
-                className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
-                Proponer plan
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {ofrecerIA && (
+                  <button
+                    onClick={() => setIdeasDe(grp)}
+                    className="px-4 py-2 rounded-xl border border-secondary/60 text-on-surface hover:bg-surface-container text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-primary">auto_awesome</span>
+                    Ideas con IA
+                  </button>
+                )}
+                <button
+                  onClick={() => openProposePlanModal(grp)}
+                  className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary-hover text-on-secondary text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">add</span>
+                  Proponer plan
+                </button>
+              </div>
             </div>
 
             {/* Listado de Propuestas del Grupo */}
@@ -1411,6 +1435,14 @@ export default function GroupDetailPage() {
           onLeave={handleLeaveGroup}
           onClose={() => setIsEditGroupModalOpen(false)}
           onSubmit={handleUpdateGroup}
+        />
+      )}
+
+      {ideasDe && (
+        <IdeasConIA
+          grupoId={ideasDe.id}
+          onUsar={(idea) => usarIdea(ideasDe, idea)}
+          onCerrar={() => setIdeasDe(null)}
         />
       )}
 
