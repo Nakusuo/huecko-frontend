@@ -146,6 +146,7 @@ src/
 - Bloques recurrentes y puntuales, edición, eliminación y escaneo de una foto del horario con Huecko IA (con el lector del navegador como respaldo), revisable antes de guardar.
 - Grupos, código de invitación, umbral de disponibilidad y heatmap semanal.
 - Propuestas con 2–5 ventanas, votación, confirmación, retrasos e imprevistos/votación exprés.
+- «Redactar con Huecko IA»: un borrador de plan a partir de una frase («repaso de 2 horas el viernes en la tarde»), con opciones dentro de los huecos reales del grupo.
 - Notificaciones y UI responsiva para móvil y escritorio.
 
 ## Documentación
