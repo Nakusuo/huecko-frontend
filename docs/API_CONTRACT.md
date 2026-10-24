@@ -29,6 +29,7 @@ Prefijo: `/api/v1`. Salvo autenticación, todas las rutas requieren `Authorizati
 | `PUT /fotos/:id/reacciones/:reaccion`, `DELETE …` | Poner o quitar ❤️ 😂 🔥 😮 👏 (`CORAZON`, `RISA`, `FUEGO`, `ASOMBRO`, `APLAUSO`). |
 | `GET /fotos/:id/comentarios`, `POST …` (`{texto}`), `DELETE /comentarios/:id` | Comentarios de una foto. |
 | `GET /planes/:id/llegadas`, `PUT …`, `DELETE …` | «Llegué»: si se puede marcar ahora (lo decide el servidor), quiénes llegaron y si a tiempo. |
+| `GET /grupos/:id/muro?antes=` | Muro del grupo, 20 entradas por página; `siguiente` para pedir las anteriores. |
 | `GET /schedule/blocks` | Devuelve los bloques del usuario. |
 | `POST /schedule/blocks` | Crea bloque manual. |
 | `PATCH /schedule/blocks/:id` | Edita bloque. |

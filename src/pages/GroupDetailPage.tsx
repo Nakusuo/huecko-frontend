@@ -43,6 +43,7 @@ import { AvatarMiembro } from '../components/Avatar';
 import { TarjetaPerfil } from '../components/TarjetaPerfil';
 import { AlbumPlanModal } from '../components/album/AlbumPlanModal';
 import { LlegadaPlan } from '../components/LlegadaPlan';
+import { MuroGrupo } from '../components/MuroGrupo';
 import { RecuerdosDelGrupo } from '../components/album/RecuerdosDelGrupo';
 import { useOfrecerIA } from '../hooks/useOfrecerIA';
 import { completarOpciones } from '../services/planesIaService';
@@ -1245,6 +1246,8 @@ export default function GroupDetailPage() {
           </section>
 
           <RecuerdosDelGrupo key={grp.id} grupoId={grp.id} />
+
+          <MuroGrupo key={`muro-${grp.id}`} grupoId={grp.id} onAbrirAlbum={setAlbumAbierto} />
 
           {(() => {
             const cruce = estadoDelCruce(grp);
