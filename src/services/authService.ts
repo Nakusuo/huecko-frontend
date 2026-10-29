@@ -1,4 +1,11 @@
-import type { LoginPayload, RegisterPayload, AuthResponse, AuthUser, PerfilSocial } from '../types/auth.types';
+import type {
+  LoginPayload,
+  RegisterPayload,
+  AuthResponse,
+  AuthUser,
+  PerfilSocial,
+  RespuestaLogin,
+} from '../types/auth.types';
 import { apiClient, isApiEnabled } from '../lib/apiClient';
 
 const SIMULATED_NETWORK_DELAY_MS = 1000;
@@ -195,9 +202,14 @@ export function cambiarSuspensionDemo(usuarioId: string, suspendido: boolean): v
 
 /* ------------------------------------------------------------------------ */
 
-export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
+/**
+ * Primer paso del login. Si la cuenta tiene la verificación en dos pasos,
+ * devuelve un desafío en vez de la sesión (ver `verificarDosPasos`). En el
+ * modo demo nunca: no hay app de códigos que enlazar.
+ */
+export async function loginUser(payload: LoginPayload): Promise<RespuestaLogin> {
   if (isApiEnabled) {
-    const { data } = await apiClient.post<AuthResponse>('/auth/login', {
+    const { data } = await apiClient.post<RespuestaLogin>('/auth/login', {
       ...payload,
       email: normalizarEmail(payload.email),
     });
@@ -216,6 +228,12 @@ export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
   }
 
   return { token: tokenDemo(cuenta.id), user: sinClave(cuenta) };
+}
+
+/** Segundo paso: el código de 6 dígitos de la app, o uno de respaldo. */
+export async function verificarDosPasos(desafio: string, codigo: string): Promise<AuthResponse> {
+  const { data } = await apiClient.post<AuthResponse>('/auth/dos-pasos', { desafio, codigo: codigo.trim() });
+  return data;
 }
 
 export async function registerUser(payload: RegisterPayload): Promise<AuthResponse> {

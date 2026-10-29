@@ -12,6 +12,7 @@ import AdminResumenPage from '../pages/admin/AdminResumenPage';
 import AdminSaludPage from '../pages/admin/AdminSaludPage';
 import AdminFallosPage from '../pages/admin/AdminFallosPage';
 import AdminConsolaPage from '../pages/admin/AdminConsolaPage';
+import AdminCuentaPage from '../pages/admin/AdminCuentaPage';
 import { useAuthStore } from '../store/authStore';
 import { inicioDe } from '../lib/rol';
 
@@ -54,6 +55,7 @@ export default function AppRouter() {
         <Route path="salud" element={<AdminSaludPage />} />
         <Route path="fallos" element={<AdminFallosPage />} />
         <Route path="consola" element={<AdminConsolaPage />} />
+        <Route path="cuenta" element={<AdminCuentaPage />} />
       </Route>
 
       {/* Ruta por defecto */}

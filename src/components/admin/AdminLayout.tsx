@@ -18,6 +18,7 @@ const ITEMS: ItemAdmin[] = [
   { to: '/admin/salud', label: 'Salud', icon: 'ecg_heart' },
   { to: '/admin/fallos', label: 'Fallos', icon: 'bug_report' },
   { to: '/admin/consola', label: 'Consola', icon: 'terminal' },
+  { to: '/admin/cuenta', label: 'Cuenta', icon: 'shield_lock' },
 ];
 
 const REFRESCO_PENDIENTES_MS = 60_000;
