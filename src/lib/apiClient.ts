@@ -25,13 +25,23 @@ export const isApiEnabled = apiBaseUrl.length > 0;
 export class ApiError extends Error {
   status: number;
   isNetworkError: boolean;
+  /** `X-Request-Id` de la respuesta: con él se encuentran sus líneas en la consola del panel. */
+  idPeticion: string | null;
 
-  constructor(message: string, status: number, isNetworkError = false) {
+  constructor(message: string, status: number, isNetworkError = false, idPeticion: string | null = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.isNetworkError = isNetworkError;
+    this.idPeticion = idPeticion;
   }
+}
+
+/** El id de la petición: en el cuerpo del error o, si no, en la cabecera. */
+function leerIdPeticion(data: unknown, cabeceras: Record<string, unknown>): string | null {
+  const delCuerpo = data && typeof data === 'object' ? (data as Record<string, unknown>).idPeticion : null;
+  const valor = typeof delCuerpo === 'string' ? delCuerpo : cabeceras['x-request-id'];
+  return typeof valor === 'string' && valor ? valor : null;
 }
 
 /**
@@ -98,8 +108,12 @@ apiClient.interceptors.response.use(
       return Promise.reject(new ApiError('Tu sesión expiró. Inicia sesión de nuevo.', status));
     }
 
+    const idPeticion = leerIdPeticion(data, error.response.headers ?? {});
+    const mensaje = readServerMessage(data) ?? 'No fue posible comunicarse con el servidor.';
+    /* En un error del servidor el mensaje es genérico: el id es lo único que
+       permite encontrar qué pasó, así que se enseña para poder reportarlo. */
     return Promise.reject(
-      new ApiError(readServerMessage(data) ?? 'No fue posible comunicarse con el servidor.', status)
+      new ApiError(status >= 500 && idPeticion ? `${mensaje} (código: ${idPeticion})` : mensaje, status, false, idPeticion)
     );
   }
 );

@@ -11,6 +11,8 @@ import { destinoTrasLogin } from '../../routes/destino';
 import { esAdmin } from '../../lib/rol';
 import { despertarServidor } from '../../lib/servidor';
 import AvisoServidorDespertando from '../../components/AvisoServidorDespertando';
+import PasoDosPasos from './PasoDosPasos';
+import { esDesafioDosPasos, type AuthResponse } from '../../types/auth.types';
 
 const loginSchema = z.object({
   email: z
@@ -29,6 +31,8 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  /** Con la verificación en dos pasos, el desafío que da la contraseña correcta. */
+  const [desafio, setDesafio] = useState<string | null>(null);
   const login = useAuthStore((s) => s.login);
   const sesionExpirada = useAuthStore((s) => s.sesionExpirada);
   const navigate = useNavigate();
@@ -50,9 +54,11 @@ export default function LoginPage() {
       // rendirse a los 15 s.
       await despertarServidor();
       const res = await loginUser(data);
-      login(res.user, res.token);
-      // De vuelta a la página donde estaba (p. ej. si la sesión expiró ahí).
-      navigate(destinoTrasLogin(location.state, esAdmin(res.user)), { replace: true });
+      if (esDesafioDosPasos(res)) {
+        setDesafio(res.desafio);
+        return;
+      }
+      entrar(res);
     } catch (err) {
       const msg =
         err instanceof Error
@@ -60,6 +66,12 @@ export default function LoginPage() {
           : 'Error al iniciar sesión';
       setServerError(msg);
     }
+  };
+
+  const entrar = (res: AuthResponse) => {
+    login(res.user, res.token);
+    // De vuelta a la página donde estaba (p. ej. si la sesión expiró ahí).
+    navigate(destinoTrasLogin(location.state, esAdmin(res.user)), { replace: true });
   };
 
   const fillDemoCredentials = (credenciales: { email: string; password: string }) => {
@@ -70,6 +82,17 @@ export default function LoginPage() {
       shouldValidate: true,
     });
   };
+
+  if (desafio) {
+    return (
+      <div className="w-full max-w-[27rem]">
+        <MobileLogo />
+        <div className="bg-surface-container-lowest rounded-3xl p-7 md:p-9 elev-2">
+          <PasoDosPasos desafio={desafio} onSesion={entrar} onVolver={() => setDesafio(null)} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-[27rem]">

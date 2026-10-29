@@ -277,6 +277,12 @@ function TarjetaFallo({
         En <code>{fallo.ubicacion}</code>
         {navegadorCorto(fallo.navegador) && <> · {navegadorCorto(fallo.navegador)}</>}
         {' · '}primera vez {tiempoRelativo(fallo.primeraVez).toLowerCase()}
+        {fallo.idPeticion && (
+          <>
+            {' · '}petición{' '}
+            <code title="Búscalo en la Consola para ver sus líneas del log">{fallo.idPeticion}</code>
+          </>
+        )}
       </p>
 
       {fallo.traza && (

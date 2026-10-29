@@ -35,9 +35,39 @@ export interface AuthUser extends Partial<PerfilSocial> {
   rolSistema?: RolSistema;
   /** Cuándo cambió la foto; nulo si no tiene. Sirve de versión para no pedirla dos veces. */
   fotoActualizadaEn?: string | null;
+  /** Si al entrar se le pide el código de la app (verificación en dos pasos). */
+  dosPasosActivo?: boolean;
 }
 
 export interface AuthResponse {
   token: string;
   user: AuthUser;
+}
+
+/**
+ * Lo que responde `/auth/login` cuando la cuenta tiene la verificación en dos
+ * pasos: la contraseña fue correcta, pero falta el código. El desafío vale
+ * 5 minutos y no sirve como sesión.
+ */
+export interface DesafioDosPasos {
+  requiereDosPasos: true;
+  desafio: string;
+}
+
+export type RespuestaLogin = AuthResponse | DesafioDosPasos;
+
+export const esDesafioDosPasos = (respuesta: RespuestaLogin): respuesta is DesafioDosPasos =>
+  'requiereDosPasos' in respuesta && respuesta.requiereDosPasos === true;
+
+/** `GET /api/me/dos-pasos`. */
+export interface EstadoDosPasos {
+  activo: boolean;
+  codigosRespaldoRestantes: number;
+  activadoEn: string | null;
+}
+
+/** `POST /api/me/dos-pasos/iniciar`: el secreto (para teclearlo) y la dirección del QR. */
+export interface ConfiguracionDosPasos {
+  secreto: string;
+  uri: string;
 }

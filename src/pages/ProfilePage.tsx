@@ -12,6 +12,7 @@ import { useTengoFoto } from '../hooks/useFoto';
 import { TarjetaPerfil } from '../components/TarjetaPerfil';
 import { PerfilSocialCard } from '../components/perfil/PerfilSocialCard';
 import { MisLogros } from '../components/perfil/MisLogros';
+import { VerificacionDosPasos } from '../components/perfil/VerificacionDosPasos';
 import { isApiEnabled } from '../lib/apiClient';
 import { MAX_BYTES_ORIGINAL } from '../lib/fotos';
 
@@ -364,6 +365,8 @@ export default function ProfilePage() {
             <PerfilSocialCard onVerTarjeta={() => setVerTarjeta(true)} />
 
             <MisLogros />
+
+            <VerificacionDosPasos />
 
             {/* Sección: Notificaciones */}
             <div className="bg-surface-container-lowest elev-1 rounded-2xl p-6">

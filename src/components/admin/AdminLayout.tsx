@@ -16,8 +16,10 @@ interface ItemAdmin {
 const ITEMS: ItemAdmin[] = [
   { to: '/admin', label: 'Resumen', icon: 'monitoring' },
   { to: '/admin/salud', label: 'Salud', icon: 'ecg_heart' },
+  { to: '/admin/metricas', label: 'Métricas', icon: 'query_stats' },
   { to: '/admin/fallos', label: 'Fallos', icon: 'bug_report' },
   { to: '/admin/consola', label: 'Consola', icon: 'terminal' },
+  { to: '/admin/cuenta', label: 'Cuenta', icon: 'shield_lock' },
 ];
 
 const REFRESCO_PENDIENTES_MS = 60_000;

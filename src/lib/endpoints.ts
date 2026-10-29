@@ -159,6 +159,7 @@ export const endpoints = {
     ia: '/admin/ia',
     pendientes: '/admin/pendientes',
     salud: '/admin/salud',
+    metricas: '/admin/metricas',
     fallos: '/admin/fallos',
     estadoFallo: (id: string) => `/admin/fallos/${id}/estado`,
     reportes: '/admin/reportes',

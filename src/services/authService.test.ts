@@ -6,6 +6,12 @@ vi.stubEnv('VITE_API_URL', '');
 instalarAlmacenamientoEnMemoria();
 const { loginUser, registerUser, actualizarCuentaDemo, leerCuentasDemo, cambiarSuspensionDemo, DEMO_CREDENTIALS, DEMO_ADMIN_CREDENTIALS } = await import('./authService');
 
+/** En el modo demo el login siempre da la sesión, nunca un desafío de dos pasos. */
+function sesion<T extends object>(respuesta: T): Extract<T, { token: string }> {
+  if (!('token' in respuesta)) throw new Error('Se esperaba una sesión');
+  return respuesta as Extract<T, { token: string }>;
+}
+
 /** El servicio simula un segundo de red: se adelanta el reloj en vez de esperarlo. */
 async function sinEspera<T>(promesa: Promise<T>): Promise<T> {
   promesa.catch(() => {});
@@ -23,7 +29,7 @@ describe('cuentas demo', () => {
   });
 
   it('la cuenta de ejemplo existe siempre y acepta el correo con mayúsculas', async () => {
-    const res = await sinEspera(loginUser({ email: '  Alex.Rodriguez@HUECKO.com ', password: DEMO_CREDENTIALS.password }));
+    const res = sesion(await sinEspera(loginUser({ email: '  Alex.Rodriguez@HUECKO.com ', password: DEMO_CREDENTIALS.password })));
     expect(res.user.id).toBe('1');
     expect(res.token).toBe('mock-jwt-token-huecko-2026');
   });
@@ -33,7 +39,7 @@ describe('cuentas demo', () => {
     expect(alta.user.nombre).toBe('Lucía Pérez');
     expect(alta.user.email).toBe('lucia@correo.com');
 
-    const entrada = await sinEspera(loginUser({ email: 'LUCIA@correo.com', password: 'secreta123' }));
+    const entrada = sesion(await sinEspera(loginUser({ email: 'LUCIA@correo.com', password: 'secreta123' })));
     expect(entrada.user).toEqual(alta.user);
   });
 
@@ -63,7 +69,7 @@ describe('cuentas demo', () => {
     const editado = actualizarCuentaDemo(user, { nombre: ' Lucía P. ', email: 'LP@correo.com' });
     expect(editado).toMatchObject({ id: user.id, nombre: 'Lucía P.', email: 'lp@correo.com' });
 
-    const entrada = await sinEspera(loginUser({ email: 'lp@correo.com', password: 'secreta123' }));
+    const entrada = sesion(await sinEspera(loginUser({ email: 'lp@correo.com', password: 'secreta123' })));
     expect(entrada.user.nombre).toBe('Lucía P.');
   });
 
@@ -88,7 +94,7 @@ describe('cuenta admin del modo demo', () => {
   });
 
   it('entra con su contraseña fija y trae el rol ADMIN', async () => {
-    const res = await sinEspera(loginUser(DEMO_ADMIN_CREDENTIALS));
+    const res = sesion(await sinEspera(loginUser(DEMO_ADMIN_CREDENTIALS)));
     expect(res.user.rolSistema).toBe('ADMIN');
   });
 

@@ -22,4 +22,44 @@ describe('apiClient', () => {
 
     expect(data).toEqual({ fallosNuevos: 1, reportesNuevos: 2 });
   });
+
+  it('un error del servidor trae el id de la petición para poder reportarlo', async () => {
+    const fallo = apiClient.get('/grupos', {
+      adapter: async (config) =>
+        Promise.reject(
+          Object.assign(new Error('500'), {
+            isAxiosError: true,
+            config,
+            response: {
+              status: 500,
+              statusText: 'Error',
+              headers: { 'x-request-id': 'abc123def456' },
+              config,
+              data: { mensaje: 'Ocurrió un error inesperado.', idPeticion: 'abc123def456' },
+            },
+          })
+        ),
+    });
+
+    await expect(fallo).rejects.toMatchObject({
+      status: 500,
+      idPeticion: 'abc123def456',
+      message: 'Ocurrió un error inesperado. (código: abc123def456)',
+    });
+  });
+
+  it('en un 4xx el mensaje queda igual, pero el id viaja en el error', async () => {
+    const fallo = apiClient.get('/grupos', {
+      adapter: async (config) =>
+        Promise.reject(
+          Object.assign(new Error('400'), {
+            isAxiosError: true,
+            config,
+            response: { status: 400, statusText: 'Bad', headers: { 'x-request-id': 'zzz999yyy888' }, config, data: { mensaje: 'Falta el título.' } },
+          })
+        ),
+    });
+
+    await expect(fallo).rejects.toMatchObject({ status: 400, idPeticion: 'zzz999yyy888', message: 'Falta el título.' });
+  });
 });

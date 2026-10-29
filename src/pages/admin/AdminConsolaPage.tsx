@@ -81,7 +81,9 @@ function LogEnVivo() {
   const visibles = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
     if (!texto) return eventos;
-    return eventos.filter((e) => `${e.logger} ${e.mensaje} ${e.excepcion ?? ''}`.toLowerCase().includes(texto));
+    return eventos.filter((e) =>
+      `${e.logger} ${e.mensaje} ${e.excepcion ?? ''} ${e.idPeticion ?? ''}`.toLowerCase().includes(texto)
+    );
   }, [eventos, busqueda]);
 
   return (
@@ -150,7 +152,9 @@ function LogEnVivo() {
           <div key={e.id} className="whitespace-pre-wrap break-words border-b border-white/5 py-0.5">
             <span className="text-cream/50">{hora(e.momento)}</span>{' '}
             <span className={`font-bold ${COLOR_NIVEL[e.nivel] ?? ''}`}>{e.nivel.padEnd(5)}</span>{' '}
-            <span className="text-cream/70">{e.logger}</span> {e.mensaje}
+            <span className="text-cream/70">{e.logger}</span>{' '}
+            {e.idPeticion && <span className="text-cream/40" title="Id de la petición (X-Request-Id)">[{e.idPeticion}]</span>}{' '}
+            {e.mensaje}
             {e.excepcion && <span className="block pl-4 text-[#ff8a80]">↳ {e.excepcion}</span>}
           </div>
         ))}
