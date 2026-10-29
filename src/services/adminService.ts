@@ -17,6 +17,7 @@ import type {
   PropiedadConfig,
   ReporteAdmin,
   ResumenAdmin,
+  MetricasAdmin,
   SaludAdmin,
   UsoIAAdmin,
 } from '../types/admin.types';
@@ -69,6 +70,12 @@ export const adminService = {
   async getSalud(): Promise<SaludAdmin> {
     exigirServidor();
     const { data } = await apiClient.get<SaludAdmin>(endpoints.admin.salud);
+    return data;
+  },
+
+  async getMetricas(): Promise<MetricasAdmin> {
+    exigirServidor();
+    const { data } = await apiClient.get<MetricasAdmin>(endpoints.admin.metricas);
     return data;
   },
 

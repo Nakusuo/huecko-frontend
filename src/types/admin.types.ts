@@ -112,6 +112,8 @@ export interface FalloAdmin {
   estado: EstadoRevision;
   /** Volvió a ocurrir después de darlo por resuelto. */
   reabierto: boolean;
+  /** `X-Request-Id` de la última vez (solo SERVIDOR): busca sus líneas en la consola. */
+  idPeticion?: string | null;
 }
 
 /** FALLO = algo de la app no funciona; CONDUCTA = problema con otra cuenta. */
@@ -161,6 +163,8 @@ export interface EventoLog {
   hilo: string;
   mensaje: string;
   excepcion: string | null;
+  /** La petición que la escribió; nulo en tareas programadas y arranque. */
+  idPeticion?: string | null;
 }
 
 export interface PaginaLogs {
@@ -190,4 +194,44 @@ export interface UsoIAAdmin {
     tasaExito: number | null;
     msPromedio: number | null;
   }[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Métricas (`GET /api/admin/metricas`)
+ * ------------------------------------------------------------------ */
+
+/** Un intervalo de 10 s. */
+export interface PuntoMetricas {
+  momento: string;
+  peticiones: number;
+  /** Errores del servidor (5xx). */
+  errores: number;
+  /** Errores del cliente (4xx): datos mal enviados, sin permiso, no encontrado… */
+  erroresCliente: number;
+  mediaMs: number;
+}
+
+export interface RutaMetricas {
+  metodo: string;
+  uri: string;
+  peticiones: number;
+  errores: number;
+  mediaMs: number;
+  p95Ms: number;
+  maxMs: number;
+}
+
+export interface MetricasAdmin {
+  intervaloSegundos: number;
+  resumen: {
+    peticiones: number;
+    errores: number;
+    erroresCliente: number;
+    porcentajeErrores: number;
+    mediaMs: number;
+    peticionesUltimoMinuto: number;
+  };
+  serie: PuntoMetricas[];
+  rutas: RutaMetricas[];
+  jvm: { memoriaUsadaMb: number; memoriaMaximaMb: number; hilos: number; cpu: number; arranque: string };
 }
