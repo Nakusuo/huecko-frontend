@@ -95,3 +95,84 @@ export function BarrasHorizontales({ filas }: { filas: FilaBarra[] }) {
     </ul>
   );
 }
+
+export interface PuntoSerie {
+  /** Instante ISO del final del intervalo. */
+  momento: string;
+  valor: number;
+}
+
+const horaCorta = (iso: string) =>
+  new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+/**
+ * Columnas de una serie en vivo (un punto cada pocos segundos). Igual que
+ * `ColumnasSemanales`: una sola serie, lectura del punto activo arriba a la
+ * derecha (el último si no se señala ninguno) y la hora de inicio y fin abajo.
+ */
+export function ColumnasSerie({
+  titulo,
+  puntos,
+  unidad,
+  vacio,
+}: {
+  titulo: string;
+  puntos: PuntoSerie[];
+  /** Texto tras el valor: «peticiones», «ms»… */
+  unidad: string;
+  /** Lo que se dice mientras aún no hay puntos. */
+  vacio: string;
+}) {
+  const [activo, setActivo] = useState<number | null>(null);
+  const maximo = Math.max(1, ...puntos.map((p) => p.valor));
+  const ultimo = puntos.length - 1;
+  const destacado = activo ?? ultimo;
+
+  return (
+    <figure className="flex flex-col rounded-2xl border border-outline-variant bg-surface-container-lowest p-4">
+      <figcaption className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-semibold text-on-surface">{titulo}</span>
+        {puntos.length > 0 && (
+          <span className="text-2xs text-on-surface-variant" aria-live="polite">
+            {activo === null ? 'Ahora' : horaCorta(puntos[destacado].momento)}:{' '}
+            <strong className="font-headline text-sm text-on-surface">{puntos[destacado].valor}</strong> {unidad}
+          </span>
+        )}
+      </figcaption>
+
+      {puntos.length === 0 ? (
+        <p className="mt-4 flex h-28 items-center justify-center text-xs text-on-surface-variant">{vacio}</p>
+      ) : (
+        <div className="relative mt-4 h-28 border-b border-outline-variant" onMouseLeave={() => setActivo(null)}>
+          <div className="flex h-full items-end gap-[2px]">
+            {puntos.map((p, i) => (
+              <button
+                key={p.momento}
+                type="button"
+                onMouseEnter={() => setActivo(i)}
+                onFocus={() => setActivo(i)}
+                onBlur={() => setActivo(null)}
+                aria-label={`${horaCorta(p.momento)}: ${p.valor} ${unidad}`}
+                className="group flex h-full flex-1 cursor-default items-end justify-center rounded-sm focus-visible:outline-2 focus-visible:outline-secondary"
+              >
+                <span
+                  className={`block w-full max-w-3 rounded-t-[4px] transition-opacity ${
+                    activo !== null && activo !== i ? 'opacity-40' : ''
+                  } ${p.valor === 0 ? 'bg-outline-variant' : 'bg-dato'}`}
+                  style={{ height: p.valor === 0 ? '2px' : `${Math.max(4, (p.valor / maximo) * 100)}%` }}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {puntos.length > 0 && (
+        <div className="mt-1.5 flex justify-between text-2xs text-on-surface-variant">
+          <span>{horaCorta(puntos[0].momento)}</span>
+          <span>{horaCorta(puntos[ultimo].momento)}</span>
+        </div>
+      )}
+    </figure>
+  );
+}

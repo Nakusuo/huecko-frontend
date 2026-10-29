@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { apiClient } from './apiClient';
-import { despertarServidor, useEstadoServidor } from './servidor';
+
+/* Modo demo pase lo que pase en el .env.local de quien corre las pruebas. */
+vi.stubEnv('VITE_API_URL', '');
+const { apiClient } = await import('./apiClient');
+const { despertarServidor, useEstadoServidor } = await import('./servidor');
 
 describe('despertarServidor (modo demo)', () => {
   it('no hay servidor que despertar: no hace peticiones', async () => {
