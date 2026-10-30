@@ -13,6 +13,16 @@ horarios incompatibles, respuestas tardías y bajas de último minuto. Huecko cr
 las agendas, propone las ventanas donde cabe todo el mundo y, cuando alguien se
 cae, abre una votación exprés con plazo en vez de dejar el plan en el aire.
 
+## En producción
+
+- Web: https://huecko-web.onrender.com
+- API: https://huecko-api.onrender.com (Swagger en [`/api/docs`](https://huecko-api.onrender.com/api/docs))
+- Servicio de IA: https://huecko-ia.onrender.com
+
+Los tres van en el plan gratuito de Render. La web es un sitio estático y no se
+duerme; la API y la IA se duermen tras unos 15 minutos sin uso y tardan cerca de
+un minuto en despertar. Cómo se despliega, paso a paso: [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
+
 ## Instalación
 
 Requiere **Node.js 20+** y npm.
@@ -151,10 +161,23 @@ src/
 - «Resumir con Huecko IA» en cada plan: cómo va la votación y qué conviene hacer (cerrar, esperar, mantener o buscar otra fecha), sin cambiar nada.
 - Notificaciones y UI responsiva para móvil y escritorio.
 
+## Pruebas e integración continua
+
+- `npm test` pasa la batería de pruebas (Vitest + Testing Library): componentes,
+  páginas, tienda de estado y el simulador del modo demo.
+- `npm run lint` y `npm run build` comprueban estilo y tipos.
+- GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) ejecuta lint, pruebas y
+  build en cada push y pull request a `develop` y `main`. Nada llega a `main`
+  en rojo.
+
+[![CI](https://github.com/Nakusuo/huecko-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/Nakusuo/huecko-frontend/actions/workflows/ci.yml)
+
 ## Documentación
 
 - [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — contrato que implementa Spring Boot.
 - [`docs/INTEGRACION_BACKEND.md`](docs/INTEGRACION_BACKEND.md) — estado real de la integración.
+- [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md) — publicación de la web en Render.
+- [`docs/CUMPLIMIENTO_SILABO.md`](https://github.com/Nakusuo/huecko-backend/blob/main/docs/CUMPLIMIENTO_SILABO.md) — dónde cumple el proyecto cada tema del curso (en el repo del backend).
 
 ## Flujo de trabajo
 
