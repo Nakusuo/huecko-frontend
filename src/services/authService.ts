@@ -5,6 +5,7 @@ import type {
   AuthUser,
   PerfilSocial,
   RespuestaLogin,
+  VerificacionPendiente,
 } from '../types/auth.types';
 import { apiClient, isApiEnabled } from '../lib/apiClient';
 
@@ -30,6 +31,27 @@ const EMAIL_EN_USO = 'El correo ya está en uso. Intenta con otro.';
 /** El mismo texto que devuelve el backend. */
 export const CUENTA_SUSPENDIDA = 'Tu cuenta está suspendida. Contacta con la administración de Huecko.';
 const CREDENCIALES_INVALIDAS = 'Credenciales incorrectas. Intenta de nuevo.';
+/* Los mismos textos que el backend para el código de verificación. */
+const CODIGO_INCORRECTO = 'El código no es correcto o ya caducó. Pide otro si hace falta.';
+const DESAFIO_CADUCADO = 'Pasó demasiado tiempo. Vuelve a escribir tu contraseña.';
+const ESPERA_REENVIO = 'Espera un momento antes de pedir otro código.';
+
+/**
+ * Alfabeto de los códigos que llegan por correo (`8JR6`): sin 0/O, 1/I ni L,
+ * que se confunden al copiarlos a mano. El mismo que usa el backend.
+ */
+export const ALFABETO_CODIGO_CORREO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+export const LARGO_CODIGO_CORREO = 4;
+/** Lo que hay que esperar entre un reenvío y el siguiente (el backend responde 429 antes). */
+export const ESPERA_REENVIO_MS = 60_000;
+const DURACION_CODIGO_MS = 10 * 60_000;
+
+/** Como el backend: sin espacios ni guiones y en mayúsculas. `8jr 6` vale igual que `8JR6`. */
+export const limpiarCodigo = (codigo: string): string => codigo.replace(/[\s-]/g, '').toUpperCase();
+
+/** Para el campo mientras se escribe: solo letras y números, así pegar «8jr-6» también funciona. */
+export const limpiarEntradaCodigo = (valor: string, largo: number): string =>
+  limpiarCodigo(valor).replace(/[^A-Z0-9]/g, '').slice(0, largo);
 
 const simulateNetworkDelay = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, SIMULATED_NETWORK_DELAY_MS));
@@ -53,6 +75,39 @@ const CLAVE_CUENTAS_DEMO = 'huecko-cuentas-demo';
 export interface CuentaDemo extends AuthUser {
   /** Resumen de la contraseña. Sin él (cuenta de ejemplo) vale `DEMO_CREDENTIALS.password`. */
   clave?: string;
+}
+
+/* ------------------------------------------------------------------------ *
+ * Códigos de verificación del modo demo
+ *
+ * Sin servidor no hay correo que enviar: el código se genera aquí y la
+ * pantalla lo enseña («Modo demo: tu código es 8JR6»). Vive en memoria, igual
+ * que un desafío del backend caduca: si se recarga la página, se vuelve a
+ * entrar con la contraseña y llega otro.
+ * ------------------------------------------------------------------------ */
+
+interface CodigoDemo {
+  cuentaId: string;
+  codigo: string;
+  expira: number;
+  enviado: number;
+}
+
+const codigosDemo = new Map<string, CodigoDemo>();
+
+function codigoAlAzar(): string {
+  const azar = globalThis.crypto.getRandomValues(new Uint32Array(LARGO_CODIGO_CORREO));
+  return Array.from(azar, (n) => ALFABETO_CODIGO_CORREO[n % ALFABETO_CODIGO_CORREO.length]).join('');
+}
+
+function pendienteDemo(cuenta: CuentaDemo): VerificacionPendiente {
+  const desafio = `demo-verificacion-${cuenta.id}-${Date.now().toString(36)}`;
+  // Un código nuevo anula el anterior de la misma cuenta, como en el backend.
+  for (const [clave, valor] of codigosDemo) if (valor.cuentaId === cuenta.id) codigosDemo.delete(clave);
+  const codigo = codigoAlAzar();
+  const ahora = Date.now();
+  codigosDemo.set(desafio, { cuentaId: cuenta.id, codigo, expira: ahora + DURACION_CODIGO_MS, enviado: ahora });
+  return { requiereVerificacion: true, desafio, email: cuenta.email, codigoDemo: codigo };
 }
 
 /* El mismo perfil que el seed del backend, para que la tarjeta no salga vacía en una demo. */
@@ -204,8 +259,10 @@ export function cambiarSuspensionDemo(usuarioId: string, suspendido: boolean): v
 
 /**
  * Primer paso del login. Si la cuenta tiene la verificación en dos pasos,
- * devuelve un desafío en vez de la sesión (ver `verificarDosPasos`). En el
- * modo demo nunca: no hay app de códigos que enlazar.
+ * devuelve un desafío en vez de la sesión (ver `verificarDosPasos`); en el
+ * modo demo nunca, porque no hay servidor que compruebe los códigos. Si la
+ * cuenta no confirmó su correo, devuelve la verificación pendiente y se manda
+ * otro código.
  */
 export async function loginUser(payload: LoginPayload): Promise<RespuestaLogin> {
   if (isApiEnabled) {
@@ -226,41 +283,100 @@ export async function loginUser(payload: LoginPayload): Promise<RespuestaLogin> 
   if (leerSuspendidasDemo().has(cuenta.id)) {
     throw new Error(CUENTA_SUSPENDIDA);
   }
+  // Con la contraseña bien pero el correo sin confirmar, se manda otro código.
+  if (cuenta.emailVerificado === false) {
+    return pendienteDemo(cuenta);
+  }
 
   return { token: tokenDemo(cuenta.id), user: sinClave(cuenta) };
 }
 
-/** Segundo paso: el código de 6 dígitos de la app, o uno de respaldo. */
+/** Segundo paso: el código de 6 dígitos de la app, el de 4 del correo o uno de respaldo. */
 export async function verificarDosPasos(desafio: string, codigo: string): Promise<AuthResponse> {
   const { data } = await apiClient.post<AuthResponse>('/auth/dos-pasos', { desafio, codigo: codigo.trim() });
   return data;
 }
 
-export async function registerUser(payload: RegisterPayload): Promise<AuthResponse> {
+/**
+ * Crea la cuenta y manda el código al correo. La sesión no se abre todavía:
+ * hace falta `verificarCorreo` con ese código.
+ */
+export async function registerUser(payload: RegisterPayload): Promise<VerificacionPendiente> {
   const nombre = payload.nombre.trim();
   const email = normalizarEmail(payload.email);
 
   if (isApiEnabled) {
-    const { data } = await apiClient.post<AuthResponse>('/auth/register', { ...payload, nombre, email });
+    const { data } = await apiClient.post<VerificacionPendiente>('/auth/register', { ...payload, nombre, email });
     return data;
   }
 
   await simulateNetworkDelay();
 
   const cuentas = leerCuentasDemo();
-  if (buscarPorEmail(cuentas, email)) {
+  const existente = buscarPorEmail(cuentas, email);
+  // Como el backend: una cuenta que nunca confirmó el correo no bloquea ese correo.
+  if (existente && existente.emailVerificado !== false) {
     throw new Error(EMAIL_EN_USO);
   }
 
   const cuenta: CuentaDemo = {
-    id: `demo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    id: existente?.id ?? `demo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     nombre,
     email,
-    creado_en: new Date().toISOString(),
+    creado_en: existente?.creado_en ?? new Date().toISOString(),
     rolSistema: 'USUARIO',
+    emailVerificado: false,
     clave: await resumirClave(payload.password),
   };
-  guardarCuentasDemo([...cuentas, cuenta]);
+  guardarCuentasDemo([...cuentas.filter((c) => c.id !== cuenta.id), cuenta]);
 
-  return { token: tokenDemo(cuenta.id), user: sinClave(cuenta) };
+  return pendienteDemo(cuenta);
+}
+
+/** El código de 4 caracteres que llegó al correo. Si es correcto, abre la sesión. */
+export async function verificarCorreo(desafio: string, codigo: string): Promise<AuthResponse> {
+  if (isApiEnabled) {
+    const { data } = await apiClient.post<AuthResponse>('/auth/verificar-correo', {
+      desafio,
+      codigo: limpiarCodigo(codigo),
+    });
+    return data;
+  }
+
+  await simulateNetworkDelay();
+
+  const pendiente = codigosDemo.get(desafio);
+  const cuentas = leerCuentasDemo();
+  const cuenta = pendiente && cuentas.find((c) => c.id === pendiente.cuentaId);
+  if (!pendiente || !cuenta) throw new Error(DESAFIO_CADUCADO);
+  if (pendiente.expira < Date.now() || pendiente.codigo !== limpiarCodigo(codigo)) {
+    throw new Error(CODIGO_INCORRECTO);
+  }
+
+  codigosDemo.delete(desafio);
+  const verificada: CuentaDemo = { ...cuenta, emailVerificado: true };
+  guardarCuentasDemo([...cuentas.filter((c) => c.id !== cuenta.id), verificada]);
+  return { token: tokenDemo(verificada.id), user: sinClave(verificada) };
+}
+
+/**
+ * Otro código al correo, para la verificación del registro o para el segundo
+ * paso del login por correo. Como mucho uno por minuto. En el modo demo
+ * devuelve el código nuevo para enseñarlo.
+ */
+export async function reenviarCodigo(desafio: string): Promise<string | undefined> {
+  if (isApiEnabled) {
+    await apiClient.post('/auth/reenviar-codigo', { desafio });
+    return undefined;
+  }
+
+  const pendiente = codigosDemo.get(desafio);
+  const cuenta = pendiente && leerCuentasDemo().find((c) => c.id === pendiente.cuentaId);
+  if (!pendiente || !cuenta) throw new Error(DESAFIO_CADUCADO);
+  if (Date.now() - pendiente.enviado < ESPERA_REENVIO_MS) throw new Error(ESPERA_REENVIO);
+
+  const codigo = codigoAlAzar();
+  const ahora = Date.now();
+  codigosDemo.set(desafio, { ...pendiente, codigo, expira: ahora + DURACION_CODIGO_MS, enviado: ahora });
+  return codigo;
 }

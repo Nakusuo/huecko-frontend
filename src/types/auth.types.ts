@@ -35,9 +35,16 @@ export interface AuthUser extends Partial<PerfilSocial> {
   rolSistema?: RolSistema;
   /** Cuándo cambió la foto; nulo si no tiene. Sirve de versión para no pedirla dos veces. */
   fotoActualizadaEn?: string | null;
-  /** Si al entrar se le pide el código de la app (verificación en dos pasos). */
+  /** Si al entrar se le pide un código además de la contraseña (verificación en dos pasos). */
   dosPasosActivo?: boolean;
+  /** Si confirmó su correo con el código que se le envió. Las sesiones antiguas no lo traen: cuentan como verificadas. */
+  emailVerificado?: boolean;
+  /** Por dónde llega el código de dos pasos; nulo si no la tiene. */
+  dosPasosMetodo?: MetodoDosPasos | null;
 }
+
+/** De dónde sale el código de la verificación en dos pasos: la app de códigos o el correo. */
+export type MetodoDosPasos = 'APP' | 'CORREO';
 
 export interface AuthResponse {
   token: string;
@@ -52,18 +59,40 @@ export interface AuthResponse {
 export interface DesafioDosPasos {
   requiereDosPasos: true;
   desafio: string;
+  /** Sin él (backend anterior), la app. */
+  metodo?: MetodoDosPasos;
+  /** Solo con `CORREO`: el correo enmascarado (`al***@gmail.com`). El código ya se envió. */
+  correo?: string;
 }
 
-export type RespuestaLogin = AuthResponse | DesafioDosPasos;
+/**
+ * Lo que responde el registro, y el login de una cuenta que aún no confirmó
+ * su correo: se ha enviado un código de 4 caracteres y la sesión no se abre
+ * hasta escribirlo (`/auth/verificar-correo`).
+ */
+export interface VerificacionPendiente {
+  requiereVerificacion: true;
+  desafio: string;
+  email: string;
+  /** Solo en el modo demo, donde no hay correo: el código se enseña en pantalla. */
+  codigoDemo?: string;
+}
+
+export type RespuestaLogin = AuthResponse | DesafioDosPasos | VerificacionPendiente;
 
 export const esDesafioDosPasos = (respuesta: RespuestaLogin): respuesta is DesafioDosPasos =>
   'requiereDosPasos' in respuesta && respuesta.requiereDosPasos === true;
+
+export const esVerificacionPendiente = (respuesta: RespuestaLogin): respuesta is VerificacionPendiente =>
+  'requiereVerificacion' in respuesta && respuesta.requiereVerificacion === true;
 
 /** `GET /api/me/dos-pasos`. */
 export interface EstadoDosPasos {
   activo: boolean;
   codigosRespaldoRestantes: number;
   activadoEn: string | null;
+  /** Sin él (backend anterior), la app si está activa. */
+  metodo?: MetodoDosPasos | null;
 }
 
 /** `POST /api/me/dos-pasos/iniciar`: el secreto (para teclearlo) y la dirección del QR. */
