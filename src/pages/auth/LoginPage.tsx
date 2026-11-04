@@ -12,7 +12,14 @@ import { esAdmin } from '../../lib/rol';
 import { despertarServidor } from '../../lib/servidor';
 import AvisoServidorDespertando from '../../components/AvisoServidorDespertando';
 import PasoDosPasos from './PasoDosPasos';
-import { esDesafioDosPasos, type AuthResponse } from '../../types/auth.types';
+import PasoVerificarCorreo from './PasoVerificarCorreo';
+import {
+  esDesafioDosPasos,
+  esVerificacionPendiente,
+  type AuthResponse,
+  type DesafioDosPasos,
+  type VerificacionPendiente,
+} from '../../types/auth.types';
 
 const loginSchema = z.object({
   email: z
@@ -31,8 +38,11 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  /** Con la verificación en dos pasos, el desafío que da la contraseña correcta. */
-  const [desafio, setDesafio] = useState<string | null>(null);
+  /**
+   * Lo que falta tras una contraseña correcta: el código de dos pasos, o
+   * confirmar el correo si la cuenta aún no lo hizo.
+   */
+  const [pendiente, setPendiente] = useState<DesafioDosPasos | VerificacionPendiente | null>(null);
   const login = useAuthStore((s) => s.login);
   const sesionExpirada = useAuthStore((s) => s.sesionExpirada);
   const navigate = useNavigate();
@@ -54,8 +64,8 @@ export default function LoginPage() {
       // rendirse a los 15 s.
       await despertarServidor();
       const res = await loginUser(data);
-      if (esDesafioDosPasos(res)) {
-        setDesafio(res.desafio);
+      if (esDesafioDosPasos(res) || esVerificacionPendiente(res)) {
+        setPendiente(res);
         return;
       }
       entrar(res);
@@ -83,12 +93,22 @@ export default function LoginPage() {
     });
   };
 
-  if (desafio) {
+  if (pendiente) {
     return (
       <div className="w-full max-w-[27rem]">
         <MobileLogo />
         <div className="bg-surface-container-lowest rounded-3xl p-7 md:p-9 elev-2">
-          <PasoDosPasos desafio={desafio} onSesion={entrar} onVolver={() => setDesafio(null)} />
+          {esVerificacionPendiente(pendiente) ? (
+            <PasoVerificarCorreo pendiente={pendiente} onSesion={entrar} onVolver={() => setPendiente(null)} />
+          ) : (
+            <PasoDosPasos
+              desafio={pendiente.desafio}
+              metodo={pendiente.metodo}
+              correo={pendiente.correo}
+              onSesion={entrar}
+              onVolver={() => setPendiente(null)}
+            />
+          )}
         </div>
       </div>
     );
