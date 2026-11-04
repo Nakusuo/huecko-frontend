@@ -8,6 +8,8 @@ import { useAuthStore } from '../../store/authStore';
 import { registerUser } from '../../services/authService';
 import { despertarServidor } from '../../lib/servidor';
 import AvisoServidorDespertando from '../../components/AvisoServidorDespertando';
+import PasoVerificarCorreo from './PasoVerificarCorreo';
+import type { AuthResponse, VerificacionPendiente } from '../../types/auth.types';
 
 const registerSchema = z
   .object({
@@ -49,6 +51,8 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  /** La cuenta ya existe, pero la sesión espera al código que llegó al correo. */
+  const [pendiente, setPendiente] = useState<VerificacionPendiente | null>(null);
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,13 +70,13 @@ export default function RegisterPage() {
     try {
       // Igual que en el login: esperar a que la API despierte.
       await despertarServidor();
-      const response = await registerUser({
-        nombre: data.nombre,
-        email: data.email,
-        password: data.password,
-      });
-      login(response.user, response.token);
-      navigate('/onboarding', { replace: true });
+      setPendiente(
+        await registerUser({
+          nombre: data.nombre,
+          email: data.email,
+          password: data.password,
+        })
+      );
     } catch (err) {
       const msg =
         err instanceof Error
@@ -81,6 +85,27 @@ export default function RegisterPage() {
       setServerError(msg);
     }
   };
+
+  const entrar = (res: AuthResponse) => {
+    login(res.user, res.token);
+    navigate('/onboarding', { replace: true });
+  };
+
+  if (pendiente) {
+    return (
+      <div className="w-full max-w-[27rem] py-4">
+        <MobileLogo />
+        <div className="bg-surface-container-lowest rounded-3xl p-7 md:p-9 elev-2">
+          <PasoVerificarCorreo
+            pendiente={pendiente}
+            onSesion={entrar}
+            onVolver={() => setPendiente(null)}
+            textoVolver="Corregir el correo"
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-[27rem] py-4">

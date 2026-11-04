@@ -23,3 +23,21 @@ describe('verificación en dos pasos en el login', () => {
     expect(html).toContain('código de respaldo');
   });
 });
+
+describe('verificación en dos pasos por correo', () => {
+  it('dice a qué correo llegó el código, acepta letras y deja reenviar', () => {
+    const html = renderToStaticMarkup(
+      <PasoDosPasos desafio="abc" metodo="CORREO" correo="al***@gmail.com" onSesion={() => {}} onVolver={() => {}} />
+    );
+    expect(html).toContain('al***@gmail.com');
+    expect(html).toContain('Código del correo');
+    expect(html).toMatch(/inputmode="text"/i);
+    expect(html).toContain('Reenviar código');
+    expect(html).toContain('código de respaldo');
+  });
+
+  it('con la app no ofrece reenviar nada', () => {
+    const html = renderToStaticMarkup(<PasoDosPasos desafio="abc" metodo="APP" onSesion={() => {}} onVolver={() => {}} />);
+    expect(html).not.toContain('Reenviar código');
+  });
+});

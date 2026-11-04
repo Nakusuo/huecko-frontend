@@ -31,6 +31,45 @@ const bloques = [
     categoria: 'Clase', color: '#94A3B8', fuente: 'OCR', estado: 'BORRADOR' },
 ];
 
+/* Cuentas creadas por registro en esta sesión del stub, por correo. */
+const cuentas = new Map();
+/** desafío → { cuenta, tipo: 'verificar' | 'dos-pasos', codigo, expira, enviado } */
+const desafios = new Map();
+/** Códigos pedidos desde el perfil (activar o gestionar los dos pasos por correo). */
+const codigosPerfil = new Map();
+
+const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+function nuevoCodigo(cuenta) {
+  const codigo = Array.from({ length: 4 }, () => ALFABETO[Math.floor(Math.random() * ALFABETO.length)]).join('');
+  console.log(`[stub] Código para ${cuenta.email}: ${codigo}`);
+  const ahora = Date.now();
+  return { codigo, expira: ahora + 10 * 60_000, enviado: ahora };
+}
+
+function nuevoDesafio(cuenta, tipo) {
+  const desafio = `stub-desafio-${++seq}`;
+  desafios.set(desafio, { cuenta, tipo, ...nuevoCodigo(cuenta) });
+  return desafio;
+}
+
+const limpiar = (codigo) => String(codigo ?? '').replace(/[\s-]/g, '').toUpperCase();
+const codigoValido = (pendiente, codigo) => pendiente.expira >= Date.now() && pendiente.codigo === limpiar(codigo);
+
+const enmascarar = (email) => {
+  const [nombre, dominio] = email.split('@');
+  return `${nombre.slice(0, 2)}***@${dominio}`;
+};
+
+const sinPassword = ({ password: _password, ...usuario }) => usuario;
+const sesion = (cuenta) => ({ token: `stub-jwt:${cuenta.email}`, user: sinPassword(cuenta) });
+
+/** Las cuentas registradas aquí llevan su correo en el token del stub. */
+function cuentaDeToken(req) {
+  const token = (req.headers.authorization ?? '').replace(/^Bearer /, '');
+  return token.startsWith('stub-jwt:') ? cuentas.get(token.slice('stub-jwt:'.length)) : undefined;
+}
+
 const json = (res, code, body) => {
   res.writeHead(code, { 'Content-Type': 'application/json' });
   res.end(body === undefined ? '' : JSON.stringify(body));
@@ -65,15 +104,114 @@ const server = http.createServer((req, res) => {
       return json(res, 200, { status: 'UP' });
     }
 
-    if ((p === '/api/auth/login' || p === '/api/auth/register') && req.method === 'POST') {
-      const body = JSON.parse(raw || '{}');
-      const admin = !p.endsWith('/register') && body.email === EMAIL_ADMIN;
-      return json(res, p.endsWith('/register') ? 201 : 200, {
+    const body = raw ? (() => { try { return JSON.parse(raw); } catch { return {}; } })() : {};
+
+    /* --- Registro con verificación del correo y dos pasos por correo ---
+       Los códigos no se envían: se escriben en esta consola, como hace el
+       backend real cuando no tiene clave de Brevo. */
+
+    if (p === '/api/auth/register' && req.method === 'POST') {
+      const email = String(body.email ?? '').trim().toLowerCase();
+      const existente = cuentas.get(email);
+      if (existente?.emailVerificado || email === USUARIO_DEMO.email || email === EMAIL_ADMIN) {
+        return error(res, 400, 'Solicitud inválida', 'El correo ya está en uso. Intenta con otro.');
+      }
+      const cuenta = {
+        ...USUARIO_DEMO,
+        id: existente?.id ?? `stub-${++seq}`,
+        nombre: body.nombre || 'Sin nombre',
+        email,
+        password: body.password,
+        emailVerificado: false,
+        dosPasosActivo: false,
+        dosPasosMetodo: null,
+      };
+      cuentas.set(email, cuenta);
+      return json(res, 201, { requiereVerificacion: true, desafio: nuevoDesafio(cuenta, 'verificar'), email });
+    }
+
+    if (p === '/api/auth/login' && req.method === 'POST') {
+      const email = String(body.email ?? '').trim().toLowerCase();
+      const cuenta = cuentas.get(email);
+      if (cuenta) {
+        if (cuenta.password !== body.password) {
+          return error(res, 400, 'Solicitud inválida', 'Credenciales incorrectas. Intenta de nuevo.');
+        }
+        if (!cuenta.emailVerificado) {
+          return json(res, 200, { requiereVerificacion: true, desafio: nuevoDesafio(cuenta, 'verificar'), email });
+        }
+        if (cuenta.dosPasosActivo) {
+          return json(res, 200, {
+            requiereDosPasos: true,
+            desafio: nuevoDesafio(cuenta, 'dos-pasos'),
+            metodo: 'CORREO',
+            correo: enmascarar(email),
+          });
+        }
+        return json(res, 200, sesion(cuenta));
+      }
+      // Cualquier otro correo entra sin más, como antes: es un stub.
+      const admin = email === EMAIL_ADMIN;
+      return json(res, 200, {
         token: 'stub-jwt',
         user: admin
           ? { id: 'admin', nombre: 'Administración Huecko', email: EMAIL_ADMIN, creado_en: USUARIO_DEMO.creado_en, rolSistema: 'ADMIN' }
-          : { ...USUARIO_DEMO, nombre: body.nombre || USUARIO_DEMO.nombre, email: body.email },
+          : { ...USUARIO_DEMO, email: email || USUARIO_DEMO.email, emailVerificado: true },
       });
+    }
+
+    if ((p === '/api/auth/verificar-correo' || p === '/api/auth/dos-pasos') && req.method === 'POST') {
+      const pendiente = desafios.get(body.desafio);
+      if (!pendiente || pendiente.expira < Date.now()) {
+        return error(res, 400, 'Solicitud inválida', 'Pasó demasiado tiempo. Vuelve a escribir tu contraseña.');
+      }
+      if (!codigoValido(pendiente, body.codigo)) {
+        return error(res, 400, 'Solicitud inválida', 'El código no es correcto o ya caducó. Pide otro si hace falta.');
+      }
+      desafios.delete(body.desafio);
+      if (pendiente.tipo === 'verificar') pendiente.cuenta.emailVerificado = true;
+      return json(res, 200, sesion(pendiente.cuenta));
+    }
+
+    if (p === '/api/auth/reenviar-codigo' && req.method === 'POST') {
+      const pendiente = desafios.get(body.desafio);
+      if (!pendiente) return error(res, 400, 'Solicitud inválida', 'Pasó demasiado tiempo. Vuelve a escribir tu contraseña.');
+      if (Date.now() - pendiente.enviado < 60_000) {
+        return error(res, 429, 'Demasiadas solicitudes', 'Espera un momento antes de pedir otro código.');
+      }
+      Object.assign(pendiente, nuevoCodigo(pendiente.cuenta));
+      return json(res, 204);
+    }
+
+    const yo = cuentaDeToken(req);
+    if (p.startsWith('/api/me/dos-pasos') && yo) {
+      if (p === '/api/me/dos-pasos' && req.method === 'GET') {
+        return json(res, 200, {
+          activo: yo.dosPasosActivo,
+          codigosRespaldoRestantes: yo.dosPasosActivo ? 10 : 0,
+          activadoEn: yo.dosPasosActivo ? new Date().toISOString() : null,
+          metodo: yo.dosPasosMetodo,
+        });
+      }
+      if ((p === '/api/me/dos-pasos/correo/iniciar' || p === '/api/me/dos-pasos/enviar-codigo') && req.method === 'POST') {
+        codigosPerfil.set(yo.email, { cuenta: yo, ...nuevoCodigo(yo) });
+        return json(res, 204);
+      }
+      const accionConCodigo = {
+        '/api/me/dos-pasos/correo/activar': () => { yo.dosPasosActivo = true; yo.dosPasosMetodo = 'CORREO'; },
+        '/api/me/dos-pasos/codigos-respaldo': () => {},
+        '/api/me/dos-pasos/desactivar': () => { yo.dosPasosActivo = false; yo.dosPasosMetodo = null; },
+      }[p];
+      if (accionConCodigo && req.method === 'POST') {
+        const pendiente = codigosPerfil.get(yo.email);
+        if (!pendiente || !codigoValido(pendiente, body.codigo)) {
+          return error(res, 400, 'Solicitud inválida', 'El código no es correcto o ya caducó. Pide otro si hace falta.');
+        }
+        codigosPerfil.delete(yo.email);
+        accionConCodigo();
+        if (p.endsWith('desactivar')) return json(res, 204);
+        return json(res, 200, { codigosRespaldo: Array.from({ length: 10 }, (_, i) => `STUB-000${i}`) });
+      }
     }
 
     if (p === '/api/me') {
@@ -131,4 +269,5 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(8080, () => console.log('[stub] escuchando en http://localhost:8080'));
+const PUERTO = Number(process.env.PORT ?? 8080);
+server.listen(PUERTO, () => console.log(`[stub] escuchando en http://localhost:${PUERTO}`));

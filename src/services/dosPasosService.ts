@@ -1,4 +1,5 @@
 import { apiClient } from '../lib/apiClient';
+import { limpiarCodigo } from './authService';
 import type { ConfiguracionDosPasos, EstadoDosPasos } from '../types/auth.types';
 
 /**
@@ -35,4 +36,27 @@ export async function regenerarCodigosRespaldo(codigo: string): Promise<string[]
 
 export async function desactivarDosPasos(password: string, codigo: string): Promise<void> {
   await apiClient.post('/me/dos-pasos/desactivar', { password, codigo: codigo.trim() });
+}
+
+/* --- Por correo: el código de 4 caracteres llega al correo de la cuenta. --- */
+
+/** Manda el primer código al correo. No activa nada hasta `activarDosPasosCorreo`. */
+export async function iniciarDosPasosCorreo(): Promise<void> {
+  await apiClient.post('/me/dos-pasos/correo/iniciar');
+}
+
+/** Con el código del correo queda activa por correo. Devuelve los códigos de respaldo. */
+export async function activarDosPasosCorreo(codigo: string): Promise<string[]> {
+  const { data } = await apiClient.post<{ codigosRespaldo: string[] }>('/me/dos-pasos/correo/activar', {
+    codigo: limpiarCodigo(codigo),
+  });
+  return data.codigosRespaldo;
+}
+
+/**
+ * Ya activa por correo: manda un código para confirmar otra acción
+ * (regenerar los códigos de respaldo o desactivar).
+ */
+export async function enviarCodigoDosPasos(): Promise<void> {
+  await apiClient.post('/me/dos-pasos/enviar-codigo');
 }
