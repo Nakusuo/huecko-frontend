@@ -45,6 +45,8 @@ export function VerificacionDosPasos() {
   const [codigos, setCodigos] = useState<string[]>([]);
   const [codigo, setCodigo] = useState('');
   const [password, setPassword] = useState('');
+  /* Una cuenta creada con Google no tiene contraseña: el backend solo pide el código. */
+  const pidePassword = user?.tienePassword !== false;
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [copiado, setCopiado] = useState(false);
@@ -175,7 +177,7 @@ export function VerificacionDosPasos() {
   const desactivar = (e: FormEvent) => {
     e.preventDefault();
     return conCarga(async () => {
-      await desactivarDosPasos(password, codigo);
+      await desactivarDosPasos(pidePassword ? password : '', codigo);
       setEstado(await estadoDosPasos());
       if (user) setUser({ ...user, dosPasosActivo: false, dosPasosMetodo: null });
       reiniciarFormulario();
@@ -483,9 +485,10 @@ export function VerificacionDosPasos() {
       {paso === 'desactivar' && (
         <form onSubmit={desactivar} className="space-y-3">
           <p className="text-xs text-on-surface-variant">
-            Para quitar la protección, confirma tu contraseña y un código{' '}
+            Para quitar la protección, confirma {pidePassword ? 'tu contraseña y ' : ''}un código{' '}
             {porCorreo ? 'del correo' : 'de la app'} (o uno de respaldo).
           </p>
+          {pidePassword && (
           <div className="space-y-1">
             <label htmlFor="password-desactivar" className="text-xs font-semibold text-on-surface-variant">
               Contraseña
@@ -499,6 +502,7 @@ export function VerificacionDosPasos() {
               className="w-full px-3 py-2.5 rounded-xl text-sm bg-surface-container-lowest text-on-surface border border-outline-variant outline-none focus:ring-2 focus:ring-secondary/30 focus:border-primary"
             />
           </div>
+          )}
           {campoCodigo('codigo-desactivar', porCorreo ? 'Código del correo o de respaldo' : 'Código de la app o de respaldo', {
             metodo,
             admiteRespaldo: true,
@@ -506,7 +510,7 @@ export function VerificacionDosPasos() {
           {error && <p role="alert" className="text-xs font-medium text-error">{error}</p>}
           <div className="flex justify-end gap-2">
             {botonCancelar}
-            {botonPrincipal('Desactivar', !password || !codigoCompleto({ metodo, admiteRespaldo: true }))}
+            {botonPrincipal('Desactivar', (pidePassword && !password) || !codigoCompleto({ metodo, admiteRespaldo: true }))}
           </div>
         </form>
       )}
