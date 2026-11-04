@@ -6,10 +6,28 @@ Prefijo: `/api/v1`. Salvo autenticación, todas las rutas requieren `Authorizati
 
 | Método y ruta | Cuerpo | Respuesta 200/201 |
 | --- | --- | --- |
-| `POST /auth/register` | `{nombre,email,password}` | `{token,user}` |
-| `POST /auth/login` | `{email,password}` | `{token,user}` |
+| `POST /auth/register` | `{nombre,email,password}` | `201 {requiereVerificacion,desafio,email}`: se envía un código al correo |
+| `POST /auth/verificar-correo` | `{desafio,codigo}` | `{token,user}` |
+| `POST /auth/reenviar-codigo` | `{desafio}` | `204`; `429` si no ha pasado un minuto |
+| `POST /auth/login` | `{email,password}` | `{token,user}`, `{requiereVerificacion,desafio,email}` si el correo no está confirmado, o `{requiereDosPasos,desafio,metodo,correo?}` |
+| `POST /auth/dos-pasos` | `{desafio,codigo}` | `{token,user}` |
 
-`user`: `{id,nombre,email,creado_en}`.
+`user`: `{id,nombre,email,creado_en,emailVerificado,dosPasosActivo,dosPasosMetodo}`.
+
+Los códigos del correo tienen 4 caracteres sin 0/O/1/I/L (`8JR6`), caducan a los
+10 minutos y uno nuevo anula el anterior. El de dos pasos es de 6 dígitos con
+`metodo: APP` y de 4 caracteres con `metodo: CORREO` (`correo` llega enmascarado,
+`al***@gmail.com`); en los dos casos vale un código de respaldo (`XXXX-XXXX`).
+
+### Verificación en dos pasos de la propia cuenta
+
+| Método y ruta | Propósito |
+| --- | --- |
+| `GET /me/dos-pasos` | `{activo,codigosRespaldoRestantes,activadoEn,metodo}`. |
+| `POST /me/dos-pasos/iniciar`, `POST /me/dos-pasos/activar` | Con app: secreto y QR, y activar con el primer código. |
+| `POST /me/dos-pasos/correo/iniciar`, `POST /me/dos-pasos/correo/activar` | Con correo: manda un código (`204`) y activar con él. |
+| `POST /me/dos-pasos/enviar-codigo` | Con correo ya activo: manda un código para regenerar o desactivar. |
+| `POST /me/dos-pasos/codigos-respaldo`, `POST /me/dos-pasos/desactivar` | Otros 10 códigos de respaldo; quitarla (`{password,codigo}`). |
 
 ## Perfil y disponibilidad
 
