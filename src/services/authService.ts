@@ -1,4 +1,5 @@
 import type {
+  ConfigGoogle,
   LoginPayload,
   RegisterPayload,
   AuthResponse,
@@ -379,4 +380,44 @@ export async function reenviarCodigo(desafio: string): Promise<string | undefine
   const ahora = Date.now();
   codigosDemo.set(desafio, { ...pendiente, codigo, expira: ahora + DURACION_CODIGO_MS, enviado: ahora });
   return codigo;
+}
+
+/* ------------------------------------------------------------------------ *
+ * Iniciar sesión con Google
+ *
+ * El botón oficial de Google entrega un ID token (`credential`) y el backend
+ * lo verifica. Responde como el login: la sesión, o el paso de dos pasos si
+ * la cuenta lo tiene. Nunca pide verificar el correo: Google ya lo hizo.
+ * Solo con backend: en el modo demo no hay botón.
+ * ------------------------------------------------------------------------ */
+
+let configGoogleCache: Promise<string | null> | null = null;
+
+/**
+ * El Client ID público de Google, o `null` si el backend no lo tiene (y
+ * entonces no se muestra el botón). Se pide una vez; si falla (la API está
+ * despertando) no se guarda, para volver a intentarlo en la próxima visita.
+ */
+export function configGoogle(): Promise<string | null> {
+  if (!isApiEnabled) return Promise.resolve(null);
+  if (!configGoogleCache) {
+    configGoogleCache = apiClient
+      .get<ConfigGoogle>('/auth/google')
+      .then(({ data }) => (typeof data?.clientId === 'string' && data.clientId ? data.clientId : null))
+      .catch(() => {
+        configGoogleCache = null;
+        return null;
+      });
+  }
+  return configGoogleCache;
+}
+
+/** Solo para pruebas: olvida el Client ID guardado. */
+export function reiniciarConfigGoogle(): void {
+  configGoogleCache = null;
+}
+
+export async function loginConGoogle(credential: string): Promise<RespuestaLogin> {
+  const { data } = await apiClient.post<RespuestaLogin>('/auth/google', { credential });
+  return data;
 }

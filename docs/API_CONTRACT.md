@@ -11,8 +11,18 @@ Prefijo: `/api/v1`. Salvo autenticación, todas las rutas requieren `Authorizati
 | `POST /auth/reenviar-codigo` | `{desafio}` | `204`; `429` si no ha pasado un minuto |
 | `POST /auth/login` | `{email,password}` | `{token,user}`, `{requiereVerificacion,desafio,email}` si el correo no está confirmado, o `{requiereDosPasos,desafio,metodo,correo?}` |
 | `POST /auth/dos-pasos` | `{desafio,codigo}` | `{token,user}` |
+| `GET /auth/google` | — | `{clientId}`; `null` si el backend no tiene Google configurado (no se muestra el botón) |
+| `POST /auth/google` | `{credential}` (ID token del botón de Google) | `{token,user}` o `{requiereDosPasos,desafio,metodo,correo?}`; nunca pide verificar el correo |
 
-`user`: `{id,nombre,email,creado_en,emailVerificado,dosPasosActivo,dosPasosMetodo}`.
+`user`: `{id,nombre,email,creado_en,emailVerificado,dosPasosActivo,dosPasosMetodo,tienePassword}`.
+`tienePassword: false` es una cuenta creada con Google: al desactivar los dos pasos
+no se pide contraseña (se manda `password: ""`).
+
+**Google:** el botón es el oficial de Google Identity Services
+(`https://accounts.google.com/gsi/client`, cargado solo cuando hace falta). Solo
+aparece con backend y `clientId`. La CSP de la web debe permitir
+`https://accounts.google.com/gsi/` en `script-src`, `style-src`, `connect-src` y
+`frame-src` (ya está en `vercel.json`; en Render, en `render.yaml` del backend).
 
 Los códigos del correo tienen 4 caracteres sin 0/O/1/I/L (`8JR6`), caducan a los
 10 minutos y uno nuevo anula el anterior. El de dos pasos es de 6 dígitos con

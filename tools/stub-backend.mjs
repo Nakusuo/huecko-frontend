@@ -110,6 +110,15 @@ const server = http.createServer((req, res) => {
        Los códigos no se envían: se escriben en esta consola, como hace el
        backend real cuando no tiene clave de Brevo. */
 
+    /* Google: el stub no puede verificar un ID token de Google. Sin
+       STUB_GOOGLE_CLIENT_ID responde `null` y la web no muestra el botón. */
+    if (p === '/api/auth/google' && req.method === 'GET') {
+      return json(res, 200, { clientId: process.env.STUB_GOOGLE_CLIENT_ID || null });
+    }
+    if (p === '/api/auth/google' && req.method === 'POST') {
+      return json(res, 503, { mensaje: 'El acceso con Google no está configurado.' });
+    }
+
     if (p === '/api/auth/register' && req.method === 'POST') {
       const email = String(body.email ?? '').trim().toLowerCase();
       const existente = cuentas.get(email);
