@@ -14,6 +14,7 @@ import AvisoServidorDespertando from '../../components/AvisoServidorDespertando'
 import PasoDosPasos from './PasoDosPasos';
 import PasoVerificarCorreo from './PasoVerificarCorreo';
 import BotonGoogle from '../../components/auth/BotonGoogle';
+import { EnlacesLegales } from '../legal/PaginaLegal';
 import {
   esDesafioDosPasos,
   esVerificacionPendiente,
@@ -306,6 +307,7 @@ export default function LoginPage() {
                 Regístrate gratis
               </Link>
             </p>
+            <EnlacesLegales />
 
             {/* Tarjeta de Credenciales Demo. Solo en modo demo: con backend esa
                 cuenta no existe (el seed está desactivado). */}

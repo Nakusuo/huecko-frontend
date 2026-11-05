@@ -14,6 +14,7 @@ import BotonGoogle from '../../components/auth/BotonGoogle';
 import { destinoTrasLogin } from '../../routes/destino';
 import { esAdmin } from '../../lib/rol';
 import { esCuentaRecienCreada } from '../../lib/cuentaNueva';
+import { EnlacesLegales } from '../legal/PaginaLegal';
 import {
   esDesafioDosPasos,
   esVerificacionPendiente,
@@ -412,6 +413,7 @@ export default function RegisterPage() {
                 Inicia sesión aquí
               </Link>
             </p>
+            <EnlacesLegales />
       </div>
     </div>
   );
