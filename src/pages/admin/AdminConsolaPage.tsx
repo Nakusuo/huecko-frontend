@@ -18,9 +18,9 @@ const NIVELES: { valor: NivelLog; texto: string }[] = [
 
 /* Sobre fondo de tinta: el nivel va en palabra, y el color solo lo refuerza. */
 const COLOR_NIVEL: Record<NivelLog, string> = {
-  ERROR: 'text-[#ff8a80]',
-  WARN: 'text-[#ffd180]',
-  INFO: 'text-[#b9c99f]',
+  ERROR: 'text-log-error',
+  WARN: 'text-log-aviso',
+  INFO: 'text-log-info',
 };
 
 const hora = (iso: string) =>
@@ -155,7 +155,7 @@ function LogEnVivo() {
             <span className="text-cream/70">{e.logger}</span>{' '}
             {e.idPeticion && <span className="text-cream/40" title="Id de la petición (X-Request-Id)">[{e.idPeticion}]</span>}{' '}
             {e.mensaje}
-            {e.excepcion && <span className="block pl-4 text-[#ff8a80]">↳ {e.excepcion}</span>}
+            {e.excepcion && <span className="block pl-4 text-log-error">↳ {e.excepcion}</span>}
           </div>
         ))}
       </div>

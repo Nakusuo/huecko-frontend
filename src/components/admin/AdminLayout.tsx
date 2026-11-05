@@ -69,7 +69,7 @@ function Pendientes({ n }: { n: number }) {
 /** Distintivo junto a la marca: que nunca haya duda de en qué panel se está. */
 function SelloAdmin() {
   return (
-    <span className="rotulo -rotate-2 bg-ink px-2 py-0.5 text-2xs text-olive shadow-sm">Admin</span>
+    <span className="rotulo rounded-md bg-ink px-2 py-0.5 text-2xs text-olive">Admin</span>
   );
 }
 

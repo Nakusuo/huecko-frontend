@@ -29,7 +29,6 @@ import {
   type CruceSemanal,
 } from '../lib/huecosSemana';
 import { RUTA_CREAR_GRUPO, rutaProponerPlan } from '../lib/intenciones';
-import { EtiquetaSticker } from '../components/Stickers';
 import { PixelMosaic } from '../components/Pixel';
 
 interface TodayScheduleBlock {
@@ -792,12 +791,7 @@ export default function DashboardPage() {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary text-2xs font-bold uppercase">
-                  Tu voto importa
-                </span>
-                <h2 className="text-xl font-bold text-on-surface">Votación de planes en curso</h2>
-              </div>
+              <h2 className="text-xl font-bold text-on-surface">Votación de planes en curso</h2>
               <p className="text-xs text-on-surface-variant">
                 Opciones propuestas en tus grupos, con la disponibilidad de cada una según el cruce.
               </p>
@@ -896,13 +890,16 @@ export default function DashboardPage() {
       {isDetailModalOpen && upcomingEvent && (
         <div role="dialog" aria-modal="true" aria-label="Detalles del evento" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-xs">
           <div className="bg-surface rounded-3xl max-w-2xl w-full overflow-hidden elev-3 animate-modal-in">
-            {/* Cabecera de sticker sobre tinta. Antes era un banner con una
+            {/* Cabecera sobre tinta. Antes era un banner con una
                 imagen de portada y una descripción que ningún plan tiene: una
                 imagen rota y una línea vacía encima del título. */}
             <div className="on-brand relative overflow-hidden bg-ink px-6 pb-6 pt-7 text-cream">
               <PixelMosaic columnas={24} filas={8} />
               <div className="relative z-10 space-y-3">
-                <EtiquetaSticker codigo="200" texto="plan confirmado" tono="oliva" giro={-2} />
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-olive px-2.5 py-1 text-xs font-semibold text-ink">
+                  <span aria-hidden="true" className="material-symbols-outlined text-[16px]">check_circle</span>
+                  Plan confirmado
+                </span>
                 <h2 className="text-2xl sm:text-3xl font-headline font-bold text-cream">
                   {upcomingEvent.title}
                 </h2>

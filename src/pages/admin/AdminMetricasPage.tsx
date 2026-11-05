@@ -46,7 +46,7 @@ function Contenido({ m }: { m: MetricasAdmin }) {
         <Cifra
           titulo="Errores del servidor (5xx)"
           valor={`${r.porcentajeErrores}%`}
-          nota={r.errores === 0 ? 'Ninguno desde el arranque' : `${r.errores} en total · mira «Fallos»`}
+          nota={r.errores === 0 ? 'Ninguno desde el arranque' : `${r.errores} en total. Detalle en «Fallos»`}
           alerta={r.porcentajeErrores >= UMBRAL_ERRORES}
         />
         <Cifra

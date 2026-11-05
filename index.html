@@ -13,11 +13,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Silkscreen&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
+    <!-- Iconos: solo los que usa la app y en el único estilo que se usa
+         (contorno, peso 400, 24 px). La fuente entera pesaba 1,1 MB; así, unos
+         12 KB. Al usar un icono nuevo, añádelo a `icon_names` en orden
+         alfabético: la prueba src/lib/iconos.test.ts avisa si falta.
+         `display=block` y no `swap`: con swap se leía el nombre del icono
+         («notifications») mientras cargaba la fuente. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=add,add_circle,add_photo_alternate,alarm_on,arrow_back,arrow_forward,auto_awesome,badge,bedtime,block,bolt,bug_report,calendar_clock,calendar_month,calendar_today,campaign,cancel,celebration,chat_bubble,check,check_circle,chevron_left,chevron_right,circle,close,cloud_off,cloud_upload,content_copy,dashboard,delete,devices,diversity_3,dns,document_scanner,download,dynamic_feed,ecg_heart,edit,edit_note,email,emoji_people,error,event,event_available,event_busy,event_repeat,feedback,fiber_new,flag,gpp_maybe,grid_view,group,group_add,groups,help,hide_image,hourglass_top,how_to_vote,inbox,info,key,lightbulb,local_fire_department,location_on,lock,lock_reset,logout,mail,mail_lock,map,mark_email_read,menu_book,message,military_tech,monitoring,notifications,palette,password,pause,person,person_add,person_alert,phonelink_lock,photo_camera,photo_library,picture_as_pdf,pill,play_arrow,priority_high,progress_activity,qr_code_2,query_stats,radio,refresh,repeat,report,restaurant,schedule,script,search,search_off,send,shield_lock,sports_soccer,square,star,switch,tab,task_alt,terminal,timer,title,touch_app,tune,undo,verified_user,visibility,visibility_off,vpn_key,warning,waving_hand,web,where_to_vote&display=block"
       rel="stylesheet"
     />
   </head>

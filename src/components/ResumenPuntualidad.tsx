@@ -51,8 +51,8 @@ export function ResumenPuntualidad({ retrasos, usuarioId, cargando = false }: Pr
       <p className="text-xs text-on-surface-variant">
         <strong className="font-bold text-on-surface tabular-nums">{ordenados.length}</strong>
         {ordenados.length === 1 ? ' persona llega tarde' : ' personas llegan tarde'}
-        {' · el mayor retraso es de '}
-        <strong className="font-bold text-on-surface tabular-nums">{peor} min</strong>
+        {'. El mayor retraso es de '}
+        <strong className="font-bold text-on-surface tabular-nums">{peor} min</strong>.
       </p>
 
       <ul className="space-y-1">
