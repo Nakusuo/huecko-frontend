@@ -4,7 +4,7 @@ import { instalarAlmacenamientoEnMemoria } from '../test/almacenamientoEnMemoria
 /** Modo demo: las cuentas registradas viven en este navegador. */
 vi.stubEnv('VITE_API_URL', '');
 instalarAlmacenamientoEnMemoria();
-const { loginUser, registerUser, verificarCorreo, reenviarCodigo, actualizarCuentaDemo, leerCuentasDemo, cambiarSuspensionDemo, DEMO_CREDENTIALS, DEMO_ADMIN_CREDENTIALS } = await import('./authService');
+const { configGoogle, loginUser, registerUser, verificarCorreo, reenviarCodigo, actualizarCuentaDemo, leerCuentasDemo, cambiarSuspensionDemo, DEMO_CREDENTIALS, DEMO_ADMIN_CREDENTIALS } = await import('./authService');
 
 /** En el modo demo el login siempre da la sesión, nunca un desafío de dos pasos. */
 function sesion<T extends object>(respuesta: T): Extract<T, { token: string }> {
@@ -217,5 +217,11 @@ describe('verificación del correo en el modo demo', () => {
   it('las cuentas fijas y las guardadas antes de la verificación entran sin código', async () => {
     const res = sesion(await sinEspera(loginUser(DEMO_CREDENTIALS)));
     expect(res.user.id).toBe('1');
+  });
+});
+
+describe('Google en el modo demo', () => {
+  it('no hay Client ID sin backend: el botón no aparece', async () => {
+    expect(await configGoogle()).toBeNull();
   });
 });

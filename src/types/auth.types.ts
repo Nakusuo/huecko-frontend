@@ -41,6 +41,16 @@ export interface AuthUser extends Partial<PerfilSocial> {
   emailVerificado?: boolean;
   /** Por dónde llega el código de dos pasos; nulo si no la tiene. */
   dosPasosMetodo?: MetodoDosPasos | null;
+  /**
+   * `false` si la cuenta se creó con Google y no tiene contraseña propia.
+   * Las sesiones antiguas no lo traen: cuentan como con contraseña.
+   */
+  tienePassword?: boolean;
+}
+
+/** `GET /api/auth/google`: el Client ID público, o `null` si el backend no tiene Google configurado. */
+export interface ConfigGoogle {
+  clientId: string | null;
 }
 
 /** De dónde sale el código de la verificación en dos pasos: la app de códigos o el correo. */

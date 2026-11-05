@@ -5,11 +5,23 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { registerUser } from '../../services/authService';
+import { loginConGoogle, registerUser } from '../../services/authService';
 import { despertarServidor } from '../../lib/servidor';
 import AvisoServidorDespertando from '../../components/AvisoServidorDespertando';
 import PasoVerificarCorreo from './PasoVerificarCorreo';
-import type { AuthResponse, VerificacionPendiente } from '../../types/auth.types';
+import PasoDosPasos from './PasoDosPasos';
+import BotonGoogle from '../../components/auth/BotonGoogle';
+import { destinoTrasLogin } from '../../routes/destino';
+import { esAdmin } from '../../lib/rol';
+import { esCuentaRecienCreada } from '../../lib/cuentaNueva';
+import { EnlacesLegales } from '../legal/PaginaLegal';
+import {
+  esDesafioDosPasos,
+  esVerificacionPendiente,
+  type AuthResponse,
+  type DesafioDosPasos,
+  type VerificacionPendiente,
+} from '../../types/auth.types';
 
 const registerSchema = z
   .object({
@@ -47,12 +59,18 @@ const registerSchema = z
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
+
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  /** La cuenta ya existe, pero la sesión espera al código que llegó al correo. */
-  const [pendiente, setPendiente] = useState<VerificacionPendiente | null>(null);
+  /**
+   * La cuenta ya existe, pero la sesión espera al código que llegó al correo.
+   * Con Google puede faltar en su lugar el paso de dos pasos: el correo ya
+   * tenía una cuenta y esa cuenta lo tiene activo.
+   */
+  const [pendiente, setPendiente] = useState<VerificacionPendiente | DesafioDosPasos | null>(null);
+  const [entrandoConGoogle, setEntrandoConGoogle] = useState(false);
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
   const location = useLocation();
@@ -91,17 +109,59 @@ export default function RegisterPage() {
     navigate('/onboarding', { replace: true });
   };
 
+  /**
+   * Con Google la cuenta puede ser nueva o una que ya existía con ese correo.
+   * La recién creada va a la bienvenida, como tras el registro; la que ya
+   * existía, a donde iría tras el login.
+   */
+  const entrarConGoogle = (res: AuthResponse) => {
+    if (esCuentaRecienCreada(res.user.creado_en)) {
+      entrar(res);
+      return;
+    }
+    login(res.user, res.token);
+    navigate(destinoTrasLogin(location.state, esAdmin(res.user)), { replace: true });
+  };
+
+  const conGoogle = async (credential: string) => {
+    setServerError(null);
+    setEntrandoConGoogle(true);
+    try {
+      await despertarServidor();
+      const res = await loginConGoogle(credential);
+      if (esDesafioDosPasos(res) || esVerificacionPendiente(res)) {
+        setPendiente(res);
+        return;
+      }
+      entrarConGoogle(res);
+    } catch (err) {
+      setServerError(err instanceof Error ? err.message : 'No pudimos entrar con Google');
+    } finally {
+      setEntrandoConGoogle(false);
+    }
+  };
+
   if (pendiente) {
     return (
       <div className="w-full max-w-[27rem] py-4">
         <MobileLogo />
         <div className="bg-surface-container-lowest rounded-3xl p-7 md:p-9 elev-2">
-          <PasoVerificarCorreo
-            pendiente={pendiente}
-            onSesion={entrar}
-            onVolver={() => setPendiente(null)}
-            textoVolver="Corregir el correo"
-          />
+          {esDesafioDosPasos(pendiente) ? (
+            <PasoDosPasos
+              desafio={pendiente.desafio}
+              metodo={pendiente.metodo}
+              correo={pendiente.correo}
+              onSesion={entrarConGoogle}
+              onVolver={() => setPendiente(null)}
+            />
+          ) : (
+            <PasoVerificarCorreo
+              pendiente={pendiente}
+              onSesion={entrar}
+              onVolver={() => setPendiente(null)}
+              textoVolver="Corregir el correo"
+            />
+          )}
         </div>
       </div>
     );
@@ -339,6 +399,9 @@ export default function RegisterPage() {
               <div className="flex-1 h-px bg-outline-variant/60" />
             </div>
 
+            {/* Solo aparece con backend y Google configurado. */}
+            <BotonGoogle texto="signup_with" onCredential={conGoogle} ocupado={entrandoConGoogle} />
+
             {/* Enlace Login */}
             <p className="text-center text-sm text-on-surface-variant">
               ¿Ya tienes una cuenta?{' '}
@@ -350,6 +413,7 @@ export default function RegisterPage() {
                 Inicia sesión aquí
               </Link>
             </p>
+            <EnlacesLegales />
       </div>
     </div>
   );

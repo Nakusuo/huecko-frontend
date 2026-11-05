@@ -14,6 +14,8 @@ import AdminMetricasPage from '../pages/admin/AdminMetricasPage';
 import AdminFallosPage from '../pages/admin/AdminFallosPage';
 import AdminConsolaPage from '../pages/admin/AdminConsolaPage';
 import AdminCuentaPage from '../pages/admin/AdminCuentaPage';
+import PrivacidadPage from '../pages/legal/PrivacidadPage';
+import TerminosPage from '../pages/legal/TerminosPage';
 import { useAuthStore } from '../store/authStore';
 import { inicioDe } from '../lib/rol';
 
@@ -38,6 +40,10 @@ export default function AppRouter() {
         <Route path="/login" element={null} />
         <Route path="/register" element={null} />
       </Route>
+
+      {/* Públicas, con o sin sesión: Google las enlaza desde su pantalla de acceso. */}
+      <Route path="/privacidad" element={<PrivacidadPage />} />
+      <Route path="/terminos" element={<TerminosPage />} />
 
       {/* Rutas Protegidas */}
       <Route element={<ProtectedRoute />}>

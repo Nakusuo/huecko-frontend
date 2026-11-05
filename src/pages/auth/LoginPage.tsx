@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { DEMO_ADMIN_CREDENTIALS, DEMO_CREDENTIALS, loginUser } from '../../services/authService';
+import { DEMO_ADMIN_CREDENTIALS, DEMO_CREDENTIALS, loginConGoogle, loginUser } from '../../services/authService';
 import { isApiEnabled } from '../../lib/apiClient';
 import { destinoTrasLogin } from '../../routes/destino';
 import { esAdmin } from '../../lib/rol';
@@ -13,6 +13,8 @@ import { despertarServidor } from '../../lib/servidor';
 import AvisoServidorDespertando from '../../components/AvisoServidorDespertando';
 import PasoDosPasos from './PasoDosPasos';
 import PasoVerificarCorreo from './PasoVerificarCorreo';
+import BotonGoogle from '../../components/auth/BotonGoogle';
+import { EnlacesLegales } from '../legal/PaginaLegal';
 import {
   esDesafioDosPasos,
   esVerificacionPendiente,
@@ -43,6 +45,7 @@ export default function LoginPage() {
    * confirmar el correo si la cuenta aún no lo hizo.
    */
   const [pendiente, setPendiente] = useState<DesafioDosPasos | VerificacionPendiente | null>(null);
+  const [entrandoConGoogle, setEntrandoConGoogle] = useState(false);
   const login = useAuthStore((s) => s.login);
   const sesionExpirada = useAuthStore((s) => s.sesionExpirada);
   const navigate = useNavigate();
@@ -82,6 +85,25 @@ export default function LoginPage() {
     login(res.user, res.token);
     // De vuelta a la página donde estaba (p. ej. si la sesión expiró ahí).
     navigate(destinoTrasLogin(location.state, esAdmin(res.user)), { replace: true });
+  };
+
+  /** Lo mismo que tras la contraseña: sesión, o el paso de dos pasos si la cuenta lo tiene. */
+  const conGoogle = async (credential: string) => {
+    setServerError(null);
+    setEntrandoConGoogle(true);
+    try {
+      await despertarServidor();
+      const res = await loginConGoogle(credential);
+      if (esDesafioDosPasos(res) || esVerificacionPendiente(res)) {
+        setPendiente(res);
+        return;
+      }
+      entrar(res);
+    } catch (err) {
+      setServerError(err instanceof Error ? err.message : 'No pudimos entrar con Google');
+    } finally {
+      setEntrandoConGoogle(false);
+    }
   };
 
   const fillDemoCredentials = (credenciales: { email: string; password: string }) => {
@@ -271,6 +293,9 @@ export default function LoginPage() {
               <div className="flex-1 h-px bg-outline-variant/60" />
             </div>
 
+            {/* Solo aparece con backend y Google configurado. */}
+            <BotonGoogle texto="signin_with" onCredential={conGoogle} ocupado={entrandoConGoogle} />
+
             {/* Enlace Registro */}
             <p className="text-center text-sm text-on-surface-variant">
               ¿No tienes cuenta?{' '}
@@ -282,6 +307,7 @@ export default function LoginPage() {
                 Regístrate gratis
               </Link>
             </p>
+            <EnlacesLegales />
 
             {/* Tarjeta de Credenciales Demo. Solo en modo demo: con backend esa
                 cuenta no existe (el seed está desactivado). */}
