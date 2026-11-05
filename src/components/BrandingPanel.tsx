@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
-import { HueckoMark, PixelIcon, PixelMosaic } from './Pixel';
-import { EtiquetaSticker, SelloCircular, StickerRedondo } from './Stickers';
+import { HueckoMark, PixelMosaic } from './Pixel';
 
 /**
  * Columna de marca de las pantallas de acceso.
@@ -18,7 +17,11 @@ import { EtiquetaSticker, SelloCircular, StickerRedondo } from './Stickers';
  *    por defecto de cualquier plantilla. En su lugar hay un mosaico pixel que
  *    es una semana de horario, con unos pocos huecos libres en oliva.
  *
- * 3. **Alineado a la izquierda.** El texto centrado obliga al ojo a buscar el
+ * 3. **Sin stickers ni sellos.** Había etiquetas «404 / 200» y un sello
+ *    torcidos de adorno: no decían nada del producto. El panel informa con el
+ *    titular, tres capacidades y la nota de privacidad.
+ *
+ * 4. **Alineado a la izquierda.** El texto centrado obliga al ojo a buscar el
  *    inicio de cada línea. En una columna estrecha con cuatro puntos que se
  *    leen en vertical, el borde izquierdo es el que ordena.
  */
@@ -91,24 +94,6 @@ export function BrandingPanel({
             </li>
           ))}
         </ul>
-      </div>
-
-      {/* Los stickers solo caben en pantallas altas; en las bajas se quitan
-          antes que apretar el texto, que es lo que informa. */}
-      <div
-        aria-hidden="true"
-        className="relative z-10 hidden flex-wrap items-center gap-4 [@media(min-height:820px)]:flex"
-      >
-        <div className="flex flex-col items-start gap-2">
-          <EtiquetaSticker codigo="404" texto="hueco no encontrado" giro={-2} retardo={120} />
-          <EtiquetaSticker codigo="200" texto="plan confirmado" tono="oliva" giro={1.5} retardo={220} className="ml-5" />
-        </div>
-        <SelloCircular arriba="Huecko · café" abajo="modo grupo" giro={-8} retardo={320}>
-          <PixelIcon name="taza" size={20} className="text-olive" />
-        </SelloCircular>
-        <StickerRedondo tono="oliva" size={72} giro={6} retardo={420}>
-          <PixelIcon name="auriculares" size={30} />
-        </StickerRedondo>
       </div>
 
       <p className="relative z-10 text-xs text-cream/60">

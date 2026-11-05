@@ -89,7 +89,7 @@ export function ReportarProblemaModal({
 
         {enviado ? (
           <div className="flex flex-col items-center gap-3 py-4 text-center animate-fade-in">
-            <div className="flex h-12 w-12 -rotate-3 items-center justify-center bg-ink text-olive shadow-md">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink text-olive">
               <span aria-hidden="true" className="material-symbols-outlined">mark_email_read</span>
             </div>
             <p className="font-semibold text-on-surface">Gracias, lo revisaremos.</p>

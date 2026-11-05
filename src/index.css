@@ -11,7 +11,7 @@
   /* --- Color: roles Material 3 --------------------------------------------
      Cambiar la marca = cambiar este bloque. Ningún componente conoce un hex.
 
-     Estética «stickers sobre papel»: tinta casi negra, oliva y crema sobre un
+     Estética «tinta sobre papel»: tinta casi negra, oliva y crema sobre un
      gris de papel. La tinta es el color de acción; el oliva es el acento. */
   --color-primary: #1f1f1d;
   --color-primary-hover: #34342f;
@@ -80,6 +80,10 @@
 
   /* Los tres colores de los stickers, para las piezas de identidad. */
   --color-ink: #1f1f1d;
+  /* Niveles del log en la Consola del admin, sobre fondo de tinta. */
+  --color-log-error: #ff8a80;
+  --color-log-aviso: #ffd180;
+  --color-log-info: #b9c99f;
   --color-olive: #7d9460;
   --color-cream: #f5f3ec;
 
@@ -146,7 +150,6 @@
   --font-headline: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-body: 'Geist', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-pixel: 'Silkscreen', 'Space Mono', ui-monospace, monospace;
 
   /* --- Movimiento ---------------------------------------------------------
      Easing exponencial: los objetos reales desaceleran, no rebotan. */
@@ -158,19 +161,7 @@
   --animate-modal-in: modal-in 200ms var(--ease-out-expo) both;
   --animate-scrim-in: fade-in 160ms var(--ease-out-quart) both;
   --animate-toast-in: toast-in 280ms var(--ease-out-expo) both;
-  --animate-sticker-in: sticker-in 420ms var(--ease-out-expo) both;
 
-  /* Un sticker se pega: llega un poco más grande y girado, y asienta. */
-  @keyframes sticker-in {
-    from {
-      opacity: 0;
-      transform: translateY(6px) scale(1.06) rotate(calc(var(--giro, 0deg) + 4deg));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1) rotate(var(--giro, 0deg));
-    }
-  }
 
   @keyframes fade-in {
     from {
@@ -298,11 +289,6 @@ body {
   text-transform: uppercase;
 }
 
-.font-pixel {
-  font-family: var(--font-pixel);
-  font-weight: 400;
-  letter-spacing: 0.04em;
-}
 
 /* Los iconos pixel se dibujan con rectángulos: sin antialias, bordes limpios. */
 .pixel {
