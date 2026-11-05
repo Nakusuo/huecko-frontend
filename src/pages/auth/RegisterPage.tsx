@@ -177,7 +177,7 @@ export default function RegisterPage() {
                 Crea tu cuenta
               </h2>
               <p className="text-on-surface-variant text-sm">
-                Únete a Huecko y empieza a coordinar horarios sin esfuerzo.
+                Sube tu horario una vez y encuentra con tu grupo los huecos que coinciden.
               </p>
             </div>
 

@@ -139,7 +139,7 @@ export function AlbumPlanModal({ planId, onCerrar }: { planId: string; onCerrar:
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container-lowest border border-outline-variant/60 p-3">
                 {album.puedeSubir ? (
                   <p className="text-2xs text-on-surface-variant">
-                    Puedes subir {album.restantesMias} más · quedan {album.restantesGrupo} en el álbum del grupo.
+                    Puedes subir {album.restantesMias} más, y en el álbum del grupo quedan {album.restantesGrupo}.
                     Solo las ve tu grupo.
                   </p>
                 ) : (
@@ -190,7 +190,12 @@ export function AlbumPlanModal({ planId, onCerrar }: { planId: string; onCerrar:
                           {(reacciones > 0 || foto.comentarios > 0) && (
                             <span aria-hidden="true" className="absolute bottom-1 left-1 flex gap-1.5 rounded-full bg-ink/70 px-1.5 py-0.5 text-2xs font-semibold text-cream tabular-nums">
                               {reacciones > 0 && <span>{emojis} {reacciones}</span>}
-                              {foto.comentarios > 0 && <span>💬 {foto.comentarios}</span>}
+                              {foto.comentarios > 0 && (
+                                <span className="flex items-center gap-0.5">
+                                  <span className="material-symbols-outlined text-[12px]">chat_bubble</span>
+                                  {foto.comentarios}
+                                </span>
+                              )}
                             </span>
                           )}
                         </button>

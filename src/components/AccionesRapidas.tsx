@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useGroupsStore } from '../store/groupsStore';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { RUTA_CREAR_GRUPO, RUTA_IMPORTAR_HORARIO, rutaProponerPlan } from '../lib/intenciones';
-import { StickerRedondo } from './Stickers';
 
 /**
  * Barra de acciones del panel.
@@ -132,14 +131,14 @@ export function AccionesRapidas() {
             <ol className="space-y-4">
               {PASOS.map((paso, i) => (
                 <li key={paso.titulo} className="flex items-start gap-4">
-                  <StickerRedondo
-                    tono={i === PASOS.length - 1 ? 'oliva' : 'tinta'}
-                    size={40}
-                    giro={i % 2 === 0 ? -6 : 5}
-                    retardo={i * 80}
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-headline text-base ${
+                      i === PASOS.length - 1 ? 'bg-olive text-ink' : 'bg-ink text-cream'
+                    }`}
                   >
-                    <span aria-hidden="true" className="font-headline text-lg leading-none">{i + 1}</span>
-                  </StickerRedondo>
+                    {i + 1}
+                  </span>
                   <div>
                     <h3 className="text-sm font-bold text-on-surface">{paso.titulo}</h3>
                     <p className="mt-0.5 text-xs text-on-surface-variant">{paso.texto}</p>

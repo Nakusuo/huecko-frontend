@@ -1277,7 +1277,7 @@ export default function GroupDetailPage() {
               </div>
 
               <div className="bg-surface-bright px-4 py-2 rounded-xl border border-outline-variant text-xs text-on-surface-variant">
-                {grp.miembros.length} integrantes · {grp.umbralDisponibilidad}% mínimo
+                {grp.miembros.length} integrantes, umbral del {grp.umbralDisponibilidad}%
               </div>
             </div>
 

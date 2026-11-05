@@ -218,8 +218,8 @@ export function VotacionExpresPanel({
               </strong>{' '}
               de {votacion.miembrosDelGrupo} han votado
               {noPuedoVotar
-                ? ' · reportaste tú el imprevisto: decide el resto del grupo'
-                : votacion.miVoto && ' · puedes cambiar tu voto'}
+                ? '. Reportaste tú el imprevisto: decide el resto del grupo.'
+                : votacion.miVoto && '. Puedes cambiar tu voto.'}
             </span>
 
             {!vencida && totalVotos < 2 && (
