@@ -791,12 +791,7 @@ export default function DashboardPage() {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary text-2xs font-bold uppercase">
-                  Tu voto importa
-                </span>
-                <h2 className="text-xl font-bold text-on-surface">Votación de planes en curso</h2>
-              </div>
+              <h2 className="text-xl font-bold text-on-surface">Votación de planes en curso</h2>
               <p className="text-xs text-on-surface-variant">
                 Opciones propuestas en tus grupos, con la disponibilidad de cada una según el cruce.
               </p>
